@@ -1,0 +1,58 @@
+{
+  "name": "@portel/photon-core",
+  "version": "1.0.0",
+  "description": "Core library for parsing, loading, and managing .photon.ts files - runtime-agnostic foundation for building custom Photon runtimes",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build",
+    "test": "echo \"Error: no test specified\" && exit 0"
+  },
+  "keywords": [
+    "photon",
+    "mcp",
+    "model-context-protocol",
+    "typescript",
+    "schema",
+    "parser",
+    "dependency-manager",
+    "rest-api",
+    "graphql",
+    "rpc",
+    "runtime-agnostic"
+  ],
+  "author": "Portel <support@portel.dev>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/portel-dev/photon-core.git"
+  },
+  "bugs": {
+    "url": "https://github.com/portel-dev/photon-core/issues"
+  },
+  "homepage": "https://github.com/portel-dev/photon-core#readme",
+  "dependencies": {
+    "typescript": "^5.7.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
