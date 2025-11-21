@@ -40,7 +40,7 @@ export class DependencyManager {
 
     // Match @dependencies tags in JSDoc comments
     // Regex: @dependencies package@version, package2@version2
-    const dependencyRegex = /@dependencies\s+([\w@^~.,\s-]+)/g;
+    const dependencyRegex = /@dependencies\s+([\w@^~.,\s/-]+)/g;
 
     let match;
     while ((match = dependencyRegex.exec(content)) !== null) {
