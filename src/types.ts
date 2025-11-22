@@ -2,6 +2,16 @@
  * Photon MCP Core Types
  */
 
+/**
+ * Output format types
+ * - Structural: primitive, table, tree, list, none
+ * - Content: json, markdown, yaml, xml, html, code, code:<lang>
+ */
+export type OutputFormat =
+  | 'primitive' | 'table' | 'tree' | 'list' | 'none'
+  | 'json' | 'markdown' | 'yaml' | 'xml' | 'html'
+  | `code` | `code:${string}`;
+
 export interface PhotonTool {
   name: string;
   description: string;
@@ -10,6 +20,7 @@ export interface PhotonTool {
     properties: Record<string, any>;
     required?: string[];
   };
+  outputFormat?: OutputFormat;
 }
 
 export interface ExtractedSchema {
@@ -20,7 +31,7 @@ export interface ExtractedSchema {
     properties: Record<string, any>;
     required?: string[];
   };
-  format?: 'primitive' | 'table' | 'tree' | 'list' | 'none';
+  outputFormat?: OutputFormat;
 }
 
 export interface PhotonMCPClass {

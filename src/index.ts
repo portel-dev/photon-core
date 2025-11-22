@@ -42,5 +42,37 @@ export { DependencyManager } from './dependency-manager.js';
 // Schema extraction
 export { SchemaExtractor } from './schema-extractor.js';
 
+// CLI formatting
+export {
+  formatOutput,
+  detectFormat,
+  renderPrimitive,
+  renderList,
+  renderTable,
+  renderTree,
+  renderNone,
+  formatKey,
+  formatValue,
+  formatToMimeType,
+  printSuccess,
+  printError,
+  printInfo,
+  printWarning,
+  printHeader,
+  STATUS,
+} from './cli-formatter.js';
+
+// Path resolution
+export {
+  resolvePath,
+  listFiles,
+  ensureDir,
+  resolvePhotonPath,
+  listPhotonFiles,
+  ensurePhotonDir,
+  DEFAULT_PHOTON_DIR,
+  type ResolverOptions,
+} from './path-resolver.js';
+
 // Types
 export * from './types.js';

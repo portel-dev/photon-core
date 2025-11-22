@@ -10,7 +10,7 @@
 
 import * as fs from 'fs/promises';
 import * as ts from 'typescript';
-import { ExtractedSchema, ConstructorParam, TemplateInfo, StaticInfo } from './types.js';
+import { ExtractedSchema, ConstructorParam, TemplateInfo, StaticInfo, OutputFormat } from './types.js';
 
 export interface ExtractedMetadata {
   tools: ExtractedSchema[];
@@ -125,12 +125,12 @@ export class SchemaExtractor {
         }
         // Otherwise, it's a regular tool
         else {
-          const format = this.extractFormat(jsdoc);
+          const outputFormat = this.extractFormat(jsdoc);
           tools.push({
             name: methodName,
             description,
             inputSchema,
-            ...(format ? { format } : {}),
+            ...(outputFormat ? { outputFormat } : {}),
           });
         }
       };
@@ -813,12 +813,28 @@ export class SchemaExtractor {
   /**
    * Extract format hint from @format tag
    * Example: @format table
+   * Example: @format json
+   * Example: @format code:typescript
    */
-  private extractFormat(jsdocContent: string): 'primitive' | 'table' | 'tree' | 'list' | 'none' | undefined {
-    const match = jsdocContent.match(/@format\s+(primitive|table|tree|list|none)/i);
-    if (match) {
-      return match[1].toLowerCase() as 'primitive' | 'table' | 'tree' | 'list' | 'none';
+  private extractFormat(jsdocContent: string): OutputFormat | undefined {
+    // Match structural formats
+    const structuralMatch = jsdocContent.match(/@format\s+(primitive|table|tree|list|none)/i);
+    if (structuralMatch) {
+      return structuralMatch[1].toLowerCase() as OutputFormat;
     }
+
+    // Match content formats
+    const contentMatch = jsdocContent.match(/@format\s+(json|markdown|yaml|xml|html)/i);
+    if (contentMatch) {
+      return contentMatch[1].toLowerCase() as OutputFormat;
+    }
+
+    // Match code format (with optional language)
+    const codeMatch = jsdocContent.match(/@format\s+code(?::(\w+))?/i);
+    if (codeMatch) {
+      return codeMatch[1] ? `code:${codeMatch[1]}` as OutputFormat : 'code';
+    }
+
     return undefined;
   }
 
