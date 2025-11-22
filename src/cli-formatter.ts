@@ -19,6 +19,8 @@
  */
 
 import { OutputFormat } from './types.js';
+import { highlight } from 'cli-highlight';
+import chalk from 'chalk';
 
 /**
  * Format and output data with optional format hint
@@ -76,67 +78,108 @@ function renderContent(content: string, format: OutputFormat): void {
 }
 
 /**
- * Render JSON with pretty printing
+ * Render JSON with syntax highlighting
  */
 function renderJson(content: string): void {
   try {
     const parsed = typeof content === 'string' ? JSON.parse(content) : content;
-    console.log(JSON.stringify(parsed, null, 2));
+    const formatted = JSON.stringify(parsed, null, 2);
+    console.log(highlight(formatted, { language: 'json', ignoreIllegals: true }));
   } catch {
     console.log(content);
   }
 }
 
 /**
- * Render markdown (basic terminal rendering)
+ * Render markdown with colored terminal output
  */
 function renderMarkdown(content: string): void {
-  // Basic markdown rendering for terminal
-  const rendered = content
-    // Headers
-    .replace(/^### (.+)$/gm, '\n   $1\n   ' + '-'.repeat(20))
-    .replace(/^## (.+)$/gm, '\n  $1\n  ' + '='.repeat(30))
-    .replace(/^# (.+)$/gm, '\n$1\n' + '='.repeat(40))
-    // Bold
-    .replace(/\*\*(.+?)\*\*/g, '$1')
-    // Italic (just remove markers for terminal)
-    .replace(/\*(.+?)\*/g, '$1')
-    .replace(/_(.+?)_/g, '$1')
-    // Code blocks
-    .replace(/```[\w]*\n([\s\S]*?)```/g, '\n$1')
-    // Inline code
-    .replace(/`([^`]+)`/g, '$1')
-    // Lists
-    .replace(/^- /gm, '  * ')
-    .replace(/^\d+\. /gm, '  ')
-    // Links
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1 ($2)');
+  // Process markdown with colors for terminal
+  let rendered = content;
+
+  // Code blocks - highlight with language if specified
+  rendered = rendered.replace(/```(\w*)\n([\s\S]*?)```/g, (_match, lang, code) => {
+    const trimmedCode = code.trim();
+    if (lang && lang !== '') {
+      try {
+        return '\n' + highlight(trimmedCode, { language: lang, ignoreIllegals: true }) + '\n';
+      } catch {
+        return '\n' + chalk.gray(trimmedCode) + '\n';
+      }
+    }
+    return '\n' + chalk.gray(trimmedCode) + '\n';
+  });
+
+  // Headers with colors
+  rendered = rendered
+    .replace(/^### (.+)$/gm, (_m, h) => '\n' + chalk.cyan('   ' + h) + '\n   ' + chalk.dim('-'.repeat(20)))
+    .replace(/^## (.+)$/gm, (_m, h) => '\n' + chalk.yellow.bold('  ' + h) + '\n  ' + chalk.dim('='.repeat(30)))
+    .replace(/^# (.+)$/gm, (_m, h) => '\n' + chalk.magenta.bold(h) + '\n' + chalk.dim('='.repeat(40)));
+
+  // Bold
+  rendered = rendered.replace(/\*\*(.+?)\*\*/g, (_m, text) => chalk.bold(text));
+
+  // Italic
+  rendered = rendered.replace(/\*(.+?)\*/g, (_m, text) => chalk.italic(text));
+  rendered = rendered.replace(/_(.+?)_/g, (_m, text) => chalk.italic(text));
+
+  // Inline code
+  rendered = rendered.replace(/`([^`]+)`/g, (_m, code) => chalk.cyan(code));
+
+  // Lists
+  rendered = rendered.replace(/^- /gm, chalk.dim('  • '));
+  rendered = rendered.replace(/^(\d+)\. /gm, (_m, num) => chalk.dim(`  ${num}. `));
+
+  // Links
+  rendered = rendered.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, text, url) =>
+    chalk.blue.underline(text) + chalk.dim(` (${url})`)
+  );
+
+  // Blockquotes
+  rendered = rendered.replace(/^> (.+)$/gm, (_m, quote) => chalk.dim('│ ') + chalk.italic(quote));
+
+  // Horizontal rules
+  rendered = rendered.replace(/^---+$/gm, chalk.dim('─'.repeat(40)));
 
   console.log(rendered);
 }
 
 /**
- * Render YAML (pass through, it's already readable)
+ * Render YAML with syntax highlighting
  */
 function renderYaml(content: string): void {
-  console.log(content);
+  try {
+    console.log(highlight(content, { language: 'yaml', ignoreIllegals: true }));
+  } catch {
+    console.log(content);
+  }
 }
 
 /**
- * Render XML/HTML (pass through with basic indentation)
+ * Render XML/HTML with syntax highlighting
  */
 function renderXml(content: string): void {
-  console.log(content);
+  try {
+    console.log(highlight(content, { language: 'xml', ignoreIllegals: true }));
+  } catch {
+    console.log(content);
+  }
 }
 
 /**
- * Render code (with optional language hint)
+ * Render code with syntax highlighting
  */
 function renderCode(content: string, lang?: string): void {
-  if (lang) {
-    console.log(`[${lang}]`);
+  try {
+    if (lang) {
+      console.log(highlight(content, { language: lang, ignoreIllegals: true }));
+    } else {
+      // Auto-detect language
+      console.log(highlight(content, { ignoreIllegals: true }));
+    }
+  } catch {
+    console.log(content);
   }
-  console.log(content);
 }
 
 /**
