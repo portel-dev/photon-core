@@ -95,9 +95,10 @@ function renderJson(content: string): void {
  */
 function renderMarkdown(content: string): void {
   // Process markdown with colors for terminal
+  // Order matters: process block elements first, then inline elements
   let rendered = content;
 
-  // Code blocks - highlight with language if specified
+  // 1. Code blocks - highlight with language if specified (must be first)
   rendered = rendered.replace(/```(\w*)\n([\s\S]*?)```/g, (_match, lang, code) => {
     const trimmedCode = code.trim();
     if (lang && lang !== '') {
@@ -110,36 +111,37 @@ function renderMarkdown(content: string): void {
     return '\n' + chalk.gray(trimmedCode) + '\n';
   });
 
-  // Headers with colors
+  // 2. Links - convert to plain format first (before other inline processing)
+  // This prevents markdown link brackets from interfering with other processing
+  rendered = rendered.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, text, url) =>
+    chalk.blue.underline(text) + chalk.dim(` (${url})`)
+  );
+
+  // 3. Headers with colors
   rendered = rendered
     .replace(/^### (.+)$/gm, (_m, h) => '\n' + chalk.cyan('   ' + h) + '\n   ' + chalk.dim('-'.repeat(20)))
     .replace(/^## (.+)$/gm, (_m, h) => '\n' + chalk.yellow.bold('  ' + h) + '\n  ' + chalk.dim('='.repeat(30)))
     .replace(/^# (.+)$/gm, (_m, h) => '\n' + chalk.magenta.bold(h) + '\n' + chalk.dim('='.repeat(40)));
 
-  // Bold
-  rendered = rendered.replace(/\*\*(.+?)\*\*/g, (_m, text) => chalk.bold(text));
+  // 4. Blockquotes
+  rendered = rendered.replace(/^> (.+)$/gm, (_m, quote) => chalk.dim('│ ') + chalk.italic(quote));
 
-  // Italic
-  rendered = rendered.replace(/\*(.+?)\*/g, (_m, text) => chalk.italic(text));
-  rendered = rendered.replace(/_(.+?)_/g, (_m, text) => chalk.italic(text));
+  // 5. Horizontal rules
+  rendered = rendered.replace(/^---+$/gm, chalk.dim('─'.repeat(40)));
 
-  // Inline code
-  rendered = rendered.replace(/`([^`]+)`/g, (_m, code) => chalk.cyan(code));
-
-  // Lists
+  // 6. Lists
   rendered = rendered.replace(/^- /gm, chalk.dim('  • '));
   rendered = rendered.replace(/^(\d+)\. /gm, (_m, num) => chalk.dim(`  ${num}. `));
 
-  // Links
-  rendered = rendered.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, text, url) =>
-    chalk.blue.underline(text) + chalk.dim(` (${url})`)
-  );
+  // 7. Bold (before italic to handle **text** before *text*)
+  rendered = rendered.replace(/\*\*(.+?)\*\*/g, (_m, text) => chalk.bold(text));
 
-  // Blockquotes
-  rendered = rendered.replace(/^> (.+)$/gm, (_m, quote) => chalk.dim('│ ') + chalk.italic(quote));
+  // 8. Italic
+  rendered = rendered.replace(/\*(.+?)\*/g, (_m, text) => chalk.italic(text));
+  rendered = rendered.replace(/_(.+?)_/g, (_m, text) => chalk.italic(text));
 
-  // Horizontal rules
-  rendered = rendered.replace(/^---+$/gm, chalk.dim('─'.repeat(40)));
+  // 9. Inline code (last to avoid matching code in other elements)
+  rendered = rendered.replace(/`([^`]+)`/g, (_m, code) => chalk.cyan(code));
 
   console.log(rendered);
 }
