@@ -138,6 +138,12 @@ export class DependencyManager {
         await fs.readFile(packageJsonPath, 'utf-8')
       );
 
+      // Check if dependency count matches (catches added/removed dependencies)
+      const installedCount = Object.keys(packageJson.dependencies || {}).length;
+      if (installedCount !== dependencies.length) {
+        return false;
+      }
+
       // Check if all dependencies match
       for (const dep of dependencies) {
         if (packageJson.dependencies?.[dep.name] !== dep.version) {
