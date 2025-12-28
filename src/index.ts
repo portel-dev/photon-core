@@ -76,3 +76,15 @@ export {
 
 // Types
 export * from './types.js';
+
+// Elicit - Cross-platform user input
+export {
+  elicit,
+  elicitReadline,
+  elicitNativeDialog,
+  setElicitHandler,
+  getElicitHandler,
+  type ElicitOptions,
+  type ElicitResult,
+  type ElicitHandler,
+} from './elicit.js';
