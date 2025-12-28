@@ -10,7 +10,7 @@
 
 import * as fs from 'fs/promises';
 import * as ts from 'typescript';
-import { ExtractedSchema, ConstructorParam, TemplateInfo, StaticInfo, OutputFormat } from './types.js';
+import { ExtractedSchema, ConstructorParam, TemplateInfo, StaticInfo, OutputFormat, YieldInfo } from './types.js';
 
 export interface ExtractedMetadata {
   tools: ExtractedSchema[];
@@ -62,6 +62,9 @@ export class SchemaExtractor {
       const processMethod = (member: ts.MethodDeclaration) => {
         const methodName = member.name.getText(sourceFile);
         const jsdoc = this.getJSDocComment(member, sourceFile);
+
+        // Check if this is an async generator method (has asterisk token)
+        const isGenerator = member.asteriskToken !== undefined;
 
         // Extract parameter type information
         const paramsType = this.getFirstParameterType(member, sourceFile);
@@ -126,11 +129,15 @@ export class SchemaExtractor {
         // Otherwise, it's a regular tool
         else {
           const outputFormat = this.extractFormat(jsdoc);
+          const yields = isGenerator ? this.extractYieldsFromJSDoc(jsdoc) : undefined;
+
           tools.push({
             name: methodName,
             description,
             inputSchema,
             ...(outputFormat ? { outputFormat } : {}),
+            ...(isGenerator ? { isGenerator: true } : {}),
+            ...(yields && yields.length > 0 ? { yields } : {}),
           });
         }
       };
@@ -140,7 +147,7 @@ export class SchemaExtractor {
         // Look for class declarations
         if (ts.isClassDeclaration(node)) {
           node.members.forEach((member) => {
-            // Look for async methods
+            // Look for async methods (including async generators with *)
             if (ts.isMethodDeclaration(member) &&
                 member.modifiers?.some(m => m.kind === ts.SyntaxKind.AsyncKeyword)) {
               processMethod(member);
@@ -845,5 +852,28 @@ export class SchemaExtractor {
   private extractMimeType(jsdocContent: string): string | undefined {
     const match = jsdocContent.match(/@mimeType\s+([\w\/\-+.]+)/i);
     return match ? match[1].trim() : undefined;
+  }
+
+  /**
+   * Extract yield information from JSDoc for generator methods
+   * Supports @yields tags with id, type, and description
+   * Example: @yields {pairing_code} text Enter the 6-digit code shown on TV
+   */
+  private extractYieldsFromJSDoc(jsdocContent: string): YieldInfo[] {
+    const yields: YieldInfo[] = [];
+    // Match @yields {id} type description
+    const yieldRegex = /@yields?\s+\{(\w+)\}\s+(prompt|confirm|select)\s+(.+)/gi;
+
+    let match;
+    while ((match = yieldRegex.exec(jsdocContent)) !== null) {
+      const [, id, type, description] = match;
+      yields.push({
+        id,
+        type: type.toLowerCase() as 'prompt' | 'confirm' | 'select',
+        prompt: description.trim(),
+      });
+    }
+
+    return yields;
   }
 }

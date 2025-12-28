@@ -23,6 +23,22 @@ export interface PhotonTool {
   outputFormat?: OutputFormat;
 }
 
+/**
+ * Yield information extracted from generator methods
+ * Used for REST API schema generation (yields become optional parameters)
+ */
+export interface YieldInfo {
+  id: string;
+  type: 'prompt' | 'confirm' | 'select';
+  prompt?: string;
+  options?: Array<string | { value: string; label: string }>;
+  default?: string;
+  required?: boolean;
+  pattern?: string;
+  dangerous?: boolean;
+  multi?: boolean;
+}
+
 export interface ExtractedSchema {
   name: string;
   description: string;
@@ -32,6 +48,10 @@ export interface ExtractedSchema {
     required?: string[];
   };
   outputFormat?: OutputFormat;
+  /** True if this method is an async generator (uses yield for prompts) */
+  isGenerator?: boolean;
+  /** Yield information for generator methods (used by REST APIs) */
+  yields?: YieldInfo[];
 }
 
 export interface PhotonMCPClass {
