@@ -77,14 +77,56 @@ export {
 // Types
 export * from './types.js';
 
-// Elicit - Cross-platform user input
+// Generator-based tools - yield for prompts, progress, streaming
 export {
+  // Yield type checking
+  isInputYield,
+  isProgressYield,
+  isStreamYield,
+  isLogYield,
+  // Generator detection
+  isAsyncGeneratorFunction,
+  isAsyncGenerator,
+  // Executor
+  executeGenerator,
+  // Yield extraction (for REST schema generation)
+  extractYields,
+  // Built-in providers
+  createPrefilledProvider,
+  NeedsInputError,
+  // Utility
+  wrapAsGenerator,
+  // Types
+  type PhotonYield,
+  type PromptYield,
+  type ConfirmYield,
+  type SelectYield,
+  type ProgressYield,
+  type StreamYield,
+  type LogYield,
+  type InputProvider,
+  type OutputHandler,
+  type GeneratorExecutorConfig,
+  type ExtractedYield,
+} from './generator.js';
+
+// Elicit - Cross-platform user input (legacy, prefer generators)
+export {
+  // Simple functions (no imports needed in photon files)
+  prompt,
+  confirm,
+  // Full elicit with options
   elicit,
   elicitReadline,
   elicitNativeDialog,
+  // Handler management (for runtimes)
+  setPromptHandler,
+  getPromptHandler,
   setElicitHandler,
   getElicitHandler,
+  // Types
   type ElicitOptions,
   type ElicitResult,
   type ElicitHandler,
+  type PromptHandler,
 } from './elicit.js';

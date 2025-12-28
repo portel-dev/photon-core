@@ -2,14 +2,17 @@
  * Elicit - Cross-platform user input for Photon
  *
  * Provides a unified API for requesting user input that works across:
- * - Native OS dialogs (default)
- * - CLI readline (when in terminal mode)
- * - MCP elicitation protocol (when running as MCP server)
+ * - Native OS dialogs (default - works standalone without photon runtime)
+ * - CLI readline (photon CLI overrides via globalThis.__photon_prompt__)
+ * - MCP elicitation (photon MCP overrides when client supports it)
  *
- * Runtimes can override the default behavior by setting the elicit handler.
+ * Design:
+ * - Photon files call the simple `prompt()` function (no imports needed)
+ * - Standalone: Uses native OS dialogs
+ * - Photon runtime: Overrides globalThis.__photon_prompt__ with appropriate handler
  */
 
-import { execSync, exec } from 'child_process';
+import { exec } from 'child_process';
 import * as os from 'os';
 import * as readline from 'readline';
 
@@ -39,48 +42,89 @@ export interface ElicitResult {
   error?: string;
 }
 
-/** Custom elicit handler type */
+/** Prompt handler type - simple string in, string out */
+export type PromptHandler = (message: string, defaultValue?: string) => Promise<string | null>;
+
+/** Full elicit handler type */
 export type ElicitHandler = (options: ElicitOptions) => Promise<ElicitResult>;
 
-/** Global elicit handler - can be overridden by runtimes */
-let customHandler: ElicitHandler | null = null;
+// Declare global override point
+declare global {
+  var __photon_prompt__: PromptHandler | undefined;
+  var __photon_elicit__: ElicitHandler | undefined;
+}
 
 /**
- * Set a custom elicit handler
- * Runtimes (CLI, MCP, etc.) can use this to override the default behavior
+ * Set the prompt handler (simple string-based)
+ * Runtimes use this to override with readline, MCP elicitation, etc.
+ */
+export function setPromptHandler(handler: PromptHandler | null): void {
+  globalThis.__photon_prompt__ = handler || undefined;
+}
+
+/**
+ * Set the full elicit handler (with options)
  */
 export function setElicitHandler(handler: ElicitHandler | null): void {
-  customHandler = handler;
+  globalThis.__photon_elicit__ = handler || undefined;
 }
 
 /**
- * Get the current elicit handler
- */
-export function getElicitHandler(): ElicitHandler | null {
-  return customHandler;
-}
-
-/**
- * Request user input
+ * Simple prompt function - can be called directly from photon files
+ * No imports needed - uses global override or falls back to native dialog
  *
  * @example
  * ```typescript
- * import { elicit } from '@portel/photon-core';
- *
- * const result = await elicit({
- *   prompt: 'Enter the 6-digit code shown on TV:',
- *   title: 'Pairing Code',
- * });
- *
- * if (result.success) {
- *   console.log('User entered:', result.value);
+ * // In a photon file - works standalone or with photon runtime
+ * const code = await prompt('Enter the 6-digit code:');
+ * if (code) {
+ *   console.log('User entered:', code);
  * }
  * ```
  */
+export async function prompt(message: string, defaultValue?: string): Promise<string | null> {
+  // Check for runtime override
+  if (globalThis.__photon_prompt__) {
+    return globalThis.__photon_prompt__(message, defaultValue);
+  }
+
+  // Fall back to native dialog
+  const result = await elicitNativeDialog({
+    prompt: message,
+    defaultValue,
+    type: 'text',
+  });
+
+  return result.success ? (result.value ?? null) : null;
+}
+
+/**
+ * Confirm dialog - returns true/false
+ */
+export async function confirm(message: string): Promise<boolean> {
+  if (globalThis.__photon_elicit__) {
+    const result = await globalThis.__photon_elicit__({
+      prompt: message,
+      type: 'confirm',
+    });
+    return result.confirmed ?? false;
+  }
+
+  const result = await elicitNativeDialog({
+    prompt: message,
+    type: 'confirm',
+  });
+
+  return result.confirmed ?? false;
+}
+
+/**
+ * Full elicit with options
+ */
 export async function elicit(options: ElicitOptions): Promise<ElicitResult> {
   // Use custom handler if set
-  if (customHandler) {
-    return customHandler(options);
+  if (globalThis.__photon_elicit__) {
+    return globalThis.__photon_elicit__(options);
   }
 
   // Check if we're in a TTY (interactive terminal)
@@ -90,6 +134,20 @@ export async function elicit(options: ElicitOptions): Promise<ElicitResult> {
 
   // Default to native OS dialog
   return elicitNativeDialog(options);
+}
+
+/**
+ * Get the current prompt handler
+ */
+export function getPromptHandler(): PromptHandler | undefined {
+  return globalThis.__photon_prompt__;
+}
+
+/**
+ * Get the current elicit handler
+ */
+export function getElicitHandler(): ElicitHandler | undefined {
+  return globalThis.__photon_elicit__;
 }
 
 /**
