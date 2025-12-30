@@ -200,6 +200,87 @@ await depManager.clearAllCache();
 
 ---
 
+### MCP SDK Transport
+
+Connect to external MCPs using the official `@modelcontextprotocol/sdk`. Supports multiple transports:
+
+```typescript
+import {
+  SDKMCPClientFactory,
+  SDKMCPTransport,
+  loadMCPConfig,
+  createSDKMCPClientFactory,
+  resolveMCPSource
+} from '@portel/photon-core';
+
+// Create from config
+const config = {
+  mcpServers: {
+    // stdio transport (local process)
+    github: {
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-github'],
+      env: { GITHUB_TOKEN: 'your-token' }
+    },
+    // SSE transport (HTTP)
+    remote: {
+      url: 'http://localhost:3000/mcp',
+      transport: 'sse'
+    },
+    // WebSocket transport
+    realtime: {
+      url: 'ws://localhost:8080/mcp',
+      transport: 'websocket'
+    },
+    // Streamable HTTP transport
+    streaming: {
+      url: 'http://localhost:3000/mcp',
+      transport: 'streamable-http'
+    }
+  }
+};
+
+const factory = new SDKMCPClientFactory(config);
+const github = factory.create('github');
+
+// List tools
+const tools = await github.list();
+
+// Call a tool
+const issues = await github.call('list_issues', { repo: 'owner/repo' });
+
+// Or use the proxy for fluent API
+import { createMCPProxy } from '@portel/photon-core';
+const githubProxy = createMCPProxy(github);
+const issues = await githubProxy.list_issues({ repo: 'owner/repo' });
+```
+
+**Transport Types:**
+
+| Transport | Config | Use Case |
+|-----------|--------|----------|
+| `stdio` | `command`, `args` | Local CLI-based MCPs |
+| `sse` | `url`, `transport: 'sse'` | HTTP Server-Sent Events |
+| `streamable-http` | `url`, `transport: 'streamable-http'` | HTTP streaming |
+| `websocket` | `url`, `transport: 'websocket'` | WebSocket connections |
+
+**Helper Functions:**
+
+```typescript
+// Load config from standard locations
+// Checks: PHOTON_MCP_CONFIG env, ./photon.mcp.json, ~/.config/photon/mcp.json
+const config = await loadMCPConfig();
+
+// Create factory from default config
+const factory = await createSDKMCPClientFactory();
+
+// Resolve marketplace sources to config
+const config = resolveMCPSource('github', 'anthropics/mcp-server-github', 'github');
+// → { command: 'npx', args: ['-y', '@anthropics/mcp-server-github'], transport: 'stdio' }
+```
+
+---
+
 ### `SchemaExtractor`
 
 Extracts JSON schemas from TypeScript method signatures and JSDoc comments.
