@@ -77,36 +77,73 @@ export {
 // Types
 export * from './types.js';
 
-// Generator-based tools - yield for prompts, progress, streaming
+// Generator-based tools with ask/emit pattern
+// See generator.ts for comprehensive documentation
 export {
-  // Yield type checking
+  // Type guards - check yield direction
+  isAskYield,
+  isEmitYield,
+  getAskType,
+  getEmitType,
+
+  // Generator detection
+  isAsyncGeneratorFunction,
+  isAsyncGenerator,
+
+  // Executor - runs generators to completion
+  executeGenerator,
+
+  // Ask extraction (for REST API schema generation)
+  extractAsks,
+
+  // Built-in providers
+  createPrefilledProvider,
+  NeedsInputError,
+
+  // Utility
+  wrapAsGenerator,
+
+  // Ask yield types (input from user)
+  type AskYield,
+  type AskText,
+  type AskPassword,
+  type AskConfirm,
+  type AskSelect,
+  type AskNumber,
+  type AskFile,
+  type AskDate,
+
+  // Emit yield types (output to user)
+  type EmitYield,
+  type EmitStatus,
+  type EmitProgress,
+  type EmitStream,
+  type EmitLog,
+  type EmitToast,
+  type EmitThinking,
+  type EmitArtifact,
+
+  // Combined type
+  type PhotonYield,
+
+  // Execution config
+  type InputProvider,
+  type OutputHandler,
+  type GeneratorExecutorConfig,
+  type ExtractedAsk,
+
+  // Legacy compatibility (deprecated)
   isInputYield,
   isProgressYield,
   isStreamYield,
   isLogYield,
-  // Generator detection
-  isAsyncGeneratorFunction,
-  isAsyncGenerator,
-  // Executor
-  executeGenerator,
-  // Yield extraction (for REST schema generation)
   extractYields,
-  // Built-in providers
-  createPrefilledProvider,
-  NeedsInputError,
-  // Utility
-  wrapAsGenerator,
-  // Types
-  type PhotonYield,
   type PromptYield,
   type ConfirmYield,
   type SelectYield,
   type ProgressYield,
   type StreamYield,
   type LogYield,
-  type InputProvider,
-  type OutputHandler,
-  type GeneratorExecutorConfig,
   type ExtractedYield,
 } from './generator.js';
 

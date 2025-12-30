@@ -1,192 +1,651 @@
 /**
- * Generator-based Tool Execution
+ * Generator-based Tool Execution with Ask/Emit Pattern
  *
- * Enables photon tools to use generator functions with `yield` for:
- * - User prompts (text, password, confirm, select)
- * - Progress updates
- * - Streaming responses
- * - Multi-step wizards
+ * Enables photon tools to use async generator functions with `yield` for:
+ * - Interactive user input (ask) - blocks until user responds
+ * - Real-time output (emit) - fire and forget, no response needed
  *
- * The runtime handles yields appropriately based on the protocol:
- * - REST: Extract yields as optional parameters
- * - WebSocket/MCP: Interactive prompts
- * - CLI: readline prompts
- * - Fallback: Native OS dialogs
+ * ══════════════════════════════════════════════════════════════════════════════
+ * DESIGN PHILOSOPHY
+ * ══════════════════════════════════════════════════════════════════════════════
  *
- * @example
+ * The `ask` vs `emit` pattern provides instant clarity:
+ * - `ask` = "I need something FROM the user" (blocks, returns value)
+ * - `emit` = "I'm sending something TO the user" (non-blocking, void)
+ *
+ * This maps naturally to all runtime contexts:
+ *
+ * | Runtime    | ask (input)              | emit (output)              |
+ * |------------|--------------------------|----------------------------|
+ * | REST API   | Returns 202 + continue   | Included in response or SSE|
+ * | WebSocket  | Server request → client  | Server push to client      |
+ * | CLI        | Readline prompt          | Console output             |
+ * | MCP        | Elicitation dialog       | Notification/logging       |
+ * | Chatbot    | Bot question → user reply| Status message, typing...  |
+ *
+ * ══════════════════════════════════════════════════════════════════════════════
+ * REST API CONTINUATION PATTERN
+ * ══════════════════════════════════════════════════════════════════════════════
+ *
+ * When a generator yields `ask`, REST APIs can implement a continuation flow:
+ *
+ * ```
+ * POST /api/google-tv/connect
+ * Body: { ip: "192.168.1.100" }
+ *
+ * Response (202 Accepted):
+ * {
+ *   "status": "awaiting_input",
+ *   "continuation_id": "ctx_abc123",
+ *   "ask": { "type": "text", "id": "pairing_code", "message": "Enter code:" },
+ *   "continue": "/api/google-tv/connect/ctx_abc123"
+ * }
+ *
+ * POST /api/google-tv/connect/ctx_abc123
+ * Body: { "pairing_code": "123456" }
+ *
+ * Response (200 OK):
+ * { "status": "complete", "result": { "success": true } }
+ * ```
+ *
+ * ══════════════════════════════════════════════════════════════════════════════
+ * USAGE EXAMPLE
+ * ══════════════════════════════════════════════════════════════════════════════
+ *
  * ```typescript
  * async *connect(params: { ip: string }) {
- *   await this.startConnection(params.ip);
+ *   yield { emit: 'status', message: 'Connecting to TV...' };
  *
+ *   await this.startPairing(params.ip);
+ *
+ *   yield { emit: 'progress', value: 0.3, message: 'Waiting for code...' };
+ *
+ *   // Blocks until user provides input
  *   const code: string = yield {
- *     prompt: 'Enter the 6-digit code:',
- *     type: 'text'
+ *     ask: 'text',
+ *     id: 'pairing_code',
+ *     message: 'Enter the 6-digit code shown on TV:',
+ *     pattern: '^[0-9]{6}$',
+ *     required: true
  *   };
  *
+ *   yield { emit: 'status', message: 'Verifying code...' };
+ *
  *   await this.sendCode(code);
- *   return { success: true };
+ *
+ *   yield { emit: 'toast', message: 'Connected!', type: 'success' };
+ *
+ *   return { success: true, paired: true };
  * }
  * ```
+ *
+ * @module generator
  */
 
-// ============================================================================
-// Yield Types - What can be yielded from generator tools
-// ============================================================================
+// ══════════════════════════════════════════════════════════════════════════════
+// ASK YIELDS - Input from user (blocks until response)
+// ══════════════════════════════════════════════════════════════════════════════
 
 /**
- * Text input prompt
+ * Base properties shared by all ask yields
  */
-export interface PromptYield {
-  prompt: string;
-  type?: 'text' | 'password';
-  default?: string;
-  /** Unique identifier for this prompt (auto-generated if not provided) */
+interface AskBase {
+  /**
+   * Unique identifier for this input.
+   * Used for:
+   * - REST API parameter mapping (pre-provided inputs)
+   * - Continuation token correlation
+   * - Form field identification
+   *
+   * Auto-generated if not provided (ask_0, ask_1, etc.)
+   */
   id?: string;
-  /** Validation pattern */
-  pattern?: string;
-  /** Whether this prompt is required */
+
+  /**
+   * The prompt message shown to the user.
+   * Should be clear and actionable.
+   */
+  message: string;
+
+  /**
+   * Whether this input is required.
+   * If false, user can skip/cancel.
+   * @default true
+   */
   required?: boolean;
 }
 
 /**
- * Confirmation dialog
+ * Text input - single line string
+ *
+ * @example
+ * const name: string = yield {
+ *   ask: 'text',
+ *   message: 'Enter your name:',
+ *   default: 'Guest',
+ *   placeholder: 'John Doe'
+ * };
  */
-export interface ConfirmYield {
-  confirm: string;
-  /** Mark as dangerous action (UI can show warning styling) */
+export interface AskText extends AskBase {
+  ask: 'text';
+  /** Default value if user submits empty */
+  default?: string;
+  /** Placeholder hint shown in input field */
+  placeholder?: string;
+  /** Regex pattern for validation */
+  pattern?: string;
+  /** Minimum length */
+  minLength?: number;
+  /** Maximum length */
+  maxLength?: number;
+}
+
+/**
+ * Password input - hidden/masked string
+ *
+ * @example
+ * const apiKey: string = yield {
+ *   ask: 'password',
+ *   message: 'Enter your API key:'
+ * };
+ */
+export interface AskPassword extends AskBase {
+  ask: 'password';
+}
+
+/**
+ * Confirmation - yes/no boolean
+ *
+ * @example
+ * const confirmed: boolean = yield {
+ *   ask: 'confirm',
+ *   message: 'Delete this file permanently?',
+ *   dangerous: true
+ * };
+ */
+export interface AskConfirm extends AskBase {
+  ask: 'confirm';
+  /**
+   * Mark as dangerous/destructive action.
+   * UI may show warning styling (red button, confirmation dialog).
+   */
   dangerous?: boolean;
-  id?: string;
+  /** Default value if user just presses enter */
+  default?: boolean;
 }
 
 /**
- * Selection from options
+ * Selection from predefined options
+ *
+ * @example
+ * // Simple string options
+ * const env: string = yield {
+ *   ask: 'select',
+ *   message: 'Choose environment:',
+ *   options: ['development', 'staging', 'production']
+ * };
+ *
+ * // Rich options with labels
+ * const region: string = yield {
+ *   ask: 'select',
+ *   message: 'Select region:',
+ *   options: [
+ *     { value: 'us-east-1', label: 'US East (N. Virginia)' },
+ *     { value: 'eu-west-1', label: 'EU West (Ireland)' }
+ *   ]
+ * };
+ *
+ * // Multi-select
+ * const features: string[] = yield {
+ *   ask: 'select',
+ *   message: 'Enable features:',
+ *   options: ['auth', 'logging', 'metrics'],
+ *   multi: true
+ * };
  */
-export interface SelectYield {
-  select: string;
-  options: Array<string | { value: string; label: string }>;
-  /** Allow multiple selections */
+export interface AskSelect extends AskBase {
+  ask: 'select';
+  /** Available options */
+  options: Array<string | { value: string; label: string; description?: string }>;
+  /** Allow selecting multiple options */
   multi?: boolean;
-  id?: string;
+  /** Default selected value(s) */
+  default?: string | string[];
 }
 
 /**
- * Progress update (for long-running operations)
+ * Number input with optional constraints
+ *
+ * @example
+ * const quantity: number = yield {
+ *   ask: 'number',
+ *   message: 'Enter quantity:',
+ *   min: 1,
+ *   max: 100,
+ *   step: 1
+ * };
  */
-export interface ProgressYield {
-  progress: number;  // 0-100
-  status?: string;
-  /** Additional data to stream to client */
-  data?: any;
+export interface AskNumber extends AskBase {
+  ask: 'number';
+  /** Minimum value */
+  min?: number;
+  /** Maximum value */
+  max?: number;
+  /** Step increment */
+  step?: number;
+  /** Default value */
+  default?: number;
 }
 
 /**
- * Stream data to client
+ * File selection (for supported runtimes)
+ *
+ * @example
+ * const file: FileInfo = yield {
+ *   ask: 'file',
+ *   message: 'Select a document:',
+ *   accept: '.pdf,.doc,.docx',
+ *   multiple: false
+ * };
  */
-export interface StreamYield {
-  stream: any;
+export interface AskFile extends AskBase {
+  ask: 'file';
+  /** Accepted file types (MIME types or extensions) */
+  accept?: string;
+  /** Allow multiple file selection */
+  multiple?: boolean;
+}
+
+/**
+ * Date/time selection
+ *
+ * @example
+ * const date: string = yield {
+ *   ask: 'date',
+ *   message: 'Select delivery date:',
+ *   min: '2024-01-01',
+ *   max: '2024-12-31'
+ * };
+ */
+export interface AskDate extends AskBase {
+  ask: 'date';
+  /** Include time selection */
+  includeTime?: boolean;
+  /** Minimum date (ISO string) */
+  min?: string;
+  /** Maximum date (ISO string) */
+  max?: string;
+  /** Default value (ISO string) */
+  default?: string;
+}
+
+/**
+ * Union of all ask (input) yield types
+ */
+export type AskYield =
+  | AskText
+  | AskPassword
+  | AskConfirm
+  | AskSelect
+  | AskNumber
+  | AskFile
+  | AskDate;
+
+// ══════════════════════════════════════════════════════════════════════════════
+// EMIT YIELDS - Output to user (fire and forget)
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Status message - general purpose user notification
+ *
+ * Use for: progress updates, step completions, informational messages
+ *
+ * @example
+ * yield { emit: 'status', message: 'Connecting to server...' };
+ * yield { emit: 'status', message: 'Upload complete!', type: 'success' };
+ */
+export interface EmitStatus {
+  emit: 'status';
+  /** Message to display */
+  message: string;
+  /** Message type for styling */
+  type?: 'info' | 'success' | 'warning' | 'error';
+}
+
+/**
+ * Progress update - for long-running operations
+ *
+ * Runtimes may display as: progress bar, percentage, spinner
+ *
+ * @example
+ * yield { emit: 'progress', value: 0.0, message: 'Starting...' };
+ * yield { emit: 'progress', value: 0.5, message: 'Halfway there...' };
+ * yield { emit: 'progress', value: 1.0, message: 'Complete!' };
+ */
+export interface EmitProgress {
+  emit: 'progress';
+  /** Progress value from 0 to 1 (0% to 100%) */
+  value: number;
+  /** Optional status message */
+  message?: string;
+  /** Additional metadata */
+  meta?: Record<string, any>;
+}
+
+/**
+ * Streaming data - for chunked responses
+ *
+ * Use for: streaming text, large file transfers, real-time data
+ *
+ * @example
+ * for await (const chunk of aiStream) {
+ *   yield { emit: 'stream', data: chunk.text };
+ * }
+ * yield { emit: 'stream', data: '', final: true };
+ */
+export interface EmitStream {
+  emit: 'stream';
+  /** Data chunk to send */
+  data: any;
   /** Whether this is the final chunk */
   final?: boolean;
+  /** Content type hint */
+  contentType?: string;
 }
 
 /**
- * Log/debug message
+ * Log message - for debugging/development
+ *
+ * May be hidden in production or routed to logging system
+ *
+ * @example
+ * yield { emit: 'log', message: 'Processing item', level: 'debug', data: { id: 123 } };
  */
-export interface LogYield {
-  log: string;
+export interface EmitLog {
+  emit: 'log';
+  /** Log message */
+  message: string;
+  /** Log level */
   level?: 'debug' | 'info' | 'warn' | 'error';
+  /** Additional structured data */
+  data?: Record<string, any>;
 }
 
 /**
- * All possible yield types
+ * Toast notification - ephemeral popup message
+ *
+ * Use for: success confirmations, quick alerts, non-blocking notices
+ *
+ * @example
+ * yield { emit: 'toast', message: 'Settings saved!', type: 'success' };
+ * yield { emit: 'toast', message: 'Connection lost', type: 'error', duration: 5000 };
  */
-export type PhotonYield =
-  | PromptYield
-  | ConfirmYield
-  | SelectYield
-  | ProgressYield
-  | StreamYield
-  | LogYield;
-
-/**
- * Check if a yield requires user input
- */
-export function isInputYield(y: PhotonYield): y is PromptYield | ConfirmYield | SelectYield {
-  return 'prompt' in y || 'confirm' in y || 'select' in y;
+export interface EmitToast {
+  emit: 'toast';
+  /** Toast message */
+  message: string;
+  /** Toast type for styling */
+  type?: 'info' | 'success' | 'warning' | 'error';
+  /** Display duration in ms (0 = sticky) */
+  duration?: number;
 }
 
 /**
- * Check if a yield is a progress update
+ * Thinking indicator - for chatbot/AI contexts
+ *
+ * Shows user that processing is happening (typing dots, spinner)
+ *
+ * @example
+ * yield { emit: 'thinking', active: true };
+ * const result = await this.heavyComputation();
+ * yield { emit: 'thinking', active: false };
  */
-export function isProgressYield(y: PhotonYield): y is ProgressYield {
-  return 'progress' in y;
+export interface EmitThinking {
+  emit: 'thinking';
+  /** Whether thinking indicator should be shown */
+  active: boolean;
 }
 
 /**
- * Check if a yield is streaming data
+ * Rich artifact - embedded content preview
+ *
+ * Use for: images, code blocks, documents, embeds
+ *
+ * @example
+ * yield {
+ *   emit: 'artifact',
+ *   type: 'image',
+ *   url: 'https://example.com/chart.png',
+ *   title: 'Sales Chart Q4'
+ * };
+ *
+ * yield {
+ *   emit: 'artifact',
+ *   type: 'code',
+ *   language: 'typescript',
+ *   content: 'const x = 1;',
+ *   title: 'Example'
+ * };
  */
-export function isStreamYield(y: PhotonYield): y is StreamYield {
-  return 'stream' in y;
+export interface EmitArtifact {
+  emit: 'artifact';
+  /** Artifact type */
+  type: 'image' | 'code' | 'document' | 'embed' | 'json';
+  /** Title/label */
+  title?: string;
+  /** URL for external content */
+  url?: string;
+  /** Inline content */
+  content?: string;
+  /** Language hint for code */
+  language?: string;
+  /** MIME type hint */
+  mimeType?: string;
 }
 
 /**
- * Check if a yield is a log message
+ * Union of all emit (output) yield types
  */
-export function isLogYield(y: PhotonYield): y is LogYield {
-  return 'log' in y;
+export type EmitYield =
+  | EmitStatus
+  | EmitProgress
+  | EmitStream
+  | EmitLog
+  | EmitToast
+  | EmitThinking
+  | EmitArtifact;
+
+// ══════════════════════════════════════════════════════════════════════════════
+// COMBINED TYPES
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * All possible yield types from a photon generator
+ */
+export type PhotonYield = AskYield | EmitYield;
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TYPE GUARDS - Check what kind of yield we have
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Check if yield is an ask (requires user input)
+ *
+ * @example
+ * if (isAskYield(yielded)) {
+ *   const userInput = await promptUser(yielded);
+ *   generator.next(userInput);
+ * }
+ */
+export function isAskYield(y: PhotonYield): y is AskYield {
+  return 'ask' in y;
 }
 
-// ============================================================================
-// Input Provider - How runtimes provide values for yields
-// ============================================================================
+/**
+ * Check if yield is an emit (output only, no response needed)
+ *
+ * @example
+ * if (isEmitYield(yielded)) {
+ *   handleOutput(yielded);
+ *   generator.next(); // Continue without value
+ * }
+ */
+export function isEmitYield(y: PhotonYield): y is EmitYield {
+  return 'emit' in y;
+}
 
 /**
- * Function that provides input for a yield
- * Runtimes implement this based on their protocol
+ * Get the type of an ask yield
  */
-export type InputProvider = (yielded: PhotonYield) => Promise<any>;
+export function getAskType(y: AskYield): AskYield['ask'] {
+  return y.ask;
+}
 
 /**
- * Handler for non-input yields (progress, stream, log)
+ * Get the type of an emit yield
  */
-export type OutputHandler = (yielded: PhotonYield) => void | Promise<void>;
+export function getEmitType(y: EmitYield): EmitYield['emit'] {
+  return y.emit;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// GENERATOR DETECTION
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Check if a function is an async generator function
+ *
+ * @example
+ * if (isAsyncGeneratorFunction(method)) {
+ *   const gen = method.call(instance, params);
+ *   await executeGenerator(gen, config);
+ * }
+ */
+export function isAsyncGeneratorFunction(fn: any): fn is (...args: any[]) => AsyncGenerator {
+  if (!fn) return false;
+  const constructor = fn.constructor;
+  if (!constructor) return false;
+  if (constructor.name === 'AsyncGeneratorFunction') return true;
+  const prototype = Object.getPrototypeOf(fn);
+  return prototype?.constructor?.name === 'AsyncGeneratorFunction';
+}
+
+/**
+ * Check if a value is an async generator instance (already invoked)
+ *
+ * @example
+ * const result = method.call(instance, params);
+ * if (isAsyncGenerator(result)) {
+ *   await executeGenerator(result, config);
+ * }
+ */
+export function isAsyncGenerator(obj: any): obj is AsyncGenerator {
+  return obj &&
+    typeof obj.next === 'function' &&
+    typeof obj.return === 'function' &&
+    typeof obj.throw === 'function' &&
+    typeof obj[Symbol.asyncIterator] === 'function';
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// INPUT PROVIDER - How runtimes supply values for ask yields
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Function that provides input for an ask yield.
+ *
+ * Runtimes implement this based on their capabilities:
+ * - CLI: readline prompts
+ * - MCP: elicitation dialogs
+ * - WebSocket: request/response messages
+ * - REST: throw NeedsInputError for continuation flow
+ *
+ * @example
+ * const cliInputProvider: InputProvider = async (ask) => {
+ *   if (ask.ask === 'text') return await readline(ask.message);
+ *   if (ask.ask === 'confirm') return await confirm(ask.message);
+ *   // ...
+ * };
+ */
+export type InputProvider = (ask: AskYield) => Promise<any>;
+
+/**
+ * Handler for emit yields (output).
+ *
+ * Runtimes implement this to handle output:
+ * - CLI: console.log, progress bar
+ * - WebSocket: push message to client
+ * - REST: collect for response or send via SSE
+ *
+ * @example
+ * const cliOutputHandler: OutputHandler = (emit) => {
+ *   if (emit.emit === 'status') console.log(emit.message);
+ *   if (emit.emit === 'progress') updateProgressBar(emit.value);
+ * };
+ */
+export type OutputHandler = (emit: EmitYield) => void | Promise<void>;
 
 /**
  * Configuration for generator execution
  */
 export interface GeneratorExecutorConfig {
-  /** Provides input for prompt/confirm/select yields */
+  /**
+   * Provides input values for ask yields.
+   * Required unless all asks are pre-provided.
+   */
   inputProvider: InputProvider;
-  /** Handles progress/stream/log yields */
+
+  /**
+   * Handles emit yields (optional).
+   * If not provided, emits are silently ignored.
+   */
   outputHandler?: OutputHandler;
-  /** Pre-provided inputs (for REST APIs) */
+
+  /**
+   * Pre-provided inputs keyed by ask id.
+   * Used by REST APIs to pass all inputs upfront.
+   *
+   * @example
+   * // If photon yields { ask: 'text', id: 'name', message: '...' }
+   * // and preProvidedInputs = { name: 'John' }
+   * // The generator receives 'John' without calling inputProvider
+   */
   preProvidedInputs?: Record<string, any>;
-  /** Timeout for waiting for input (ms) */
+
+  /**
+   * Timeout for waiting on input (ms).
+   * @default 300000 (5 minutes)
+   */
   inputTimeout?: number;
 }
 
-// ============================================================================
-// Generator Executor - Runs generator tools
-// ============================================================================
+// ══════════════════════════════════════════════════════════════════════════════
+// GENERATOR EXECUTOR - Runs generator tools to completion
+// ══════════════════════════════════════════════════════════════════════════════
 
 /**
- * Execute a generator-based tool
+ * Execute a generator-based photon tool to completion.
+ *
+ * Handles the yield/resume loop:
+ * 1. Run generator until it yields
+ * 2. If ask yield: get input from provider (or pre-provided), resume with value
+ * 3. If emit yield: call output handler, resume without value
+ * 4. Repeat until generator returns
  *
  * @param generator - The async generator to execute
  * @param config - Configuration for handling yields
  * @returns The final return value of the generator
  *
  * @example
- * ```typescript
- * const result = await executeGenerator(tool.connect({ ip: '192.168.1.1' }), {
- *   inputProvider: async (y) => {
- *     if ('prompt' in y) return await readline(y.prompt);
- *     if ('confirm' in y) return await confirm(y.confirm);
+ * const result = await executeGenerator(photon.connect({ ip: '192.168.1.1' }), {
+ *   inputProvider: async (ask) => {
+ *     if (ask.ask === 'text') return await readline(ask.message);
+ *     if (ask.ask === 'confirm') return await confirm(ask.message);
  *   },
- *   outputHandler: (y) => {
- *     if ('progress' in y) console.log(`Progress: ${y.progress}%`);
+ *   outputHandler: (emit) => {
+ *     if (emit.emit === 'progress') console.log(`${emit.value * 100}%`);
  *   }
  * });
- * ```
  */
 export async function executeGenerator<T>(
   generator: AsyncGenerator<PhotonYield, T, any>,
@@ -194,20 +653,20 @@ export async function executeGenerator<T>(
 ): Promise<T> {
   const { inputProvider, outputHandler, preProvidedInputs } = config;
 
-  let promptIndex = 0;
+  let askIndex = 0;
   let result = await generator.next();
 
   while (!result.done) {
     const yielded = result.value;
 
-    // Handle input yields (prompt, confirm, select)
-    if (isInputYield(yielded)) {
-      // Generate ID if not provided
-      const yieldId = yielded.id || `prompt_${promptIndex++}`;
+    // Handle ask yields (need input)
+    if (isAskYield(yielded)) {
+      // Generate id if not provided
+      const askId = yielded.id || `ask_${askIndex++}`;
 
       // Check for pre-provided input (REST API style)
-      if (preProvidedInputs && yieldId in preProvidedInputs) {
-        result = await generator.next(preProvidedInputs[yieldId]);
+      if (preProvidedInputs && askId in preProvidedInputs) {
+        result = await generator.next(preProvidedInputs[askId]);
         continue;
       }
 
@@ -215,12 +674,17 @@ export async function executeGenerator<T>(
       const input = await inputProvider(yielded);
       result = await generator.next(input);
     }
-    // Handle output yields (progress, stream, log)
-    else {
+    // Handle emit yields (output only)
+    else if (isEmitYield(yielded)) {
       if (outputHandler) {
         await outputHandler(yielded);
       }
       // Continue without providing a value
+      result = await generator.next();
+    }
+    // Unknown yield type - skip
+    else {
+      console.warn('[generator] Unknown yield type:', yielded);
       result = await generator.next();
     }
   }
@@ -228,67 +692,46 @@ export async function executeGenerator<T>(
   return result.value;
 }
 
-// ============================================================================
-// Generator Detection - Check if a function is a generator
-// ============================================================================
+// ══════════════════════════════════════════════════════════════════════════════
+// YIELD EXTRACTION - For REST API schema generation
+// ══════════════════════════════════════════════════════════════════════════════
 
 /**
- * Check if a function is an async generator function
+ * Information about an ask yield extracted from a generator.
+ * Used to generate REST API schemas (optional parameters).
  */
-export function isAsyncGeneratorFunction(fn: any): fn is (...args: any[]) => AsyncGenerator {
-  if (!fn) return false;
-  const constructor = fn.constructor;
-  if (!constructor) return false;
-  if (constructor.name === 'AsyncGeneratorFunction') return true;
-  // Check prototype chain
-  const prototype = Object.getPrototypeOf(fn);
-  return prototype && prototype.constructor &&
-         prototype.constructor.name === 'AsyncGeneratorFunction';
-}
-
-/**
- * Check if a value is an async generator (already invoked)
- */
-export function isAsyncGenerator(obj: any): obj is AsyncGenerator {
-  return obj &&
-         typeof obj.next === 'function' &&
-         typeof obj.return === 'function' &&
-         typeof obj.throw === 'function' &&
-         typeof obj[Symbol.asyncIterator] === 'function';
-}
-
-// ============================================================================
-// Yield Extraction - Extract yields from generator for schema generation
-// ============================================================================
-
-/**
- * Information about a yield point extracted from a generator
- */
-export interface ExtractedYield {
+export interface ExtractedAsk {
   id: string;
-  type: 'prompt' | 'confirm' | 'select';
-  prompt?: string;
-  options?: Array<string | { value: string; label: string }>;
-  default?: string;
+  type: AskYield['ask'];
+  message: string;
   required?: boolean;
+  default?: any;
+  options?: Array<string | { value: string; label: string }>;
   pattern?: string;
-  dangerous?: boolean;
-  multi?: boolean;
+  min?: number;
+  max?: number;
 }
 
 /**
- * Extract yield information by running generator with mock provider
- * This is used for REST API schema generation
+ * Extract ask yield information by running generator with mock provider.
  *
- * Note: This only extracts yields that are reachable with default/empty inputs
- * Complex conditional yields may not be extracted
+ * This is used for REST API schema generation - each ask becomes
+ * an optional request parameter.
+ *
+ * Note: Only extracts asks reachable with default/empty inputs.
+ * Conditional asks may not be discovered.
+ *
+ * @example
+ * const asks = await extractAsks(Photon.prototype.connect, { ip: '' });
+ * // Returns: [{ id: 'pairing_code', type: 'text', message: '...' }]
+ * // These become optional query/body params in REST API
  */
-export async function extractYields(
+export async function extractAsks(
   generatorFn: (...args: any[]) => AsyncGenerator<PhotonYield, any, any>,
   mockParams: any = {}
-): Promise<ExtractedYield[]> {
-  const yields: ExtractedYield[] = [];
-  let promptIndex = 0;
+): Promise<ExtractedAsk[]> {
+  const asks: ExtractedAsk[] = [];
+  let askIndex = 0;
 
   try {
     const generator = generatorFn(mockParams);
@@ -297,108 +740,224 @@ export async function extractYields(
     while (!result.done) {
       const yielded = result.value;
 
-      if (isInputYield(yielded)) {
-        const id = yielded.id || `prompt_${promptIndex++}`;
+      if (isAskYield(yielded)) {
+        const id = yielded.id || `ask_${askIndex++}`;
 
-        if ('prompt' in yielded) {
-          yields.push({
-            id,
-            type: yielded.type === 'password' ? 'prompt' : 'prompt',
-            prompt: yielded.prompt,
-            default: yielded.default,
-            required: yielded.required,
-            pattern: yielded.pattern,
-          });
-          // Provide mock value to continue
-          result = await generator.next(yielded.default || '');
-        } else if ('confirm' in yielded) {
-          yields.push({
-            id,
-            type: 'confirm',
-            prompt: yielded.confirm,
-            dangerous: yielded.dangerous,
-          });
-          result = await generator.next(true);
-        } else if ('select' in yielded) {
-          yields.push({
-            id,
-            type: 'select',
-            prompt: yielded.select,
-            options: yielded.options,
-            multi: yielded.multi,
-          });
-          const firstOption = yielded.options[0];
-          const mockValue = typeof firstOption === 'string' ? firstOption : firstOption.value;
-          result = await generator.next(yielded.multi ? [mockValue] : mockValue);
+        const extracted: ExtractedAsk = {
+          id,
+          type: yielded.ask,
+          message: yielded.message,
+          required: yielded.required,
+        };
+
+        // Extract type-specific properties
+        if (yielded.ask === 'text') {
+          extracted.default = yielded.default;
+          extracted.pattern = yielded.pattern;
+        } else if (yielded.ask === 'confirm') {
+          extracted.default = yielded.default;
+        } else if (yielded.ask === 'select') {
+          extracted.options = yielded.options;
+          extracted.default = yielded.default;
+        } else if (yielded.ask === 'number') {
+          extracted.default = yielded.default;
+          extracted.min = yielded.min;
+          extracted.max = yielded.max;
         }
+
+        asks.push(extracted);
+
+        // Provide mock value to continue
+        const mockValue = getMockValue(yielded);
+        result = await generator.next(mockValue);
       } else {
-        // Skip non-input yields
+        // Skip emit yields
         result = await generator.next();
       }
     }
   } catch (error) {
     // Generator may throw if it needs real resources
     // Return what we've extracted so far
-    console.warn('[generator] Yield extraction incomplete:', error);
+    console.warn('[generator] Ask extraction incomplete:', error);
   }
 
-  return yields;
+  return asks;
 }
 
-// ============================================================================
-// Default Input Providers - Built-in implementations for common scenarios
-// ============================================================================
+/**
+ * Get a mock value for an ask yield (for extraction purposes)
+ */
+function getMockValue(ask: AskYield): any {
+  switch (ask.ask) {
+    case 'text':
+    case 'password':
+      return (ask as AskText).default || '';
+    case 'confirm':
+      return (ask as AskConfirm).default ?? true;
+    case 'select':
+      const select = ask as AskSelect;
+      const firstOpt = select.options[0];
+      const firstVal = typeof firstOpt === 'string' ? firstOpt : firstOpt.value;
+      return select.multi ? [firstVal] : firstVal;
+    case 'number':
+      return (ask as AskNumber).default ?? 0;
+    case 'file':
+      return null;
+    case 'date':
+      return (ask as AskDate).default || new Date().toISOString();
+    default:
+      return null;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// BUILT-IN INPUT PROVIDERS
+// ══════════════════════════════════════════════════════════════════════════════
 
 /**
- * Create an input provider from pre-provided values
- * Throws if a required value is missing
+ * Error thrown when input is required but not available.
+ *
+ * REST APIs can catch this to return a continuation response.
+ *
+ * @example
+ * try {
+ *   await executeGenerator(gen, { inputProvider: createPrefilledProvider({}) });
+ * } catch (e) {
+ *   if (e instanceof NeedsInputError) {
+ *     return {
+ *       status: 'awaiting_input',
+ *       ask: e.ask,
+ *       continuation_id: saveContinuation(gen)
+ *     };
+ *   }
+ * }
+ */
+export class NeedsInputError extends Error {
+  public readonly ask: AskYield;
+
+  constructor(ask: AskYield) {
+    super(`Input required: ${ask.message}`);
+    this.name = 'NeedsInputError';
+    this.ask = ask;
+  }
+}
+
+/**
+ * Create an input provider from pre-provided values.
+ * Throws NeedsInputError if a required value is missing.
+ *
+ * Use for REST APIs where all inputs are provided upfront.
+ *
+ * @example
+ * const provider = createPrefilledProvider({
+ *   name: 'John',
+ *   confirmed: true
+ * });
  */
 export function createPrefilledProvider(inputs: Record<string, any>): InputProvider {
-  return async (yielded: PhotonYield) => {
-    if (!isInputYield(yielded)) return undefined;
+  let askIndex = 0;
 
-    const id = yielded.id || 'default';
+  return async (ask: AskYield) => {
+    const id = ask.id || `ask_${askIndex++}`;
 
     if (id in inputs) {
       return inputs[id];
     }
 
     // Check for default value
-    if ('prompt' in yielded && yielded.default !== undefined) {
-      return yielded.default;
+    if ('default' in ask && ask.default !== undefined) {
+      return ask.default;
     }
 
-    throw new NeedsInputError(yielded);
+    // No input available
+    throw new NeedsInputError(ask);
   };
 }
 
-/**
- * Error thrown when input is needed but not available
- * Runtimes can catch this to return appropriate responses
- */
-export class NeedsInputError extends Error {
-  public readonly yielded: PhotonYield;
-
-  constructor(yielded: PhotonYield) {
-    const message = 'prompt' in yielded ? yielded.prompt :
-                    'confirm' in yielded ? yielded.confirm :
-                    'select' in yielded ? yielded.select : 'Input required';
-    super(`Input required: ${message}`);
-    this.name = 'NeedsInputError';
-    this.yielded = yielded;
-  }
-}
-
-// ============================================================================
-// Utility: Wrap regular async function to match generator interface
-// ============================================================================
+// ══════════════════════════════════════════════════════════════════════════════
+// UTILITY: Wrap regular function as generator
+// ══════════════════════════════════════════════════════════════════════════════
 
 /**
- * Wrap a regular async function to behave like a generator
- * Useful for uniform handling in runtimes
+ * Wrap a regular async function to behave like a generator.
+ * Useful for uniform handling in runtimes.
+ *
+ * @example
+ * const gen = wrapAsGenerator(() => photon.simpleMethod(params));
+ * const result = await executeGenerator(gen, config);
  */
 export async function* wrapAsGenerator<T>(
   asyncFn: () => Promise<T>
 ): AsyncGenerator<never, T, unknown> {
   return await asyncFn();
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// LEGACY COMPATIBILITY - Map old format to new
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * @deprecated Use AskYield instead
+ */
+export type PromptYield = AskText | AskPassword;
+
+/**
+ * @deprecated Use AskConfirm instead
+ */
+export type ConfirmYield = AskConfirm;
+
+/**
+ * @deprecated Use AskSelect instead
+ */
+export type SelectYield = AskSelect;
+
+/**
+ * @deprecated Use EmitProgress instead
+ */
+export type ProgressYield = EmitProgress;
+
+/**
+ * @deprecated Use EmitStream instead
+ */
+export type StreamYield = EmitStream;
+
+/**
+ * @deprecated Use EmitLog instead
+ */
+export type LogYield = EmitLog;
+
+/**
+ * @deprecated Use isAskYield instead
+ */
+export const isInputYield = isAskYield;
+
+/**
+ * @deprecated Use isEmitYield instead
+ */
+export function isProgressYield(y: PhotonYield): y is EmitProgress {
+  return isEmitYield(y) && y.emit === 'progress';
+}
+
+/**
+ * @deprecated Use isEmitYield instead
+ */
+export function isStreamYield(y: PhotonYield): y is EmitStream {
+  return isEmitYield(y) && y.emit === 'stream';
+}
+
+/**
+ * @deprecated Use isEmitYield instead
+ */
+export function isLogYield(y: PhotonYield): y is EmitLog {
+  return isEmitYield(y) && y.emit === 'log';
+}
+
+/**
+ * @deprecated Use extractAsks instead
+ */
+export const extractYields = extractAsks;
+
+/**
+ * @deprecated Use ExtractedAsk instead
+ */
+export type ExtractedYield = ExtractedAsk;
