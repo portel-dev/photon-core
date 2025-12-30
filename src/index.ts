@@ -77,6 +77,19 @@ export {
 // Types
 export * from './types.js';
 
+// MCP Protocol Client - for calling external MCPs from Photons
+export {
+  MCPClient,
+  MCPError,
+  MCPNotConnectedError,
+  MCPToolError,
+  createMCPProxy,
+  type MCPToolInfo,
+  type MCPToolResult,
+  type MCPTransport,
+  type MCPClientFactory,
+} from './mcp-client.js';
+
 // Generator-based tools with ask/emit pattern
 // See generator.ts for comprehensive documentation
 export {
