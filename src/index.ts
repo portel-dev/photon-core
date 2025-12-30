@@ -90,6 +90,17 @@ export {
   type MCPClientFactory,
 } from './mcp-client.js';
 
+// MCP SDK Transport - official SDK-based transport implementation
+export {
+  SDKMCPTransport,
+  SDKMCPClientFactory,
+  loadMCPConfig,
+  createSDKMCPClientFactory,
+  resolveMCPSource,
+  type MCPServerConfig,
+  type MCPConfig,
+} from './mcp-sdk-transport.js';
+
 // Generator-based tools with ask/emit pattern
 // See generator.ts for comprehensive documentation
 export {
