@@ -10,7 +10,7 @@
 
 import * as fs from 'fs/promises';
 import * as ts from 'typescript';
-import { ExtractedSchema, ConstructorParam, TemplateInfo, StaticInfo, OutputFormat, YieldInfo } from './types.js';
+import { ExtractedSchema, ConstructorParam, TemplateInfo, StaticInfo, OutputFormat, YieldInfo, MCPDependency } from './types.js';
 
 export interface ExtractedMetadata {
   tools: ExtractedSchema[];
@@ -875,5 +875,75 @@ export class SchemaExtractor {
     }
 
     return yields;
+  }
+
+  /**
+   * Extract MCP dependencies from source code
+   * Parses @mcp tags in file-level or class-level JSDoc comments
+   *
+   * Format: @mcp <name> <source>
+   *
+   * Source formats:
+   * - GitHub shorthand: anthropics/mcp-server-github
+   * - npm package: npm:@modelcontextprotocol/server-filesystem
+   * - Local path: ./my-local-mcp or /absolute/path
+   * - Full URL: https://github.com/user/repo
+   *
+   * Example:
+   * ```
+   * /**
+   *  * @mcp github anthropics/mcp-server-github
+   *  * @mcp fs npm:@modelcontextprotocol/server-filesystem
+   *  *\/
+   * ```
+   */
+  extractMCPDependencies(source: string): MCPDependency[] {
+    const dependencies: MCPDependency[] = [];
+
+    // Match @mcp <name> <source> pattern
+    // Supports multiline JSDoc comments
+    const mcpRegex = /@mcp\s+(\w+)\s+([^\s*]+(?:\s+[^\s*@][^\s*]*)*)/g;
+
+    let match;
+    while ((match = mcpRegex.exec(source)) !== null) {
+      const [, name, rawSource] = match;
+      const source = rawSource.trim();
+
+      // Determine source type
+      const sourceType = this.classifyMCPSource(source);
+
+      dependencies.push({
+        name,
+        source,
+        sourceType,
+      });
+    }
+
+    return dependencies;
+  }
+
+  /**
+   * Classify MCP source type based on format
+   */
+  private classifyMCPSource(source: string): 'github' | 'npm' | 'url' | 'local' {
+    // npm package: npm:@scope/package or npm:package
+    if (source.startsWith('npm:')) {
+      return 'npm';
+    }
+
+    // Full URL
+    if (source.startsWith('http://') || source.startsWith('https://')) {
+      return 'url';
+    }
+
+    // Local path (relative or absolute)
+    if (source.startsWith('./') || source.startsWith('../') ||
+        source.startsWith('/') || source.startsWith('~') ||
+        /^[A-Za-z]:[\\/]/.test(source)) {
+      return 'local';
+    }
+
+    // Default: GitHub shorthand (owner/repo)
+    return 'github';
   }
 }

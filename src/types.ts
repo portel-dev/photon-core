@@ -70,6 +70,40 @@ export interface ConstructorParam {
 }
 
 /**
+ * MCP Dependency declaration from @mcp tag
+ * Format: @mcp <name> <source>
+ *
+ * Source formats (following marketplace conventions):
+ * - GitHub shorthand: anthropics/mcp-server-github
+ * - npm package: npm:@modelcontextprotocol/server-filesystem
+ * - Local path: ./my-local-mcp
+ * - Full URL: https://github.com/user/repo
+ *
+ * Example:
+ * ```typescript
+ * /**
+ *  * @mcp github anthropics/mcp-server-github
+ *  * @mcp fs npm:@modelcontextprotocol/server-filesystem
+ *  *\/
+ * export default class MyPhoton extends PhotonMCP {
+ *   async doSomething() {
+ *     const issues = await this.github.list_issues({ repo: 'owner/repo' });
+ *   }
+ * }
+ * ```
+ */
+export interface MCPDependency {
+  /** Local name to use for accessing this MCP (e.g., 'github') */
+  name: string;
+  /** Source identifier (GitHub shorthand, npm package, URL, or path) */
+  source: string;
+  /** Resolved source type */
+  sourceType: 'github' | 'npm' | 'url' | 'local';
+  /** Environment variables to pass (from @env tags) */
+  env?: Record<string, string>;
+}
+
+/**
  * Template type - for text generation with variable substitution
  * Maps to MCP Prompts, HTTP template endpoints, CLI help generators, etc.
  */
