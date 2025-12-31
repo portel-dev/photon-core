@@ -67,6 +67,27 @@ export interface ConstructorParam {
   isOptional: boolean;
   hasDefault: boolean;
   defaultValue?: any;
+  /** True if type is string, number, or boolean (inject from env var) */
+  isPrimitive: boolean;
+}
+
+/**
+ * Injection type for constructor parameters
+ */
+export type InjectionType = 'env' | 'mcp' | 'photon';
+
+/**
+ * Resolved injection info for a constructor parameter
+ */
+export interface ResolvedInjection {
+  param: ConstructorParam;
+  injectionType: InjectionType;
+  /** For 'mcp' - the MCP dependency info */
+  mcpDependency?: MCPDependency;
+  /** For 'photon' - the Photon dependency info */
+  photonDependency?: PhotonDependency;
+  /** For 'env' - the environment variable name */
+  envVarName?: string;
 }
 
 /**
@@ -101,6 +122,40 @@ export interface MCPDependency {
   sourceType: 'github' | 'npm' | 'url' | 'local';
   /** Environment variables to pass (from @env tags) */
   env?: Record<string, string>;
+}
+
+/**
+ * Photon Dependency declaration from @photon tag
+ * Format: @photon <name> <source>
+ *
+ * Source formats (following marketplace conventions):
+ * - Marketplace: rss-feed (from configured marketplace)
+ * - GitHub shorthand: portel-dev/photons/rss-feed
+ * - npm package: npm:@portel/rss-feed-photon
+ * - Local path: ./my-local-photon.photon.ts
+ *
+ * Example:
+ * ```typescript
+ * /**
+ *  * @photon rssFeed rss-feed
+ *  * @photon custom ./my-photon.photon.ts
+ *  *\/
+ * export default class MyWorkflow {
+ *   constructor(private rssFeed: any) {}
+ *
+ *   async run() {
+ *     const items = await this.rssFeed.read({ url: '...' });
+ *   }
+ * }
+ * ```
+ */
+export interface PhotonDependency {
+  /** Local name to use for accessing this Photon (e.g., 'rssFeed') */
+  name: string;
+  /** Source identifier (marketplace name, GitHub shorthand, npm package, or path) */
+  source: string;
+  /** Resolved source type */
+  sourceType: 'marketplace' | 'github' | 'npm' | 'local';
 }
 
 /**

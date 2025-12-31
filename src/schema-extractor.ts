@@ -10,7 +10,7 @@
 
 import * as fs from 'fs/promises';
 import * as ts from 'typescript';
-import { ExtractedSchema, ConstructorParam, TemplateInfo, StaticInfo, OutputFormat, YieldInfo, MCPDependency } from './types.js';
+import { ExtractedSchema, ConstructorParam, TemplateInfo, StaticInfo, OutputFormat, YieldInfo, MCPDependency, PhotonDependency, ResolvedInjection } from './types.js';
 
 export interface ExtractedMetadata {
   tools: ExtractedSchema[];
@@ -451,6 +451,15 @@ export class SchemaExtractor {
   }
 
   /**
+   * Check if a type is a primitive (string, number, boolean)
+   * Primitives are injected from environment variables
+   */
+  private isPrimitiveType(type: string): boolean {
+    const normalizedType = type.trim().toLowerCase();
+    return ['string', 'number', 'boolean'].includes(normalizedType);
+  }
+
+  /**
    * Extract constructor parameters for config injection
    */
   extractConstructorParams(source: string): ConstructorParam[] {
@@ -486,6 +495,7 @@ export class SchemaExtractor {
                     isOptional,
                     hasDefault,
                     defaultValue,
+                    isPrimitive: this.isPrimitiveType(type),
                   });
                 }
               });
@@ -945,5 +955,146 @@ export class SchemaExtractor {
 
     // Default: GitHub shorthand (owner/repo)
     return 'github';
+  }
+
+  /**
+   * Extract Photon dependencies from source code
+   * Parses @photon tags in file-level or class-level JSDoc comments
+   *
+   * Format: @photon <name> <source>
+   *
+   * Source formats:
+   * - Marketplace: rss-feed (simple name from marketplace)
+   * - GitHub: portel-dev/photons/rss-feed
+   * - npm package: npm:@portel/rss-feed-photon
+   * - Local path: ./my-photon.photon.ts
+   *
+   * Example:
+   * ```
+   * /**
+   *  * @photon rssFeed rss-feed
+   *  * @photon custom ./my-photon.photon.ts
+   *  *\/
+   * ```
+   */
+  extractPhotonDependencies(source: string): PhotonDependency[] {
+    const dependencies: PhotonDependency[] = [];
+
+    // Match @photon <name> <source> pattern
+    const photonRegex = /@photon\s+(\w+)\s+([^\s*]+(?:\s+[^\s*@][^\s*]*)*)/g;
+
+    let match;
+    while ((match = photonRegex.exec(source)) !== null) {
+      const [, name, rawSource] = match;
+      const photonSource = rawSource.trim();
+
+      // Determine source type
+      const sourceType = this.classifyPhotonSource(photonSource);
+
+      dependencies.push({
+        name,
+        source: photonSource,
+        sourceType,
+      });
+    }
+
+    return dependencies;
+  }
+
+  /**
+   * Classify Photon source type based on format
+   */
+  private classifyPhotonSource(source: string): 'marketplace' | 'github' | 'npm' | 'local' {
+    // npm package: npm:@scope/package or npm:package
+    if (source.startsWith('npm:')) {
+      return 'npm';
+    }
+
+    // Local path (relative or absolute, or ends with .photon.ts)
+    if (source.startsWith('./') || source.startsWith('../') ||
+        source.startsWith('/') || source.startsWith('~') ||
+        /^[A-Za-z]:[\\/]/.test(source) ||
+        source.endsWith('.photon.ts')) {
+      return 'local';
+    }
+
+    // GitHub: has at least 2 slashes (owner/repo/photon) or 1 slash (owner/repo)
+    if ((source.match(/\//g) || []).length >= 1) {
+      return 'github';
+    }
+
+    // Default: Marketplace (simple name like "rss-feed")
+    return 'marketplace';
+  }
+
+  /**
+   * Resolve all injections for a Photon class
+   * Determines how each constructor parameter should be injected:
+   * - Primitives (string, number, boolean) → env var
+   * - Non-primitives matching @mcp → MCP client
+   * - Non-primitives matching @photon → Photon instance
+   *
+   * @param source The Photon source code
+   * @param mcpName The MCP name (for env var prefixing)
+   */
+  resolveInjections(source: string, mcpName: string): ResolvedInjection[] {
+    const params = this.extractConstructorParams(source);
+    const mcpDeps = this.extractMCPDependencies(source);
+    const photonDeps = this.extractPhotonDependencies(source);
+
+    // Build lookup maps
+    const mcpMap = new Map(mcpDeps.map(d => [d.name, d]));
+    const photonMap = new Map(photonDeps.map(d => [d.name, d]));
+
+    return params.map(param => {
+      // Primitives → env var
+      if (param.isPrimitive) {
+        const envVarName = this.toEnvVarName(mcpName, param.name);
+        return {
+          param,
+          injectionType: 'env' as const,
+          envVarName,
+        };
+      }
+
+      // Check if matches an @mcp declaration
+      if (mcpMap.has(param.name)) {
+        return {
+          param,
+          injectionType: 'mcp' as const,
+          mcpDependency: mcpMap.get(param.name),
+        };
+      }
+
+      // Check if matches an @photon declaration
+      if (photonMap.has(param.name)) {
+        return {
+          param,
+          injectionType: 'photon' as const,
+          photonDependency: photonMap.get(param.name),
+        };
+      }
+
+      // Non-primitive without declaration - treat as env var (will likely fail at runtime)
+      const envVarName = this.toEnvVarName(mcpName, param.name);
+      return {
+        param,
+        injectionType: 'env' as const,
+        envVarName,
+      };
+    });
+  }
+
+  /**
+   * Convert MCP name and parameter name to environment variable name
+   * Example: (filesystem, workdir) → FILESYSTEM_WORKDIR
+   */
+  private toEnvVarName(mcpName: string, paramName: string): string {
+    const mcpPrefix = mcpName.toUpperCase().replace(/-/g, '_');
+    const paramSuffix = paramName
+      .replace(/([A-Z])/g, '_$1')
+      .toUpperCase()
+      .replace(/^_/, '');
+    return `${mcpPrefix}_${paramSuffix}`;
   }
 }
