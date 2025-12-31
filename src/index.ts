@@ -191,3 +191,25 @@ export {
   type ElicitHandler,
   type PromptHandler,
 } from './elicit.js';
+
+// Photon Runtime Configuration - ~/.photon/mcp-servers.json
+export {
+  // Constants
+  PHOTON_CONFIG_DIR,
+  MCP_SERVERS_CONFIG_FILE,
+  // Load/Save
+  loadPhotonMCPConfig,
+  savePhotonMCPConfig,
+  // Query
+  isMCPConfigured,
+  getMCPServerConfig,
+  listMCPServers,
+  // Modify
+  setMCPServerConfig,
+  removeMCPServerConfig,
+  // Utilities
+  toMCPConfig,
+  resolveEnvVars,
+  // Types
+  type PhotonMCPConfig,
+} from './photon-config.js';
