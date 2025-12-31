@@ -460,9 +460,40 @@ export type EmitYield =
 // ══════════════════════════════════════════════════════════════════════════════
 
 /**
+ * Checkpoint yield - marks a safe resume point for stateful workflows
+ *
+ * Place checkpoints AFTER side effects to ensure idempotency on resume.
+ *
+ * @example
+ * // After a side effect, checkpoint to preserve state
+ * const posted = await this.slack.post_message({ ... });
+ * yield { checkpoint: true, state: { step: 1, messageTs: posted.ts } };
+ */
+export interface CheckpointYield {
+  /** Marker for checkpoint yield */
+  checkpoint: true;
+  /** State snapshot to preserve (accumulated data at this point) */
+  state: Record<string, any>;
+  /** Optional checkpoint ID (auto-generated if not provided) */
+  id?: string;
+}
+
+/**
+ * Type guard for checkpoint yields
+ */
+export function isCheckpointYield(y: any): y is CheckpointYield {
+  return y && 'checkpoint' in y && y.checkpoint === true;
+}
+
+/**
  * All possible yield types from a photon generator
  */
 export type PhotonYield = AskYield | EmitYield;
+
+/**
+ * Extended yield type including checkpoint (for stateful workflows)
+ */
+export type StatefulYield = PhotonYield | CheckpointYield;
 
 // ══════════════════════════════════════════════════════════════════════════════
 // TYPE GUARDS - Check what kind of yield we have

@@ -130,6 +130,7 @@ export class SchemaExtractor {
         else {
           const outputFormat = this.extractFormat(jsdoc);
           const yields = isGenerator ? this.extractYieldsFromJSDoc(jsdoc) : undefined;
+          const isStateful = this.hasStatefulTag(jsdoc);
 
           tools.push({
             name: methodName,
@@ -138,6 +139,7 @@ export class SchemaExtractor {
             ...(outputFormat ? { outputFormat } : {}),
             ...(isGenerator ? { isGenerator: true } : {}),
             ...(yields && yields.length > 0 ? { yields } : {}),
+            ...(isStateful ? { isStateful: true } : {}),
           });
         }
       };
@@ -816,6 +818,14 @@ export class SchemaExtractor {
    */
   private hasStaticTag(jsdocContent: string): boolean {
     return /@Static/i.test(jsdocContent);
+  }
+
+  /**
+   * Check if JSDoc contains @stateful tag
+   * Indicates this method is a stateful workflow that supports checkpoint/resume
+   */
+  private hasStatefulTag(jsdocContent: string): boolean {
+    return /@stateful/i.test(jsdocContent);
   }
 
   /**

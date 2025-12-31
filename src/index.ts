@@ -107,6 +107,7 @@ export {
   // Type guards - check yield direction
   isAskYield,
   isEmitYield,
+  isCheckpointYield,
   getAskType,
   getEmitType,
 
@@ -147,8 +148,12 @@ export {
   type EmitThinking,
   type EmitArtifact,
 
-  // Combined type
+  // Checkpoint yield type (for stateful workflows)
+  type CheckpointYield,
+
+  // Combined types
   type PhotonYield,
+  type StatefulYield,
 
   // Execution config
   type InputProvider,
@@ -213,3 +218,33 @@ export {
   // Types
   type PhotonMCPConfig,
 } from './photon-config.js';
+
+// Stateful Workflow Execution - JSONL persistence with checkpoints
+export {
+  // Constants
+  RUNS_DIR,
+
+  // State Log - JSONL persistence
+  StateLog,
+
+  // Resume state parsing
+  parseResumeState,
+
+  // Stateful executor
+  executeStatefulGenerator,
+  generateRunId,
+
+  // Run management
+  listRuns,
+  getRunInfo,
+  deleteRun,
+  cleanupRuns,
+
+  // Types re-exported from stateful.ts
+  type CheckpointYield as StatefulCheckpointYield,
+  type StatefulYield as StatefulWorkflowYield,
+  isCheckpointYield as isStatefulCheckpointYield,
+  type ResumeState,
+  type StatefulExecutorConfig,
+  type StatefulExecutionResult,
+} from './stateful.js';

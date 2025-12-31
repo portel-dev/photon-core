@@ -52,6 +52,8 @@ export interface ExtractedSchema {
   isGenerator?: boolean;
   /** Yield information for generator methods (used by REST APIs) */
   yields?: YieldInfo[];
+  /** True if this is a stateful workflow (supports checkpoint/resume) */
+  isStateful?: boolean;
 }
 
 export interface PhotonMCPClass {
@@ -234,4 +236,151 @@ export interface StaticInfo {
 export interface PhotonMCPClassExtended extends PhotonMCPClass {
   templates: TemplateInfo[];
   statics: StaticInfo[];
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// STATEFUL WORKFLOW TYPES
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * State log entry types for JSONL persistence
+ */
+export type StateLogType = 'start' | 'emit' | 'checkpoint' | 'ask' | 'answer' | 'return' | 'error';
+
+/**
+ * Base state log entry
+ */
+interface StateLogBase {
+  /** Entry type */
+  t: StateLogType;
+  /** Timestamp (Unix ms) */
+  ts: number;
+}
+
+/**
+ * Workflow start entry
+ */
+export interface StateLogStart extends StateLogBase {
+  t: 'start';
+  /** Tool/method name being executed */
+  tool: string;
+  /** Input parameters */
+  params: Record<string, any>;
+}
+
+/**
+ * Emit entry (status, progress, etc.)
+ */
+export interface StateLogEmit extends StateLogBase {
+  t: 'emit';
+  /** Emit type (status, progress, stream, log, etc.) */
+  emit: string;
+  /** Emit message */
+  message?: string;
+  /** Additional emit data */
+  data?: any;
+}
+
+/**
+ * Checkpoint entry - marks safe resume point with state snapshot
+ */
+export interface StateLogCheckpoint extends StateLogBase {
+  t: 'checkpoint';
+  /** Checkpoint ID (auto-generated or explicit) */
+  id: string;
+  /** Accumulated state at this point */
+  state: Record<string, any>;
+}
+
+/**
+ * Ask entry - input request
+ */
+export interface StateLogAsk extends StateLogBase {
+  t: 'ask';
+  /** Ask ID */
+  id: string;
+  /** Ask type (text, confirm, select, etc.) */
+  ask: string;
+  /** Ask message */
+  message: string;
+}
+
+/**
+ * Answer entry - input response
+ */
+export interface StateLogAnswer extends StateLogBase {
+  t: 'answer';
+  /** Ask ID this answers */
+  id: string;
+  /** User's response value */
+  value: any;
+}
+
+/**
+ * Return entry - workflow completion
+ */
+export interface StateLogReturn extends StateLogBase {
+  t: 'return';
+  /** Final return value */
+  value: any;
+}
+
+/**
+ * Error entry - workflow failed
+ */
+export interface StateLogError extends StateLogBase {
+  t: 'error';
+  /** Error message */
+  message: string;
+  /** Error stack trace */
+  stack?: string;
+}
+
+/**
+ * Union of all state log entry types
+ */
+export type StateLogEntry =
+  | StateLogStart
+  | StateLogEmit
+  | StateLogCheckpoint
+  | StateLogAsk
+  | StateLogAnswer
+  | StateLogReturn
+  | StateLogError;
+
+/**
+ * Workflow run status
+ */
+export type WorkflowStatus = 'running' | 'waiting' | 'completed' | 'failed' | 'paused';
+
+/**
+ * Workflow run metadata
+ */
+export interface WorkflowRun {
+  /** Unique run ID */
+  runId: string;
+  /** Photon name */
+  photon: string;
+  /** Tool/method name */
+  tool: string;
+  /** Input parameters */
+  params: Record<string, any>;
+  /** Current status */
+  status: WorkflowStatus;
+  /** Start timestamp */
+  startedAt: number;
+  /** Last update timestamp */
+  updatedAt: number;
+  /** Completion timestamp (if completed/failed) */
+  completedAt?: number;
+  /** Final result (if completed) */
+  result?: any;
+  /** Error message (if failed) */
+  error?: string;
+  /** Last checkpoint state */
+  lastCheckpoint?: {
+    id: string;
+    state: Record<string, any>;
+    ts: number;
+  };
 }
