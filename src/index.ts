@@ -83,11 +83,14 @@ export {
   MCPError,
   MCPNotConnectedError,
   MCPToolError,
+  MCPConfigurationError,
   createMCPProxy,
   type MCPToolInfo,
   type MCPToolResult,
   type MCPTransport,
   type MCPClientFactory,
+  type MCPSourceType,
+  type MissingMCPInfo,
 } from './mcp-client.js';
 
 // MCP SDK Transport - official SDK-based transport implementation

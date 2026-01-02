@@ -283,6 +283,260 @@ export class MCPToolError extends MCPError {
 }
 
 /**
+ * MCP source type - how the MCP was declared
+ */
+export type MCPSourceType = 'npm' | 'github' | 'local' | 'url' | 'unknown';
+
+/**
+ * Information about a missing MCP dependency
+ */
+export interface MissingMCPInfo {
+  name: string;
+  source: string;
+  sourceType: MCPSourceType;
+  declaredIn?: string; // Photon file that declared this dependency
+  originalError?: string;
+}
+
+/**
+ * Error thrown when MCP is not configured correctly
+ * Provides detailed, actionable guidance for users
+ */
+export class MCPConfigurationError extends MCPError {
+  public readonly configPath: string;
+  public readonly missingMCPs: MissingMCPInfo[];
+
+  constructor(missingMCPs: MissingMCPInfo[]) {
+    const configPath = `~/.photon/mcp-servers.json`;
+    const message = MCPConfigurationError.formatMessage(missingMCPs, configPath);
+    super(missingMCPs[0]?.name || 'unknown', message);
+    this.name = 'MCPConfigurationError';
+    this.configPath = configPath;
+    this.missingMCPs = missingMCPs;
+  }
+
+  /**
+   * Format detailed error message with configuration instructions
+   */
+  private static formatMessage(missingMCPs: MissingMCPInfo[], configPath: string): string {
+    const lines: string[] = [
+      '',
+      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+      '❌ MCP Configuration Required',
+      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+      '',
+    ];
+
+    // List missing MCPs
+    lines.push(`The following MCP server${missingMCPs.length > 1 ? 's are' : ' is'} required but not configured:`);
+    lines.push('');
+
+    for (const mcp of missingMCPs) {
+      lines.push(`  • ${mcp.name}`);
+      if (mcp.source) {
+        lines.push(`    Source: ${mcp.source} (${mcp.sourceType})`);
+      }
+      if (mcp.declaredIn) {
+        lines.push(`    Declared in: ${mcp.declaredIn}`);
+      }
+      if (mcp.originalError) {
+        lines.push(`    Error: ${mcp.originalError}`);
+      }
+      lines.push('');
+    }
+
+    // Configuration instructions
+    lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    lines.push('🔧 How to Fix');
+    lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    lines.push('');
+    lines.push(`Add the following to ${configPath}:`);
+    lines.push('');
+
+    // Generate example config
+    const exampleConfig = MCPConfigurationError.generateExampleConfig(missingMCPs);
+    lines.push(exampleConfig);
+    lines.push('');
+
+    // Step-by-step instructions
+    lines.push('Steps:');
+    lines.push(`  1. Create or edit ${configPath}`);
+    lines.push('  2. Add the configuration above');
+    lines.push('  3. Replace placeholder values with your actual configuration');
+    lines.push('  4. Restart the Photon');
+    lines.push('');
+
+    // Per-source-type guidance
+    const uniqueTypes = new Set(missingMCPs.map(m => m.sourceType));
+    if (uniqueTypes.size > 0) {
+      lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      lines.push('📖 Configuration Guide');
+      lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      lines.push('');
+
+      for (const type of uniqueTypes) {
+        lines.push(...MCPConfigurationError.getSourceTypeGuide(type));
+        lines.push('');
+      }
+    }
+
+    lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+    return lines.join('\n');
+  }
+
+  /**
+   * Generate example JSON config for missing MCPs
+   */
+  private static generateExampleConfig(missingMCPs: MissingMCPInfo[]): string {
+    const servers: Record<string, any> = {};
+
+    for (const mcp of missingMCPs) {
+      servers[mcp.name] = MCPConfigurationError.getExampleServerConfig(mcp);
+    }
+
+    const config = { mcpServers: servers };
+    return JSON.stringify(config, null, 2)
+      .split('\n')
+      .map(line => '  ' + line)
+      .join('\n');
+  }
+
+  /**
+   * Get example server config based on source type
+   */
+  private static getExampleServerConfig(mcp: MissingMCPInfo): Record<string, any> {
+    switch (mcp.sourceType) {
+      case 'npm':
+        return {
+          command: 'npx',
+          args: ['-y', mcp.source],
+          env: {
+            '// Add required environment variables here': '',
+          },
+        };
+
+      case 'github': {
+        // Parse github source: owner/repo or owner/repo#branch
+        const [repo, branch] = mcp.source.split('#');
+        const args = ['-y', `github:${repo}`];
+        if (branch) {
+          args[1] = `github:${repo}#${branch}`;
+        }
+        return {
+          command: 'npx',
+          args,
+          env: {
+            '// Add required environment variables here': '',
+          },
+        };
+      }
+
+      case 'url':
+        if (mcp.source.startsWith('ws://') || mcp.source.startsWith('wss://')) {
+          return {
+            url: mcp.source,
+            transport: 'websocket',
+          };
+        }
+        return {
+          url: mcp.source,
+          transport: 'sse',
+        };
+
+      case 'local':
+        return {
+          command: mcp.source,
+          args: [],
+          cwd: '// Optional: working directory',
+        };
+
+      default:
+        return {
+          '// Configure this MCP server': '',
+          command: 'npx',
+          args: ['-y', '<package-name>'],
+        };
+    }
+  }
+
+  /**
+   * Get source-type specific guidance
+   */
+  private static getSourceTypeGuide(type: MCPSourceType): string[] {
+    switch (type) {
+      case 'npm':
+        return [
+          '📦 NPM Packages:',
+          '   MCP servers from npm are run via npx.',
+          '   Example: @modelcontextprotocol/server-github',
+          '',
+          '   {',
+          '     "command": "npx",',
+          '     "args": ["-y", "@modelcontextprotocol/server-github"],',
+          '     "env": {',
+          '       "GITHUB_TOKEN": "ghp_your_token_here"',
+          '     }',
+          '   }',
+        ];
+
+      case 'github':
+        return [
+          '🐙 GitHub Repositories:',
+          '   MCP servers from GitHub repos are cloned and run.',
+          '   Format: owner/repo or owner/repo#branch',
+          '',
+          '   {',
+          '     "command": "npx",',
+          '     "args": ["-y", "github:anthropics/mcp-server-github"],',
+          '     "env": {',
+          '       "GITHUB_TOKEN": "ghp_your_token_here"',
+          '     }',
+          '   }',
+        ];
+
+      case 'url':
+        return [
+          '🌐 Remote URLs:',
+          '   MCP servers running on remote hosts.',
+          '',
+          '   HTTP/SSE:',
+          '   {',
+          '     "url": "https://mcp.example.com/api",',
+          '     "transport": "sse",',
+          '     "headers": { "Authorization": "Bearer token" }',
+          '   }',
+          '',
+          '   WebSocket:',
+          '   {',
+          '     "url": "wss://mcp.example.com/ws",',
+          '     "transport": "websocket"',
+          '   }',
+        ];
+
+      case 'local':
+        return [
+          '💻 Local Commands:',
+          '   MCP servers running as local processes.',
+          '',
+          '   {',
+          '     "command": "/path/to/mcp-server",',
+          '     "args": ["--port", "3000"],',
+          '     "cwd": "/working/directory",',
+          '     "env": { "CONFIG": "value" }',
+          '   }',
+        ];
+
+      default:
+        return [
+          '⚙️ Custom Configuration:',
+          '   Configure the MCP server based on its documentation.',
+        ];
+    }
+  }
+}
+
+/**
  * Create a proxy-based MCP client that allows direct method calls
  *
  * This enables a more fluent API:
