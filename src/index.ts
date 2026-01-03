@@ -161,6 +161,7 @@ export {
   type EmitToast,
   type EmitThinking,
   type EmitArtifact,
+  type EmitUI,
 
   // Checkpoint yield type (for stateful workflows)
   type CheckpointYield,

@@ -614,6 +614,52 @@ export interface EmitArtifact {
 }
 
 /**
+ * UI render - display a UI asset from the Photon's asset folder
+ *
+ * For MCP Apps (SEP-1865) - renders interactive UI templates
+ * The runtime will resolve the asset path and serve the UI appropriately.
+ *
+ * @example
+ * // Show a form UI after a tool runs
+ * yield {
+ *   emit: 'ui',
+ *   id: 'preferences',
+ *   title: 'Configure Preferences',
+ *   data: { currentTheme: 'dark', volume: 80 }
+ * };
+ *
+ * @example
+ * // Show inline HTML content
+ * yield {
+ *   emit: 'ui',
+ *   inline: '<div class="result"><h2>Success!</h2></div>',
+ *   mimeType: 'text/html'
+ * };
+ */
+export interface EmitUI {
+  emit: 'ui';
+  /**
+   * UI asset ID (references @ui annotation in Photon)
+   * Must match an @ui declared asset: @ui preferences ./ui/preferences.html
+   */
+  id?: string;
+  /** Title for the UI panel/dialog */
+  title?: string;
+  /** Data to pass to the UI template (available as window.__photon_data__) */
+  data?: Record<string, any>;
+  /** Inline HTML/JSX content (alternative to id) */
+  inline?: string;
+  /** MIME type for inline content */
+  mimeType?: 'text/html' | 'text/jsx' | 'application/json';
+  /** Display mode */
+  mode?: 'panel' | 'dialog' | 'fullscreen' | 'inline';
+  /** Width hint (CSS value or number in px) */
+  width?: string | number;
+  /** Height hint (CSS value or number in px) */
+  height?: string | number;
+}
+
+/**
  * Union of all emit (output) yield types
  */
 export type EmitYield =
@@ -623,7 +669,8 @@ export type EmitYield =
   | EmitLog
   | EmitToast
   | EmitThinking
-  | EmitArtifact;
+  | EmitArtifact
+  | EmitUI;
 
 // ══════════════════════════════════════════════════════════════════════════════
 // COMBINED TYPES

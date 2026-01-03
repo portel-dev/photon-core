@@ -76,6 +76,7 @@ import {
   type OutputHandler,
   isAskYield,
   isEmitYield,
+  isAsyncGenerator,
 } from './generator.js';
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -420,7 +421,25 @@ export async function executeStatefulGenerator<T>(
   }
 
   try {
-    const generator = generatorFn();
+    // Call the function and check if it returns a generator or a promise
+    const maybeGenerator = generatorFn();
+
+    // Handle non-generator functions (regular async methods)
+    if (!isAsyncGenerator(maybeGenerator)) {
+      // It's a promise, await it directly
+      const finalValue = await maybeGenerator;
+      await log.writeReturn(finalValue);
+
+      return {
+        runId,
+        result: finalValue,
+        resumed,
+        status: 'completed',
+      };
+    }
+
+    // It's a generator, proceed with generator execution
+    const generator = maybeGenerator;
     let result = await generator.next();
 
     // If resuming, fast-forward to last checkpoint

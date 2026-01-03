@@ -160,6 +160,89 @@ export interface PhotonDependency {
   sourceType: 'marketplace' | 'github' | 'npm' | 'local';
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// PHOTON ASSETS - Static files referenced via @ui, @prompt, @resource
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * UI Asset - HTML/React UI for MCP Apps
+ *
+ * Declared via @ui annotation:
+ * ```
+ * /** @ui preferences-form ./ui/preferences.html *\/
+ * ```
+ *
+ * Referenced in tools via @ui JSDoc or EmitUI yield
+ */
+export interface UIAsset {
+  /** Asset identifier (e.g., 'preferences-form') */
+  id: string;
+  /** Relative path from asset folder (e.g., './ui/preferences.html') */
+  path: string;
+  /** Resolved absolute path (set by loader) */
+  resolvedPath?: string;
+  /** MIME type (detected from extension) */
+  mimeType?: string;
+  /** Tool this UI is linked to (from method @ui annotation) */
+  linkedTool?: string;
+}
+
+/**
+ * Prompt Asset - Static MCP Prompt template
+ *
+ * Declared via @prompt annotation:
+ * ```
+ * /** @prompt system ./prompts/system.md *\/
+ * ```
+ */
+export interface PromptAsset {
+  /** Asset identifier (e.g., 'system') */
+  id: string;
+  /** Relative path from asset folder */
+  path: string;
+  /** Resolved absolute path (set by loader) */
+  resolvedPath?: string;
+  /** Prompt description (from file frontmatter or annotation) */
+  description?: string;
+  /** Prompt arguments schema (from file frontmatter) */
+  arguments?: Record<string, { type: string; description?: string; required?: boolean }>;
+}
+
+/**
+ * Resource Asset - Static MCP Resource
+ *
+ * Declared via @resource annotation:
+ * ```
+ * /** @resource config ./resources/config.json *\/
+ * ```
+ */
+export interface ResourceAsset {
+  /** Asset identifier (e.g., 'config') */
+  id: string;
+  /** Relative path from asset folder */
+  path: string;
+  /** Resolved absolute path (set by loader) */
+  resolvedPath?: string;
+  /** MIME type (detected from extension) */
+  mimeType?: string;
+  /** Resource description */
+  description?: string;
+}
+
+/**
+ * All assets extracted from a Photon
+ */
+export interface PhotonAssets {
+  /** UI assets for MCP Apps */
+  ui: UIAsset[];
+  /** Static prompt templates */
+  prompts: PromptAsset[];
+  /** Static resources */
+  resources: ResourceAsset[];
+  /** Asset folder path (e.g., './my-photon/') */
+  assetFolder?: string;
+}
+
 /**
  * Template type - for text generation with variable substitution
  * Maps to MCP Prompts, HTTP template endpoints, CLI help generators, etc.
@@ -236,6 +319,8 @@ export interface StaticInfo {
 export interface PhotonMCPClassExtended extends PhotonMCPClass {
   templates: TemplateInfo[];
   statics: StaticInfo[];
+  /** Assets from the Photon's asset folder (UI, prompts, resources) */
+  assets?: PhotonAssets;
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

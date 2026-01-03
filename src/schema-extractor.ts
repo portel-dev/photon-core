@@ -10,7 +10,7 @@
 
 import * as fs from 'fs/promises';
 import * as ts from 'typescript';
-import { ExtractedSchema, ConstructorParam, TemplateInfo, StaticInfo, OutputFormat, YieldInfo, MCPDependency, PhotonDependency, ResolvedInjection } from './types.js';
+import { ExtractedSchema, ConstructorParam, TemplateInfo, StaticInfo, OutputFormat, YieldInfo, MCPDependency, PhotonDependency, ResolvedInjection, PhotonAssets, UIAsset, PromptAsset, ResourceAsset } from './types.js';
 
 export interface ExtractedMetadata {
   tools: ExtractedSchema[];
@@ -67,13 +67,13 @@ export class SchemaExtractor {
         const isGenerator = member.asteriskToken !== undefined;
 
         // Extract parameter type information
+        // Extract parameter type (may be undefined for no-arg methods)
         const paramsType = this.getFirstParameterType(member, sourceFile);
-        if (!paramsType) {
-          return; // Skip methods without proper params
-        }
 
-        // Build schema from TypeScript type
-        const { properties, required } = this.buildSchemaFromType(paramsType, sourceFile);
+        // Build schema from TypeScript type (empty for no-arg methods)
+        const { properties, required } = paramsType
+          ? this.buildSchemaFromType(paramsType, sourceFile)
+          : { properties: {}, required: [] };
 
         // Extract descriptions from JSDoc
         const paramDocs = this.extractParamDocs(jsdoc);
@@ -1107,5 +1107,190 @@ export class SchemaExtractor {
       .toUpperCase()
       .replace(/^_/, '');
     return `${mcpPrefix}_${paramSuffix}`;
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // ASSET EXTRACTION - @ui, @prompt, @resource annotations
+  // ════════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Extract all assets from Photon source code
+   * Parses @ui, @prompt, @resource annotations from class-level JSDoc
+   *
+   * Format:
+   * - @ui <id> <path> - UI templates for MCP Apps
+   * - @prompt <id> <path> - Static MCP prompts
+   * - @resource <id> <path> - Static MCP resources
+   *
+   * Example:
+   * ```
+   * /**
+   *  * @ui preferences ./ui/preferences.html
+   *  * @prompt system ./prompts/system.md
+   *  * @resource config ./resources/config.json
+   *  *\/
+   * export default class MyPhoton extends PhotonMCP { ... }
+   * ```
+   */
+  extractAssets(source: string, assetFolder?: string): PhotonAssets {
+    const ui = this.extractUIAssets(source);
+    const prompts = this.extractPromptAssets(source);
+    const resources = this.extractResourceAssets(source);
+
+    // Also extract method-level @ui annotations (links UI to specific tool)
+    this.extractMethodUILinks(source, ui);
+
+    return {
+      ui,
+      prompts,
+      resources,
+      assetFolder,
+    };
+  }
+
+  /**
+   * Extract UI assets from @ui annotations
+   * Format: @ui <id> <path>
+   * Path must start with ./ or / to distinguish from method-level @ui references
+   */
+  private extractUIAssets(source: string): UIAsset[] {
+    const assets: UIAsset[] = [];
+    // Path must start with ./ or / to be a declaration (not a reference)
+    const uiRegex = /@ui\s+(\w[\w-]*)\s+(\.\/[^\s*]+|\/[^\s*]+)/g;
+
+    let match;
+    while ((match = uiRegex.exec(source)) !== null) {
+      const [, id, path] = match;
+      assets.push({
+        id,
+        path,
+        mimeType: this.getMimeTypeFromPath(path),
+      });
+    }
+
+    return assets;
+  }
+
+  /**
+   * Extract prompt assets from @prompt annotations
+   * Format: @prompt <id> <path>
+   * Path must start with ./ or / to be a valid declaration
+   */
+  private extractPromptAssets(source: string): PromptAsset[] {
+    const assets: PromptAsset[] = [];
+    const promptRegex = /@prompt\s+(\w[\w-]*)\s+(\.\/[^\s*]+|\/[^\s*]+)/g;
+
+    let match;
+    while ((match = promptRegex.exec(source)) !== null) {
+      const [, id, path] = match;
+      assets.push({
+        id,
+        path,
+      });
+    }
+
+    return assets;
+  }
+
+  /**
+   * Extract resource assets from @resource annotations
+   * Format: @resource <id> <path>
+   * Path must start with ./ or / to be a valid declaration
+   */
+  private extractResourceAssets(source: string): ResourceAsset[] {
+    const assets: ResourceAsset[] = [];
+    const resourceRegex = /@resource\s+(\w[\w-]*)\s+(\.\/[^\s*]+|\/[^\s*]+)/g;
+
+    let match;
+    while ((match = resourceRegex.exec(source)) !== null) {
+      const [, id, path] = match;
+      assets.push({
+        id,
+        path,
+        mimeType: this.getMimeTypeFromPath(path),
+      });
+    }
+
+    return assets;
+  }
+
+  /**
+   * Extract method-level @ui annotations that link UI to tools
+   * Format: @ui <id> on a method's JSDoc
+   */
+  private extractMethodUILinks(source: string, uiAssets: UIAsset[]): void {
+    try {
+      const sourceFile = ts.createSourceFile(
+        'temp.ts',
+        source,
+        ts.ScriptTarget.Latest,
+        true
+      );
+
+      const visit = (node: ts.Node) => {
+        if (ts.isClassDeclaration(node)) {
+          node.members.forEach((member) => {
+            if (ts.isMethodDeclaration(member) &&
+                member.modifiers?.some(m => m.kind === ts.SyntaxKind.AsyncKeyword)) {
+              const jsdoc = this.getJSDocComment(member, sourceFile);
+              const methodName = member.name.getText(sourceFile);
+
+              // Check for @ui <id> in method JSDoc
+              const uiMatch = jsdoc.match(/@ui\s+(\S+)/);
+              if (uiMatch) {
+                const uiId = uiMatch[1];
+                // Link UI asset to this method
+                const asset = uiAssets.find(a => a.id === uiId);
+                if (asset) {
+                  asset.linkedTool = methodName;
+                }
+              }
+            }
+          });
+        }
+        ts.forEachChild(node, visit);
+      };
+
+      visit(sourceFile);
+    } catch (error: any) {
+      // Silently fail - UI links are optional
+    }
+  }
+
+  /**
+   * Get MIME type from file extension
+   */
+  private getMimeTypeFromPath(path: string): string {
+    const ext = path.toLowerCase().split('.').pop() || '';
+    const mimeTypes: Record<string, string> = {
+      // Web
+      'html': 'text/html',
+      'htm': 'text/html',
+      'css': 'text/css',
+      'js': 'application/javascript',
+      'mjs': 'application/javascript',
+      'jsx': 'text/jsx',
+      'ts': 'text/typescript',
+      'tsx': 'text/tsx',
+      // Data
+      'json': 'application/json',
+      'yaml': 'application/yaml',
+      'yml': 'application/yaml',
+      'xml': 'application/xml',
+      'csv': 'text/csv',
+      // Documents
+      'md': 'text/markdown',
+      'txt': 'text/plain',
+      'pdf': 'application/pdf',
+      // Images
+      'png': 'image/png',
+      'jpg': 'image/jpeg',
+      'jpeg': 'image/jpeg',
+      'gif': 'image/gif',
+      'svg': 'image/svg+xml',
+      'webp': 'image/webp',
+      'ico': 'image/x-icon',
+    };
+    return mimeTypes[ext] || 'application/octet-stream';
   }
 }
