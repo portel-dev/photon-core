@@ -991,7 +991,8 @@ export class SchemaExtractor {
     const dependencies: PhotonDependency[] = [];
 
     // Match @photon <name> <source> pattern
-    const photonRegex = /@photon\s+(\w+)\s+([^\s*]+(?:\s+[^\s*@][^\s*]*)*)/g;
+    // Source ends at: newline, end of comment (*), or @ (next tag)
+    const photonRegex = /@photon\s+(\w+)\s+([^\s*@\n]+)/g;
 
     let match;
     while ((match = photonRegex.exec(source)) !== null) {
