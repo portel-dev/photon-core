@@ -280,6 +280,174 @@ export interface AskDate extends AskBase {
 }
 
 /**
+ * JSON Schema property definition for form fields
+ */
+export interface FormSchemaProperty {
+  type: 'string' | 'number' | 'integer' | 'boolean';
+  title?: string;
+  description?: string;
+  default?: any;
+  // String constraints
+  minLength?: number;
+  maxLength?: number;
+  pattern?: string;
+  format?: 'email' | 'uri' | 'date' | 'date-time';
+  // Number constraints
+  minimum?: number;
+  maximum?: number;
+  // Enum (single select)
+  enum?: string[];
+  // Enum with titles (single select)
+  oneOf?: Array<{ const: string; title: string }>;
+}
+
+/**
+ * JSON Schema for array (multi-select)
+ */
+export interface FormSchemaArrayProperty {
+  type: 'array';
+  title?: string;
+  description?: string;
+  minItems?: number;
+  maxItems?: number;
+  items: {
+    type?: 'string';
+    enum?: string[];
+    anyOf?: Array<{ const: string; title: string }>;
+  };
+  default?: string[];
+}
+
+/**
+ * Full form schema (flat object only per MCP spec)
+ */
+export interface FormSchema {
+  type: 'object';
+  properties: Record<string, FormSchemaProperty | FormSchemaArrayProperty>;
+  required?: string[];
+}
+
+/**
+ * Form-based input - multi-field structured data with JSON Schema
+ *
+ * Aligned with MCP elicitation spec (form mode).
+ * Schema is limited to flat objects with primitive properties.
+ *
+ * @example
+ * // Simple form
+ * const contact = yield {
+ *   ask: 'form',
+ *   id: 'contact',
+ *   message: 'Enter your contact details',
+ *   schema: {
+ *     type: 'object',
+ *     properties: {
+ *       name: { type: 'string', title: 'Full Name' },
+ *       email: { type: 'string', format: 'email', title: 'Email' },
+ *       subscribe: { type: 'boolean', title: 'Subscribe to newsletter', default: true }
+ *     },
+ *     required: ['name', 'email']
+ *   }
+ * };
+ *
+ * @example
+ * // With enum selection
+ * const preferences = yield {
+ *   ask: 'form',
+ *   id: 'prefs',
+ *   message: 'Configure your preferences',
+ *   schema: {
+ *     type: 'object',
+ *     properties: {
+ *       theme: {
+ *         type: 'string',
+ *         title: 'Theme',
+ *         oneOf: [
+ *           { const: 'light', title: 'Light Mode' },
+ *           { const: 'dark', title: 'Dark Mode' },
+ *           { const: 'auto', title: 'System Default' }
+ *         ],
+ *         default: 'auto'
+ *       },
+ *       notifications: {
+ *         type: 'array',
+ *         title: 'Notification Types',
+ *         items: {
+ *           anyOf: [
+ *             { const: 'email', title: 'Email' },
+ *             { const: 'push', title: 'Push' },
+ *             { const: 'sms', title: 'SMS' }
+ *           ]
+ *         },
+ *         default: ['email']
+ *       }
+ *     }
+ *   }
+ * };
+ */
+export interface AskForm extends AskBase {
+  ask: 'form';
+  /** JSON Schema defining the form fields */
+  schema: FormSchema;
+}
+
+/**
+ * URL-based input - opens browser for OAuth or credential collection
+ *
+ * Aligned with MCP elicitation spec (url mode).
+ * User is redirected to a URL for authentication, then returns.
+ *
+ * Security: URL opens in secure browser context (not embedded webview).
+ * The URL should NOT contain sensitive data.
+ *
+ * @example
+ * // OAuth flow
+ * const auth = yield {
+ *   ask: 'url',
+ *   id: 'github_auth',
+ *   message: 'Authenticate with GitHub to continue',
+ *   url: 'https://github.com/login/oauth/authorize?client_id=...'
+ * };
+ *
+ * @example
+ * // API key collection via secure form
+ * const result = yield {
+ *   ask: 'url',
+ *   id: 'api_key',
+ *   message: 'Enter your API key securely',
+ *   url: 'https://myservice.com/collect-api-key?callback=...'
+ * };
+ */
+export interface AskUrl extends AskBase {
+  ask: 'url';
+  /** URL to open in browser */
+  url: string;
+  /**
+   * Unique ID for this elicitation (for async completion).
+   * If not provided, one will be generated.
+   */
+  elicitationId?: string;
+}
+
+/**
+ * Elicitation response action (MCP-aligned)
+ */
+export type ElicitAction = 'accept' | 'decline' | 'cancel';
+
+/**
+ * Result from a form or url elicitation (MCP-aligned)
+ *
+ * Different from the simpler ElicitResult in elicit.ts which is for
+ * native OS dialogs. This follows the MCP elicitation protocol.
+ */
+export interface FormElicitResult<T = any> {
+  /** User's action */
+  action: ElicitAction;
+  /** Form content (only present when action is 'accept' and mode is 'form') */
+  content?: T;
+}
+
+/**
  * Union of all ask (input) yield types
  */
 export type AskYield =
@@ -289,7 +457,9 @@ export type AskYield =
   | AskSelect
   | AskNumber
   | AskFile
-  | AskDate;
+  | AskDate
+  | AskForm
+  | AskUrl;
 
 // ══════════════════════════════════════════════════════════════════════════════
 // EMIT YIELDS - Output to user (fire and forget)
@@ -836,6 +1006,26 @@ function getMockValue(ask: AskYield): any {
       return null;
     case 'date':
       return (ask as AskDate).default || new Date().toISOString();
+    case 'form':
+      // Return object with defaults from schema
+      const form = ask as AskForm;
+      const result: Record<string, any> = {};
+      for (const [key, prop] of Object.entries(form.schema.properties)) {
+        if ('default' in prop && prop.default !== undefined) {
+          result[key] = prop.default;
+        } else if (prop.type === 'string') {
+          result[key] = '';
+        } else if (prop.type === 'number' || prop.type === 'integer') {
+          result[key] = 0;
+        } else if (prop.type === 'boolean') {
+          result[key] = false;
+        } else if (prop.type === 'array') {
+          result[key] = [];
+        }
+      }
+      return { action: 'accept', content: result };
+    case 'url':
+      return { action: 'accept' };
     default:
       return null;
   }

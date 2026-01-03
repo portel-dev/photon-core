@@ -140,6 +140,17 @@ export {
   type AskNumber,
   type AskFile,
   type AskDate,
+  type AskForm,
+  type AskUrl,
+
+  // Form schema types (for AskForm)
+  type FormSchema,
+  type FormSchemaProperty,
+  type FormSchemaArrayProperty,
+
+  // MCP elicitation result types
+  type ElicitAction,
+  type FormElicitResult,
 
   // Emit yield types (output to user)
   type EmitYield,
