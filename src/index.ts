@@ -245,9 +245,12 @@ export {
   // Resume state parsing
   parseResumeState,
 
-  // Stateful executor
+  // Stateful executor (explicit)
   executeStatefulGenerator,
   generateRunId,
+
+  // Implicit stateful executor (auto-detect checkpoint usage)
+  maybeStatefulExecute,
 
   // Run management
   listRuns,
@@ -262,4 +265,6 @@ export {
   type ResumeState,
   type StatefulExecutorConfig,
   type StatefulExecutionResult,
+  type MaybeStatefulConfig,
+  type MaybeStatefulResult,
 } from './stateful.js';

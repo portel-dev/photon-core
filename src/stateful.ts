@@ -642,6 +642,257 @@ export async function cleanupRuns(maxAgeMs: number, runsDir?: string): Promise<n
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// IMPLICIT STATEFUL EXECUTOR - Auto-detect checkpoint usage
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Configuration for maybeStatefulExecute
+ */
+export interface MaybeStatefulConfig {
+  /** Photon name */
+  photon: string;
+  /** Tool name being executed */
+  tool: string;
+  /** Input parameters */
+  params: Record<string, any>;
+  /** Input provider for ask yields */
+  inputProvider: InputProvider;
+  /** Output handler for emit yields */
+  outputHandler?: OutputHandler;
+  /** Runs directory (defaults to ~/.photon/runs) */
+  runsDir?: string;
+  /** Existing run ID to resume (if set, forces stateful mode) */
+  resumeRunId?: string;
+}
+
+/**
+ * Result of maybe-stateful execution
+ */
+export interface MaybeStatefulResult<T> {
+  /** Final result (if completed) */
+  result?: T;
+  /** Error message (if failed) */
+  error?: string;
+  /** Run ID (only if stateful - checkpoint was yielded) */
+  runId?: string;
+  /** Was this a stateful workflow? */
+  isStateful: boolean;
+  /** Was this resumed from a previous run? */
+  resumed: boolean;
+  /** Final status */
+  status: WorkflowStatus;
+}
+
+/**
+ * Buffered event from early execution (before stateful mode detected)
+ */
+interface BufferedEvent {
+  type: 'emit' | 'ask' | 'answer';
+  data: any;
+}
+
+/**
+ * Execute a generator with implicit checkpoint detection
+ *
+ * - If the generator yields checkpoint, automatically becomes stateful (JSONL persistence)
+ * - If no checkpoint, runs as ephemeral (no persistence overhead)
+ * - Seamlessly handles resume if runId is provided
+ *
+ * @example
+ * const result = await maybeStatefulExecute(
+ *   () => myPhoton.myMethod(params),
+ *   {
+ *     photon: 'my-photon',
+ *     tool: 'myMethod',
+ *     params,
+ *     inputProvider: cliInputProvider
+ *   }
+ * );
+ *
+ * if (result.isStateful) {
+ *   console.log(`Run ID: ${result.runId}`);
+ * }
+ */
+export async function maybeStatefulExecute<T>(
+  generatorFn: () => AsyncGenerator<StatefulYield, T, any> | Promise<T>,
+  config: MaybeStatefulConfig
+): Promise<MaybeStatefulResult<T>> {
+  // If resuming, use stateful executor directly
+  if (config.resumeRunId) {
+    const statefulResult = await executeStatefulGenerator<T>(
+      generatorFn as () => AsyncGenerator<StatefulYield, T, any>,
+      {
+        runId: config.resumeRunId,
+        runsDir: config.runsDir,
+        photon: config.photon,
+        tool: config.tool,
+        params: config.params,
+        inputProvider: config.inputProvider,
+        outputHandler: config.outputHandler,
+        resume: true,
+      }
+    );
+
+    return {
+      result: statefulResult.result,
+      error: statefulResult.error,
+      runId: statefulResult.runId,
+      isStateful: true,
+      resumed: statefulResult.resumed,
+      status: statefulResult.status,
+    };
+  }
+
+  // Call the function
+  const maybeGenerator = generatorFn();
+
+  // Handle non-generator functions (regular async methods)
+  if (!isAsyncGenerator(maybeGenerator)) {
+    try {
+      const finalValue = await maybeGenerator;
+      return {
+        result: finalValue,
+        isStateful: false,
+        resumed: false,
+        status: 'completed',
+      };
+    } catch (error: any) {
+      return {
+        error: error.message,
+        isStateful: false,
+        resumed: false,
+        status: 'failed',
+      };
+    }
+  }
+
+  // It's a generator - execute with checkpoint detection
+  const generator = maybeGenerator;
+  const bufferedEvents: BufferedEvent[] = [];
+  let isStateful = false;
+  let runId: string | undefined;
+  let log: StateLog | undefined;
+  let checkpointIndex = 0;
+  let askIndex = 0;
+
+  /**
+   * Initialize stateful mode on first checkpoint
+   */
+  async function initStateful(): Promise<void> {
+    if (isStateful) return;
+
+    isStateful = true;
+    runId = generateRunId();
+    log = new StateLog(runId, config.runsDir);
+    await log.init();
+
+    // Write start entry
+    await log.writeStart(config.tool, config.params);
+
+    // Replay buffered events to log
+    for (const event of bufferedEvents) {
+      if (event.type === 'emit') {
+        const emit = event.data as EmitYield;
+        await log.writeEmit(emit.emit, (emit as any).message, emit);
+      } else if (event.type === 'ask') {
+        const { id, ask, message } = event.data;
+        await log.writeAsk(id, ask, message);
+      } else if (event.type === 'answer') {
+        const { id, value } = event.data;
+        await log.writeAnswer(id, value);
+      }
+    }
+    bufferedEvents.length = 0; // Clear buffer
+  }
+
+  try {
+    let result = await generator.next();
+
+    while (!result.done) {
+      const yielded = result.value;
+
+      if (isCheckpointYield(yielded)) {
+        // First checkpoint triggers stateful mode
+        await initStateful();
+
+        const cpId = yielded.id || `cp_${checkpointIndex++}`;
+        await log!.writeCheckpoint(cpId, yielded.state);
+
+        // Continue with the state
+        result = await generator.next(yielded.state);
+      } else if (isAskYield(yielded as PhotonYield)) {
+        const askYield = yielded as AskYield;
+        const askId = askYield.id || `ask_${askIndex++}`;
+
+        // Buffer or log ask
+        if (isStateful) {
+          await log!.writeAsk(askId, askYield.ask, askYield.message);
+        } else {
+          bufferedEvents.push({ type: 'ask', data: { id: askId, ask: askYield.ask, message: askYield.message } });
+        }
+
+        // Get input
+        const input = await config.inputProvider(askYield);
+
+        // Buffer or log answer
+        if (isStateful) {
+          await log!.writeAnswer(askId, input);
+        } else {
+          bufferedEvents.push({ type: 'answer', data: { id: askId, value: input } });
+        }
+
+        result = await generator.next(input);
+      } else if (isEmitYield(yielded as PhotonYield)) {
+        const emitYield = yielded as EmitYield;
+
+        // Buffer or log emit
+        if (isStateful) {
+          await log!.writeEmit(emitYield.emit, (emitYield as any).message, emitYield);
+        } else {
+          bufferedEvents.push({ type: 'emit', data: emitYield });
+        }
+
+        // Call output handler
+        if (config.outputHandler) {
+          await config.outputHandler(emitYield);
+        }
+
+        result = await generator.next();
+      } else {
+        // Unknown yield, skip
+        result = await generator.next();
+      }
+    }
+
+    // Write return entry if stateful
+    if (isStateful && log) {
+      await log.writeReturn(result.value);
+    }
+
+    return {
+      result: result.value,
+      runId,
+      isStateful,
+      resumed: false,
+      status: 'completed',
+    };
+  } catch (error: any) {
+    // Write error entry if stateful
+    if (isStateful && log) {
+      await log.writeError(error.message, error.stack);
+    }
+
+    return {
+      error: error.message,
+      runId,
+      isStateful,
+      resumed: false,
+      status: 'failed',
+    };
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // EXPORTS
 // ══════════════════════════════════════════════════════════════════════════════
 
