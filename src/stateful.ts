@@ -725,10 +725,36 @@ export async function maybeStatefulExecute<T>(
   if (config.resumeRunId) {
     // Get resume state to find step number
     const resumeState = await parseResumeState(config.resumeRunId, config.runsDir);
-    const resumedFromStep = resumeState?.lastCheckpoint?.state?.step as number | undefined;
+
+    // Validate run exists
+    if (!resumeState) {
+      return {
+        error: `Run not found: ${config.resumeRunId}`,
+        isStateful: false,
+        resumed: false,
+        checkpointsCompleted: 0,
+        status: 'failed',
+      };
+    }
+
+    // Check if already completed
+    if (resumeState.isComplete) {
+      return {
+        result: resumeState.result,
+        error: resumeState.error,
+        runId: config.resumeRunId,
+        isStateful: true,
+        resumed: true,
+        resumedFromStep: resumeState.lastCheckpoint?.state?.step as number | undefined,
+        checkpointsCompleted: resumeState.entries.filter(e => e.t === 'checkpoint').length,
+        status: resumeState.error ? 'failed' : 'completed',
+      };
+    }
+
+    const resumedFromStep = resumeState.lastCheckpoint?.state?.step as number | undefined;
 
     // Count existing checkpoints
-    const existingCheckpoints = resumeState?.entries.filter(e => e.t === 'checkpoint').length || 0;
+    const existingCheckpoints = resumeState.entries.filter(e => e.t === 'checkpoint').length;
 
     const statefulResult = await executeStatefulGenerator<T>(
       generatorFn as () => AsyncGenerator<StatefulYield, T, any>,
