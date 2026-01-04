@@ -679,6 +679,10 @@ export interface MaybeStatefulResult<T> {
   isStateful: boolean;
   /** Was this resumed from a previous run? */
   resumed: boolean;
+  /** Step number resumed from (if resumed) */
+  resumedFromStep?: number;
+  /** Total checkpoints completed */
+  checkpointsCompleted: number;
   /** Final status */
   status: WorkflowStatus;
 }
@@ -719,6 +723,13 @@ export async function maybeStatefulExecute<T>(
 ): Promise<MaybeStatefulResult<T>> {
   // If resuming, use stateful executor directly
   if (config.resumeRunId) {
+    // Get resume state to find step number
+    const resumeState = await parseResumeState(config.resumeRunId, config.runsDir);
+    const resumedFromStep = resumeState?.lastCheckpoint?.state?.step as number | undefined;
+
+    // Count existing checkpoints
+    const existingCheckpoints = resumeState?.entries.filter(e => e.t === 'checkpoint').length || 0;
+
     const statefulResult = await executeStatefulGenerator<T>(
       generatorFn as () => AsyncGenerator<StatefulYield, T, any>,
       {
@@ -733,12 +744,18 @@ export async function maybeStatefulExecute<T>(
       }
     );
 
+    // Count total checkpoints after execution
+    const finalState = await parseResumeState(config.resumeRunId, config.runsDir);
+    const totalCheckpoints = finalState?.entries.filter(e => e.t === 'checkpoint').length || existingCheckpoints;
+
     return {
       result: statefulResult.result,
       error: statefulResult.error,
       runId: statefulResult.runId,
       isStateful: true,
       resumed: statefulResult.resumed,
+      resumedFromStep,
+      checkpointsCompleted: totalCheckpoints,
       status: statefulResult.status,
     };
   }
@@ -754,6 +771,7 @@ export async function maybeStatefulExecute<T>(
         result: finalValue,
         isStateful: false,
         resumed: false,
+        checkpointsCompleted: 0,
         status: 'completed',
       };
     } catch (error: any) {
@@ -761,6 +779,7 @@ export async function maybeStatefulExecute<T>(
         error: error.message,
         isStateful: false,
         resumed: false,
+        checkpointsCompleted: 0,
         status: 'failed',
       };
     }
@@ -874,6 +893,7 @@ export async function maybeStatefulExecute<T>(
       runId,
       isStateful,
       resumed: false,
+      checkpointsCompleted: checkpointIndex,
       status: 'completed',
     };
   } catch (error: any) {
@@ -887,6 +907,7 @@ export async function maybeStatefulExecute<T>(
       runId,
       isStateful,
       resumed: false,
+      checkpointsCompleted: checkpointIndex,
       status: 'failed',
     };
   }
