@@ -326,6 +326,129 @@ interface ExtractedSchema {
 
 ---
 
+### Generator Support (Ask/Emit Pattern)
+
+Photon methods can be async generators that yield interactive prompts and progress updates:
+
+```typescript
+import { PhotonMCP } from '@portel/photon-core';
+
+export default class DeployTool extends PhotonMCP {
+  /**
+   * Deploy with confirmation and progress
+   */
+  async *deploy(params: { env: string }) {
+    // Ask for confirmation
+    const confirmed = yield { ask: 'confirm', message: `Deploy to ${params.env}?` };
+    if (!confirmed) return { status: 'cancelled' };
+
+    // Show progress
+    yield { emit: 'progress', value: 0.3, message: 'Building...' };
+    await this.build();
+
+    yield { emit: 'progress', value: 0.7, message: 'Deploying...' };
+    const result = await this.push(params.env);
+
+    yield { emit: 'progress', value: 1.0, message: 'Done!' };
+    return result;
+  }
+}
+```
+
+**Ask yields** (input from user):
+- `{ ask: 'text', message: string }` - Text input
+- `{ ask: 'confirm', message: string }` - Yes/no confirmation
+- `{ ask: 'select', message: string, options: string[] }` - Selection
+- `{ ask: 'number', message: string }` - Number input
+- `{ ask: 'password', message: string }` - Hidden input
+
+**Emit yields** (output to user):
+- `{ emit: 'progress', value: number, message?: string }` - Progress bar (0-1)
+- `{ emit: 'status', message: string }` - Status update
+- `{ emit: 'log', level: 'info'|'warn'|'error', message: string }` - Log message
+- `{ emit: 'stream', data: string }` - Streaming output
+
+---
+
+### Stateful Workflows (Checkpoint Pattern)
+
+For long-running workflows that need to survive interruptions, use checkpoint yields:
+
+```typescript
+export default class ReportGenerator extends PhotonMCP {
+  /**
+   * Generate weekly report with checkpoints for resume
+   */
+  async *generate(params: { week: number }) {
+    // Step 1: Collect data
+    const commits = await this.github.list_commits({ since: params.week });
+    yield { checkpoint: true, state: { step: 1, commits } };
+
+    // Step 2: Analyze
+    const analysis = await this.analyze(commits);
+    yield { checkpoint: true, state: { step: 2, commits, analysis } };
+
+    // Step 3: Generate report
+    const report = await this.format(analysis);
+    yield { checkpoint: true, state: { step: 3, report } };
+
+    return report;
+  }
+}
+```
+
+**Key concepts:**
+- **Checkpoint** - marks a safe resume point with accumulated state
+- **State** - preserved data to restore on resume
+- **Idempotency** - place checkpoint AFTER side effects to avoid repeating them
+
+**Using the stateful executor:**
+
+```typescript
+import { maybeStatefulExecute } from '@portel/photon-core';
+
+// Execute with implicit checkpoint detection
+const result = await maybeStatefulExecute(
+  () => instance.generate({ week: 52 }),
+  {
+    photon: 'report-generator',
+    tool: 'generate',
+    params: { week: 52 },
+    inputProvider: async (ask) => { /* handle asks */ },
+    outputHandler: (emit) => { /* handle emits */ },
+  }
+);
+
+// If workflow used checkpoints, result includes runId
+if (result.isStateful) {
+  console.log(`Run ID: ${result.runId}`);
+}
+
+// Resume an interrupted workflow
+const resumed = await maybeStatefulExecute(
+  () => instance.generate({ week: 52 }),
+  {
+    photon: 'report-generator',
+    tool: 'generate',
+    params: { week: 52 },
+    resumeRunId: 'run_abc123_xyz',  // Resume from this run
+    inputProvider,
+    outputHandler,
+  }
+);
+```
+
+**JSONL persistence:** Workflows are persisted to `~/.photon/runs/{runId}.jsonl`:
+
+```jsonl
+{"t":"start","tool":"generate","params":{"week":52},"ts":1704067200}
+{"t":"checkpoint","id":"cp_0","state":{"step":1,"commits":[...]},"ts":1704067205}
+{"t":"checkpoint","id":"cp_1","state":{"step":2,"analysis":{...}},"ts":1704067210}
+{"t":"return","value":{"report":"..."},"ts":1704067215}
+```
+
+---
+
 ## 🏗️ Building Custom Runtimes
 
 Photon Core is designed to be the foundation for custom runtimes. Here are examples:
