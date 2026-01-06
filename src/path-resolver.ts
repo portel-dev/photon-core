@@ -87,7 +87,8 @@ export async function listFiles(
     const files: string[] = [];
 
     for (const entry of entries) {
-      if (entry.isFile()) {
+      // Include both regular files and symlinks
+      if (entry.isFile() || entry.isSymbolicLink()) {
         // Check if file matches any extension
         for (const ext of opts.extensions) {
           if (entry.name.endsWith(ext)) {
