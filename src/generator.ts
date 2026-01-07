@@ -725,8 +725,8 @@ export type StatefulYield = PhotonYield | CheckpointYield;
  *   generator.next(userInput);
  * }
  */
-export function isAskYield(y: PhotonYield): y is AskYield {
-  return 'ask' in y;
+export function isAskYield(y: PhotonYield | any): y is AskYield {
+  return typeof y === 'object' && y !== null && 'ask' in y;
 }
 
 /**
@@ -738,8 +738,8 @@ export function isAskYield(y: PhotonYield): y is AskYield {
  *   generator.next(); // Continue without value
  * }
  */
-export function isEmitYield(y: PhotonYield): y is EmitYield {
-  return 'emit' in y;
+export function isEmitYield(y: PhotonYield | any): y is EmitYield {
+  return typeof y === 'object' && y !== null && 'emit' in y;
 }
 
 /**
