@@ -930,9 +930,13 @@ export async function executeGenerator<T>(
       // Continue without providing a value
       result = await generator.next();
     }
-    // Unknown yield type - skip
+    // Handle raw values (strings, numbers, objects without emit/ask)
     else {
-      console.warn('[generator] Unknown yield type:', yielded);
+      if (outputHandler) {
+        await outputHandler({ emit: 'stream', data: yielded } as EmitStream);
+      } else {
+        console.warn('[generator] Unknown yield type without output handler:', yielded);
+      }
       result = await generator.next();
     }
   }
