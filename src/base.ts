@@ -40,6 +40,7 @@
  */
 
 import { MCPClient, MCPClientFactory, createMCPProxy } from './mcp-client.js';
+import { executionContext } from './context.js';
 
 /**
  * Simple base class for creating Photon MCPs
@@ -49,6 +50,16 @@ import { MCPClient, MCPClientFactory, createMCPProxy } from './mcp-client.js';
  * - Return value = Tool result
  */
 export class PhotonMCP {
+  /**
+   * Emit an event/progress update
+   * @param data Data to emit
+   */
+  protected emit(data: any): void {
+    const store = executionContext.getStore();
+    if (store?.outputHandler) {
+      store.outputHandler(data);
+    }
+  }
   /**
    * MCP client factory - injected by runtime
    * @internal
@@ -106,20 +117,22 @@ export class PhotonMCP {
   /**
    * Execute a tool method
    */
-  async executeTool(toolName: string, parameters: any): Promise<any> {
+  async executeTool(toolName: string, parameters: any, options?: { outputHandler?: (data: any) => void }): Promise<any> {
     const method = (this as any)[toolName];
 
     if (!method || typeof method !== 'function') {
       throw new Error(`Tool not found: ${toolName}`);
     }
 
-    try {
-      const result = await method.call(this, parameters);
-      return result;
-    } catch (error: any) {
-      console.error(`Tool execution failed: ${toolName} - ${error.message}`);
-      throw error;
-    }
+    return executionContext.run({ outputHandler: options?.outputHandler }, async () => {
+      try {
+        const result = await method.call(this, parameters);
+        return result;
+      } catch (error: any) {
+        console.error(`Tool execution failed: ${toolName} - ${error.message}`);
+        throw error;
+      }
+    });
   }
 
   /**

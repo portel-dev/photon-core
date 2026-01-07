@@ -56,6 +56,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { createReadStream } from 'fs';
 import { createInterface } from 'readline';
+import { executionContext } from './context.js';
 import type {
   StateLogEntry,
   StateLogStart,
@@ -721,8 +722,9 @@ export async function maybeStatefulExecute<T>(
   generatorFn: () => AsyncGenerator<StatefulYield, T, any> | Promise<T>,
   config: MaybeStatefulConfig
 ): Promise<MaybeStatefulResult<T>> {
-  // If resuming, use stateful executor directly
-  if (config.resumeRunId) {
+  return executionContext.run({ outputHandler: config.outputHandler }, async () => {
+    // If resuming, use stateful executor directly
+    if (config.resumeRunId) {
     // Get resume state to find step number
     const resumeState = await parseResumeState(config.resumeRunId, config.runsDir);
 
@@ -937,6 +939,7 @@ export async function maybeStatefulExecute<T>(
       status: 'failed',
     };
   }
+  });
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
