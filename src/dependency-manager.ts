@@ -95,7 +95,6 @@ export class DependencyManager {
     // Check if already installed
     const installed = await this.checkInstalled(mcpDir, dependencies);
     if (installed) {
-      console.error(`Dependencies already installed for ${mcpName}`);
       return nodeModules;
     }
 
