@@ -279,3 +279,31 @@ export {
   stopProgress,
   isProgressActive,
 } from './progress.js';
+
+// Auto-UI System - Automatic UI component generation
+export {
+  // UI Component types
+  type UIComponentType,
+  type UILayout,
+  type UIComponent,
+  type AutoUIConfig,
+  
+  // Hint extraction
+  extractUIHints,
+  
+  // Component generation
+  generateUIComponent,
+  suggestComponents,
+  shouldUseCards,
+  shouldUseChart,
+  
+  // Renderer interface
+  type UIRenderer,
+  renderUIComponent,
+} from './auto-ui.js';
+
+// CLI UI Renderer - Terminal-based UI component renderer
+export {
+  CLIUIRenderer,
+  cliRenderer,
+} from './cli-ui-renderer.js';
