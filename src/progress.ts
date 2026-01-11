@@ -6,22 +6,27 @@
  * - Progress bars for determinate progress (EmitProgress with value)
  * 
  * Used by CLI and other interactive runtimes to show temporary progress.
+ * Always writes to stderr to avoid interfering with stdout data.
  */
 
+import * as readline from 'readline';
+
 const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-const CLEAR_LINE = '\r\x1b[K';
 
 /**
  * Progress renderer that manages ephemeral output
+ * All progress is shown on stderr and clears when complete
  */
 export class ProgressRenderer {
   private spinnerInterval?: NodeJS.Timeout;
   private currentFrame = 0;
   private isActive = false;
   private lastMessage = '';
+  private lastLength = 0;
 
   /**
-   * Start an indeterminate spinner
+   * Start an indeterminate spinner with auto-animation
+   * Updates every 80ms until stopped
    */
   startSpinner(message: string): void {
     this.stop(); // Clear any previous progress
@@ -39,7 +44,19 @@ export class ProgressRenderer {
   }
 
   /**
-   * Show a progress bar (0-1)
+   * Show a single frame of spinner (no auto-animation)
+   * Use this for manual control, or startSpinner() for auto-animation
+   */
+  showSpinner(message: string): void {
+    this.clearLine();
+    this.isActive = true;
+    this.lastMessage = message;
+    this.renderSpinner();
+  }
+
+  /**
+   * Show a progress bar with percentage (0-1)
+   * Use for determinate progress
    */
   showProgress(value: number, message?: string): void {
     this.stop(); // Clear any spinner
@@ -49,7 +66,29 @@ export class ProgressRenderer {
   }
 
   /**
-   * Update spinner message without restarting
+   * Render progress bar with optional spinner animation
+   * Combines progress bar with spinner for better UX
+   */
+  render(value: number, message?: string): void {
+    this.isActive = true;
+    this.lastMessage = message || '';
+    const pct = Math.round(value * 100);
+    const barWidth = 20;
+    const filled = Math.round(value * barWidth);
+    const empty = barWidth - filled;
+
+    const bar = '█'.repeat(filled) + '░'.repeat(empty);
+    const spinner = pct < 100 ? SPINNER_FRAMES[this.currentFrame++ % SPINNER_FRAMES.length] : '✓';
+
+    const text = `${spinner} [${bar}] ${pct.toString().padStart(3)}%${this.lastMessage ? ` ${this.lastMessage}` : ''}`;
+
+    this.clearLine();
+    process.stderr.write(text);
+    this.lastLength = text.length;
+  }
+
+  /**
+   * Update message without restarting animation
    */
   updateMessage(message: string): void {
     if (this.isActive) {
@@ -62,21 +101,37 @@ export class ProgressRenderer {
 
   /**
    * Stop and clear progress display
+   * Alias for done() for consistency
    */
   stop(): void {
+    this.done();
+  }
+
+  /**
+   * End progress display (clears the line completely)
+   */
+  done(): void {
     if (this.spinnerInterval) {
       clearInterval(this.spinnerInterval);
       this.spinnerInterval = undefined;
     }
     
     if (this.isActive) {
-      // Clear the line
-      process.stderr.write(CLEAR_LINE);
+      this.clearLine();
       this.isActive = false;
     }
     
     this.currentFrame = 0;
     this.lastMessage = '';
+    this.lastLength = 0;
+  }
+
+  /**
+   * Print a persistent status message (clears progress first, then prints)
+   */
+  status(message: string): void {
+    this.done();
+    console.error(`ℹ ${message}`);
   }
 
   /**
@@ -86,10 +141,23 @@ export class ProgressRenderer {
     return this.isActive;
   }
 
+  /**
+   * Clear the current progress line
+   */
+  private clearLine(): void {
+    if ((this.lastLength > 0 || this.isActive) && process.stderr.isTTY) {
+      readline.clearLine(process.stderr, 0);
+      readline.cursorTo(process.stderr, 0);
+      this.lastLength = 0;
+    }
+  }
+
   private renderSpinner(): void {
     const frame = SPINNER_FRAMES[this.currentFrame];
-    const output = `${CLEAR_LINE}${frame} ${this.lastMessage}`;
-    process.stderr.write(output);
+    const text = `${frame} ${this.lastMessage}`;
+    this.clearLine();
+    process.stderr.write(text);
+    this.lastLength = text.length;
   }
 
   private renderProgressBar(value: number): void {
@@ -98,8 +166,10 @@ export class ProgressRenderer {
     const filled = Math.round(barLength * value);
     const bar = '█'.repeat(filled) + '░'.repeat(barLength - filled);
     
-    const output = `${CLEAR_LINE}[${bar}] ${percentage}%${this.lastMessage ? ` ${this.lastMessage}` : ''}`;
-    process.stderr.write(output);
+    const text = `[${bar}] ${percentage}%${this.lastMessage ? ` ${this.lastMessage}` : ''}`;
+    this.clearLine();
+    process.stderr.write(text);
+    this.lastLength = text.length;
   }
 }
 
