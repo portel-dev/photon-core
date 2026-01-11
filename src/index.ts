@@ -268,3 +268,14 @@ export {
   type MaybeStatefulConfig,
   type MaybeStatefulResult,
 } from './stateful.js';
+
+// Progress Rendering - Ephemeral spinners and progress bars
+export {
+  ProgressRenderer,
+  getProgressRenderer,
+  startSpinner,
+  showProgress,
+  updateProgressMessage,
+  stopProgress,
+  isProgressActive,
+} from './progress.js';
