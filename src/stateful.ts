@@ -56,7 +56,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { createReadStream } from 'fs';
 import { createInterface } from 'readline';
-import { executionContext } from './context.js';
+import { executionContext } from '@portel/core';
 import type {
   StateLogEntry,
   StateLogStart,

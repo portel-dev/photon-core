@@ -1,6 +1,6 @@
 {
   "name": "@portel/photon-core",
-  "version": "1.5.0",
+  "version": "2.0.0",
   "description": "Core library for parsing, loading, and managing .photon.ts files - runtime-agnostic foundation for building custom Photon runtimes",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -49,9 +49,8 @@
   },
   "homepage": "https://github.com/portel-dev/photon-core#readme",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.25.1",
-    "chalk": "^5.6.2",
-    "cli-highlight": "^2.1.11",
+    "@portel/core": "^1.0.0",
+    "@portel/mcp": "^1.0.0",
     "typescript": "^5.7.2"
   },
   "devDependencies": {

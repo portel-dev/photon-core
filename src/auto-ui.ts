@@ -12,7 +12,7 @@
  */
 
 import { OutputFormat } from './types.js';
-import { detectFormat } from './cli-formatter.js';
+import { detectFormat } from '@portel/core';
 
 /**
  * UI Component types that can be auto-generated

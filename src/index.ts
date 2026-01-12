@@ -33,17 +33,18 @@
  * ```
  */
 
-// Core base class with lifecycle hooks
-export { PhotonMCP } from './base.js';
-
-// Dependency management
-export { DependencyManager } from './dependency-manager.js';
-
-// Schema extraction
-export { SchemaExtractor } from './schema-extractor.js';
-
-// CLI formatting
+// ===== RE-EXPORT FROM @portel/core =====
+// CLI formatting, progress, text utils, fuzzy matching, logging
 export {
+  // Types
+  type OutputFormat,
+  type TextWrapOptions,
+  type FuzzyMatch,
+  type ExecutionContext,
+  type LogLevel,
+  type LoggerOptions,
+
+  // CLI Formatting
   formatOutput,
   detectFormat,
   renderPrimitive,
@@ -60,9 +61,106 @@ export {
   printWarning,
   printHeader,
   STATUS,
-} from './cli-formatter.js';
 
-// Path resolution
+  // Progress
+  ProgressRenderer,
+  getProgressRenderer,
+  startSpinner,
+  showProgress,
+  updateProgressMessage,
+  stopProgress,
+  isProgressActive,
+
+  // Execution Context
+  executionContext,
+  runWithContext,
+  getContext,
+
+  // Text Utils
+  TextUtils,
+
+  // Fuzzy Matching
+  FuzzyMatcher,
+  fuzzyMatch,
+  fuzzyScore,
+  findBestMatch,
+
+  // Logger
+  Logger,
+  createLogger,
+  getLogger,
+} from '@portel/core';
+
+// ===== RE-EXPORT FROM @portel/mcp =====
+// MCP client, transport, configuration, elicitation
+export {
+  // Types
+  type MCPToolInfo,
+  type MCPToolResult,
+  type MCPTransport,
+  type MCPSourceType,
+  type MissingMCPInfo,
+  type MCPServerConfig,
+  type MCPConfig,
+  type PhotonMCPConfig,
+  type ElicitOptions,
+  type ElicitResult,
+  type PromptHandler,
+  type ElicitHandler,
+
+  // MCP Client
+  MCPClient,
+  type MCPClientFactory,
+  MCPError,
+  MCPNotConnectedError,
+  MCPToolError,
+  MCPConfigurationError,
+  createMCPProxy,
+
+  // MCP SDK Transport
+  SDKMCPTransport,
+  SDKMCPClientFactory,
+  loadMCPConfig,
+  createSDKMCPClientFactory,
+  resolveMCPSource,
+
+  // MCP Configuration
+  PHOTON_CONFIG_DIR,
+  MCP_SERVERS_CONFIG_FILE,
+  loadPhotonMCPConfig,
+  savePhotonMCPConfig,
+  isMCPConfigured,
+  getMCPServerConfig,
+  listMCPServers,
+  setMCPServerConfig,
+  removeMCPServerConfig,
+  toMCPConfig,
+  resolveEnvVars,
+
+  // Elicitation
+  prompt,
+  confirm,
+  elicit,
+  elicitReadline,
+  elicitNativeDialog,
+  setPromptHandler,
+  getPromptHandler,
+  setElicitHandler,
+  getElicitHandler,
+} from '@portel/mcp';
+
+// ===== PHOTON-SPECIFIC EXPORTS =====
+
+// Core base class with lifecycle hooks
+export { PhotonMCP } from './base.js';
+
+// Dependency management
+export { DependencyManager } from './dependency-manager.js';
+
+// Schema extraction
+export { SchemaExtractor } from './schema-extractor.js';
+
+// Path resolution (Photon-specific paths)
 export {
   resolvePath,
   listFiles,
@@ -77,37 +175,9 @@ export {
 // Types
 export * from './types.js';
 
-// MCP Protocol Client - for calling external MCPs from Photons
-export {
-  MCPClient,
-  MCPError,
-  MCPNotConnectedError,
-  MCPToolError,
-  MCPConfigurationError,
-  createMCPProxy,
-  type MCPToolInfo,
-  type MCPToolResult,
-  type MCPTransport,
-  type MCPClientFactory,
-  type MCPSourceType,
-  type MissingMCPInfo,
-} from './mcp-client.js';
-
-// MCP SDK Transport - official SDK-based transport implementation
-export {
-  SDKMCPTransport,
-  SDKMCPClientFactory,
-  loadMCPConfig,
-  createSDKMCPClientFactory,
-  resolveMCPSource,
-  type MCPServerConfig,
-  type MCPConfig,
-} from './mcp-sdk-transport.js';
-
 // Generator-based tools with ask/emit pattern
-// See generator.ts for comprehensive documentation
 export {
-  // Type guards - check yield direction
+  // Type guards
   isAskYield,
   isEmitYield,
   isCheckpointYield,
@@ -118,10 +188,10 @@ export {
   isAsyncGeneratorFunction,
   isAsyncGenerator,
 
-  // Executor - runs generators to completion
+  // Executor
   executeGenerator,
 
-  // Ask extraction (for REST API schema generation)
+  // Ask extraction
   extractAsks,
 
   // Built-in providers
@@ -131,7 +201,7 @@ export {
   // Utility
   wrapAsGenerator,
 
-  // Ask yield types (input from user)
+  // Ask yield types
   type AskYield,
   type AskText,
   type AskPassword,
@@ -143,7 +213,7 @@ export {
   type AskForm,
   type AskUrl,
 
-  // Form schema types (for AskForm)
+  // Form schema types
   type FormSchema,
   type FormSchemaProperty,
   type FormSchemaArrayProperty,
@@ -152,7 +222,7 @@ export {
   type ElicitAction,
   type FormElicitResult,
 
-  // Emit yield types (output to user)
+  // Emit yield types
   type EmitYield,
   type EmitStatus,
   type EmitProgress,
@@ -163,7 +233,7 @@ export {
   type EmitArtifact,
   type EmitUI,
 
-  // Checkpoint yield type (for stateful workflows)
+  // Checkpoint yield type
   type CheckpointYield,
 
   // Combined types
@@ -176,7 +246,7 @@ export {
   type GeneratorExecutorConfig,
   type ExtractedAsk,
 
-  // Legacy compatibility (deprecated)
+  // Legacy compatibility
   isInputYield,
   isProgressYield,
   isStreamYield,
@@ -191,74 +261,18 @@ export {
   type ExtractedYield,
 } from './generator.js';
 
-// Elicit - Cross-platform user input (legacy, prefer generators)
+// Stateful Workflow Execution
 export {
-  // Simple functions (no imports needed in photon files)
-  prompt,
-  confirm,
-  // Full elicit with options
-  elicit,
-  elicitReadline,
-  elicitNativeDialog,
-  // Handler management (for runtimes)
-  setPromptHandler,
-  getPromptHandler,
-  setElicitHandler,
-  getElicitHandler,
-  // Types
-  type ElicitOptions,
-  type ElicitResult,
-  type ElicitHandler,
-  type PromptHandler,
-} from './elicit.js';
-
-// Photon Runtime Configuration - ~/.photon/mcp-servers.json
-export {
-  // Constants
-  PHOTON_CONFIG_DIR,
-  MCP_SERVERS_CONFIG_FILE,
-  // Load/Save
-  loadPhotonMCPConfig,
-  savePhotonMCPConfig,
-  // Query
-  isMCPConfigured,
-  getMCPServerConfig,
-  listMCPServers,
-  // Modify
-  setMCPServerConfig,
-  removeMCPServerConfig,
-  // Utilities
-  toMCPConfig,
-  resolveEnvVars,
-  // Types
-  type PhotonMCPConfig,
-} from './photon-config.js';
-
-// Stateful Workflow Execution - JSONL persistence with checkpoints
-export {
-  // Constants
   RUNS_DIR,
-
-  // State Log - JSONL persistence
   StateLog,
-
-  // Resume state parsing
   parseResumeState,
-
-  // Stateful executor (explicit)
   executeStatefulGenerator,
   generateRunId,
-
-  // Implicit stateful executor (auto-detect checkpoint usage)
   maybeStatefulExecute,
-
-  // Run management
   listRuns,
   getRunInfo,
   deleteRun,
   cleanupRuns,
-
-  // Types re-exported from stateful.ts
   type CheckpointYield as StatefulCheckpointYield,
   type StatefulYield as StatefulWorkflowYield,
   isCheckpointYield as isStatefulCheckpointYield,
@@ -269,44 +283,26 @@ export {
   type MaybeStatefulResult,
 } from './stateful.js';
 
-// Progress Rendering - Ephemeral spinners and progress bars
+// Auto-UI System
 export {
-  ProgressRenderer,
-  getProgressRenderer,
-  startSpinner,
-  showProgress,
-  updateProgressMessage,
-  stopProgress,
-  isProgressActive,
-} from './progress.js';
-
-// Auto-UI System - Automatic UI component generation
-export {
-  // UI Component types
   type UIComponentType,
   type UILayout,
   type UIComponent,
   type AutoUIConfig,
-  
-  // Hint extraction
   extractUIHints,
-  
-  // Component generation
   generateUIComponent,
   suggestComponents,
   shouldUseCards,
   shouldUseChart,
-  
-  // Renderer interface
   type UIRenderer,
   renderUIComponent,
 } from './auto-ui.js';
 
-// CLI UI Renderer - Terminal-based UI component renderer
+// CLI UI Renderer
 export {
   CLIUIRenderer,
   cliRenderer,
 } from './cli-ui-renderer.js';
 
-// IO Helper API - Clean ergonomic API for generator yields
+// IO Helper API
 export { io, emit, ask } from './io.js';

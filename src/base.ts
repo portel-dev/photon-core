@@ -39,8 +39,8 @@
  * ```
  */
 
-import { MCPClient, MCPClientFactory, createMCPProxy } from './mcp-client.js';
-import { executionContext } from './context.js';
+import { MCPClient, MCPClientFactory, createMCPProxy } from '@portel/mcp';
+import { executionContext } from '@portel/core';
 
 /**
  * Simple base class for creating Photon MCPs

@@ -583,6 +583,8 @@ export class SchemaExtractor {
         .replace(/\{@max\s+[^}]+\}/g, '')
         .replace(/\{@pattern\s+[^}]+\}/g, '')
         .replace(/\{@format\s+[^}]+\}/g, '')
+        .replace(/\{@choice\s+[^}]+\}/g, '')
+        .replace(/\{@field\s+[^}]+\}/g, '')
         .replace(/\{@default\s+[^}]+\}/g, '')
         .replace(/\{@unique(?:Items)?\s*\}/g, '')
         .replace(/\{@example\s+[^}]+\}/g, '')
@@ -634,6 +636,19 @@ export class SchemaExtractor {
       const formatMatch = description.match(/\{@format\s+(.+?)\}(?=\s|$|{@)/);
       if (formatMatch) {
         paramConstraints.format = formatMatch[1].trim();
+      }
+
+      // Extract {@choice value1,value2,...} - converts to enum in schema
+      const choiceMatch = description.match(/\{@choice\s+([^}]+)\}/);
+      if (choiceMatch) {
+        const choices = choiceMatch[1].split(',').map((c: string) => c.trim());
+        paramConstraints.enum = choices;
+      }
+
+      // Extract {@field type} - hints for UI form rendering
+      const fieldMatch = description.match(/\{@field\s+([a-z]+)\}/);
+      if (fieldMatch) {
+        paramConstraints.field = fieldMatch[1].trim();
       }
 
       // Extract {@default value} - use lookahead to match until tag-closing }
@@ -775,6 +790,14 @@ export class SchemaExtractor {
       }
       if (constraints.deprecated !== undefined) {
         s.deprecated = constraints.deprecated === true ? true : constraints.deprecated;
+      }
+      // Apply enum from @choice tag (overrides TypeScript-derived enum if present)
+      if (constraints.enum !== undefined && !s.enum) {
+        s.enum = constraints.enum;
+      }
+      // Apply field hint for UI rendering
+      if (constraints.field !== undefined) {
+        s.field = constraints.field;
       }
 
       // readOnly and writeOnly are mutually exclusive
