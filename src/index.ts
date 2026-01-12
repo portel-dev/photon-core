@@ -307,3 +307,6 @@ export {
   CLIUIRenderer,
   cliRenderer,
 } from './cli-ui-renderer.js';
+
+// IO Helper API - Clean ergonomic API for generator yields
+export { io, emit, ask } from './io.js';
