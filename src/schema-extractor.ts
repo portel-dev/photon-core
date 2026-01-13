@@ -129,6 +129,7 @@ export class SchemaExtractor {
         // Otherwise, it's a regular tool
         else {
           const outputFormat = this.extractFormat(jsdoc);
+          const buttonLabel = this.extractButtonLabel(jsdoc);
           const yields = isGenerator ? this.extractYieldsFromJSDoc(jsdoc) : undefined;
           const isStateful = this.hasStatefulTag(jsdoc);
           const autorun = this.hasAutorunTag(jsdoc);
@@ -138,6 +139,7 @@ export class SchemaExtractor {
             description,
             inputSchema,
             ...(outputFormat ? { outputFormat } : {}),
+            ...(buttonLabel ? { buttonLabel } : {}),
             ...(isGenerator ? { isGenerator: true } : {}),
             ...(yields && yields.length > 0 ? { yields } : {}),
             ...(isStateful ? { isStateful: true } : {}),
@@ -594,6 +596,7 @@ export class SchemaExtractor {
         .replace(/\{@deprecated(?:\s+[^}]+)?\}/g, '')
         .replace(/\{@readOnly\s*\}/g, '')
         .replace(/\{@writeOnly\s*\}/g, '')
+        .replace(/\{@label\s+[^}]+\}/g, '')
         .replace(/\s+/g, ' ')  // Collapse multiple spaces
         .trim();
       paramDocs.set(paramName, cleanDesc);
@@ -719,6 +722,12 @@ export class SchemaExtractor {
         }
       }
 
+      // Extract {@label displayName} - custom label for form fields
+      const labelMatch = description.match(/\{@label\s+([^}]+)\}/);
+      if (labelMatch) {
+        paramConstraints.label = labelMatch[1].trim();
+      }
+
       if (Object.keys(paramConstraints).length > 0) {
         constraints.set(paramName, paramConstraints);
       }
@@ -800,6 +809,10 @@ export class SchemaExtractor {
       // Apply field hint for UI rendering
       if (constraints.field !== undefined) {
         s.field = constraints.field;
+      }
+      // Apply custom label for form fields
+      if (constraints.label !== undefined) {
+        s.title = constraints.label;  // JSON Schema uses 'title' for display label
       }
 
       // readOnly and writeOnly are mutually exclusive
@@ -895,6 +908,20 @@ export class SchemaExtractor {
       return codeMatch[1] ? `code:${codeMatch[1]}` as OutputFormat : 'code';
     }
 
+    return undefined;
+  }
+
+  /**
+   * Extract button label from @returns {@label} tag
+   * Example: @returns {@label Calculate Sum} The result
+   * Example: @returns {@label Run Query}
+   */
+  private extractButtonLabel(jsdocContent: string): string | undefined {
+    // Look for {@label ...} in @returns tag
+    const returnsMatch = jsdocContent.match(/@returns?\s+.*?\{@label\s+([^}]+)\}/i);
+    if (returnsMatch) {
+      return returnsMatch[1].trim();
+    }
     return undefined;
   }
 
