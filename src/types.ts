@@ -54,6 +54,8 @@ export interface ExtractedSchema {
   yields?: YieldInfo[];
   /** True if this is a stateful workflow (supports checkpoint/resume) */
   isStateful?: boolean;
+  /** True if this method should auto-execute when selected (idempotent, no required params) */
+  autorun?: boolean;
 }
 
 export interface PhotonMCPClass {

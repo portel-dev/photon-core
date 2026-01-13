@@ -131,6 +131,7 @@ export class SchemaExtractor {
           const outputFormat = this.extractFormat(jsdoc);
           const yields = isGenerator ? this.extractYieldsFromJSDoc(jsdoc) : undefined;
           const isStateful = this.hasStatefulTag(jsdoc);
+          const autorun = this.hasAutorunTag(jsdoc);
 
           tools.push({
             name: methodName,
@@ -140,6 +141,7 @@ export class SchemaExtractor {
             ...(isGenerator ? { isGenerator: true } : {}),
             ...(yields && yields.length > 0 ? { yields } : {}),
             ...(isStateful ? { isStateful: true } : {}),
+            ...(autorun ? { autorun: true } : {}),
           });
         }
       };
@@ -849,6 +851,14 @@ export class SchemaExtractor {
    */
   private hasStatefulTag(jsdocContent: string): boolean {
     return /@stateful/i.test(jsdocContent);
+  }
+
+  /**
+   * Check if JSDoc contains @autorun tag
+   * Indicates this method should auto-execute when selected (idempotent, no required params)
+   */
+  private hasAutorunTag(jsdocContent: string): boolean {
+    return /@autorun/i.test(jsdocContent);
   }
 
   /**
