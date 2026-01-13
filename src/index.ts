@@ -33,7 +33,7 @@
  * ```
  */
 
-// ===== RE-EXPORT FROM @portel/core =====
+// ===== RE-EXPORT FROM @portel/cli =====
 // CLI formatting, progress, text utils, fuzzy matching, logging
 export {
   // Types
@@ -89,7 +89,7 @@ export {
   Logger,
   createLogger,
   getLogger,
-} from '@portel/core';
+} from '@portel/cli';
 
 // ===== RE-EXPORT FROM @portel/mcp =====
 // MCP client, transport, configuration, elicitation

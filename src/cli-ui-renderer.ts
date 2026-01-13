@@ -12,7 +12,7 @@ import {
   renderTree,
   formatKey,
   formatValue,
-} from '@portel/core';
+} from '@portel/cli';
 import { UIRenderer } from './auto-ui.js';
 import chalk from 'chalk';
 import { highlight } from 'cli-highlight';

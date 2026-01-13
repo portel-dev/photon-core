@@ -40,7 +40,7 @@
  */
 
 import { MCPClient, MCPClientFactory, createMCPProxy } from '@portel/mcp';
-import { executionContext } from '@portel/core';
+import { executionContext } from '@portel/cli';
 
 /**
  * Simple base class for creating Photon MCPs
