@@ -814,6 +814,11 @@ export class SchemaExtractor {
         paramConstraints.hint = hintMatch[1].trim();
       }
 
+      // Extract {@hidden} - hide field from UI forms (for programmatic use only)
+      if (description.match(/\{@hidden\s*\}/)) {
+        paramConstraints.hidden = true;
+      }
+
       if (Object.keys(paramConstraints).length > 0) {
         constraints.set(paramName, paramConstraints);
       }
@@ -918,6 +923,11 @@ export class SchemaExtractor {
       if (constraints.writeOnly === true) {
         s.writeOnly = true;
         delete s.readOnly; // Clear readOnly if writeOnly is set
+      }
+
+      // Apply hidden flag for UI forms
+      if (constraints.hidden === true) {
+        s.hidden = true;
       }
     };
 
