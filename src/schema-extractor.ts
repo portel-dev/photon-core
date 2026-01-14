@@ -61,6 +61,12 @@ export class SchemaExtractor {
       // Helper to process a method declaration
       const processMethod = (member: ts.MethodDeclaration) => {
         const methodName = member.name.getText(sourceFile);
+
+        // Skip private methods (prefixed with _)
+        if (methodName.startsWith('_')) {
+          return;
+        }
+
         const jsdoc = this.getJSDocComment(member, sourceFile);
 
         // Check if this is an async generator method (has asterisk token)
@@ -578,6 +584,54 @@ export class SchemaExtractor {
    * Extract parameter descriptions from JSDoc @param tags
    * Also removes constraint tags from descriptions
    */
+  /**
+   * Remove {@example ...} tags that may contain nested braces/brackets (JSON)
+   */
+  private removeExampleTags(text: string): string {
+    let result = text;
+    let searchStart = 0;
+
+    while (true) {
+      const exampleStart = result.indexOf('{@example ', searchStart);
+      if (exampleStart === -1) break;
+
+      const contentStart = exampleStart + '{@example '.length;
+      let braceDepth = 0;
+      let bracketDepth = 0;
+      let i = contentStart;
+      let inString = false;
+
+      while (i < result.length) {
+        const ch = result[i];
+        const prevCh = i > 0 ? result[i - 1] : '';
+
+        if (ch === '"' && prevCh !== '\\') {
+          inString = !inString;
+        } else if (!inString) {
+          if (ch === '{') braceDepth++;
+          else if (ch === '[') bracketDepth++;
+          else if (ch === ']') bracketDepth--;
+          else if (ch === '}') {
+            if (braceDepth === 0 && bracketDepth === 0) {
+              // Found the closing brace of the {@example} tag
+              result = result.substring(0, exampleStart) + result.substring(i + 1);
+              break;
+            }
+            braceDepth--;
+          }
+        }
+        i++;
+      }
+
+      // Safety: if we didn't find closing brace, move past this tag
+      if (i >= result.length) {
+        searchStart = exampleStart + 1;
+      }
+    }
+
+    return result;
+  }
+
   private extractParamDocs(jsdocContent: string): Map<string, string> {
     const paramDocs = new Map<string, string>();
     const paramRegex = /@param\s+(\w+)\s+(.+)/g;
@@ -585,8 +639,10 @@ export class SchemaExtractor {
     let match;
     while ((match = paramRegex.exec(jsdocContent)) !== null) {
       const [, paramName, description] = match;
-      // Remove all constraint tags from description
-      const cleanDesc = description
+      // Remove {@example} tags first (handles nested braces/brackets)
+      let cleanDesc = this.removeExampleTags(description);
+      // Remove other constraint tags from description
+      cleanDesc = cleanDesc
         .replace(/\{@min\s+[^}]+\}/g, '')
         .replace(/\{@max\s+[^}]+\}/g, '')
         .replace(/\{@pattern\s+[^}]+\}/g, '')
@@ -595,7 +651,6 @@ export class SchemaExtractor {
         .replace(/\{@field\s+[^}]+\}/g, '')
         .replace(/\{@default\s+[^}]+\}/g, '')
         .replace(/\{@unique(?:Items)?\s*\}/g, '')
-        .replace(/\{@example\s+[^}]+\}/g, '')
         .replace(/\{@multipleOf\s+[^}]+\}/g, '')
         .replace(/\{@deprecated(?:\s+[^}]+)?\}/g, '')
         .replace(/\{@readOnly\s*\}/g, '')

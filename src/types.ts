@@ -9,7 +9,8 @@
  */
 export type OutputFormat =
   | 'primitive' | 'table' | 'tree' | 'list' | 'none'
-  | 'json' | 'markdown' | 'yaml' | 'xml' | 'html'
+  | 'json' | 'markdown' | 'yaml' | 'xml' | 'html' | 'mermaid'
+  | 'card' | 'grid' | 'chips' | 'kv' | 'tabs' | 'accordion'
   | `code` | `code:${string}`;
 
 export interface PhotonTool {
