@@ -130,6 +130,7 @@ export class SchemaExtractor {
         else {
           const outputFormat = this.extractFormat(jsdoc);
           const buttonLabel = this.extractButtonLabel(jsdoc);
+          const icon = this.extractIcon(jsdoc);
           const yields = isGenerator ? this.extractYieldsFromJSDoc(jsdoc) : undefined;
           const isStateful = this.hasStatefulTag(jsdoc);
           const autorun = this.hasAutorunTag(jsdoc);
@@ -140,6 +141,7 @@ export class SchemaExtractor {
             inputSchema,
             ...(outputFormat ? { outputFormat } : {}),
             ...(buttonLabel ? { buttonLabel } : {}),
+            ...(icon ? { icon } : {}),
             ...(isGenerator ? { isGenerator: true } : {}),
             ...(yields && yields.length > 0 ? { yields } : {}),
             ...(isStateful ? { isStateful: true } : {}),
@@ -597,6 +599,8 @@ export class SchemaExtractor {
         .replace(/\{@readOnly\s*\}/g, '')
         .replace(/\{@writeOnly\s*\}/g, '')
         .replace(/\{@label\s+[^}]+\}/g, '')
+        .replace(/\{@placeholder\s+[^}]+\}/g, '')
+        .replace(/\{@hint\s+[^}]+\}/g, '')
         .replace(/\s+/g, ' ')  // Collapse multiple spaces
         .trim();
       paramDocs.set(paramName, cleanDesc);
@@ -728,6 +732,18 @@ export class SchemaExtractor {
         paramConstraints.label = labelMatch[1].trim();
       }
 
+      // Extract {@placeholder text} - placeholder text for input fields
+      const placeholderMatch = description.match(/\{@placeholder\s+([^}]+)\}/);
+      if (placeholderMatch) {
+        paramConstraints.placeholder = placeholderMatch[1].trim();
+      }
+
+      // Extract {@hint text} - help text shown below/beside the field
+      const hintMatch = description.match(/\{@hint\s+([^}]+)\}/);
+      if (hintMatch) {
+        paramConstraints.hint = hintMatch[1].trim();
+      }
+
       if (Object.keys(paramConstraints).length > 0) {
         constraints.set(paramName, paramConstraints);
       }
@@ -813,6 +829,14 @@ export class SchemaExtractor {
       // Apply custom label for form fields
       if (constraints.label !== undefined) {
         s.title = constraints.label;  // JSON Schema uses 'title' for display label
+      }
+      // Apply placeholder for input fields
+      if (constraints.placeholder !== undefined) {
+        s.placeholder = constraints.placeholder;
+      }
+      // Apply hint text for form fields
+      if (constraints.hint !== undefined) {
+        s.hint = constraints.hint;
       }
 
       // readOnly and writeOnly are mutually exclusive
@@ -921,6 +945,20 @@ export class SchemaExtractor {
     const returnsMatch = jsdocContent.match(/@returns?\s+.*?\{@label\s+([^}]+)\}/i);
     if (returnsMatch) {
       return returnsMatch[1].trim();
+    }
+    return undefined;
+  }
+
+  /**
+   * Extract icon from @icon tag
+   * Example: @icon calculator
+   * Example: @icon 🧮
+   * Example: @icon mdi:calculator
+   */
+  private extractIcon(jsdocContent: string): string | undefined {
+    const iconMatch = jsdocContent.match(/@icon\s+([^\s@*]+)/i);
+    if (iconMatch) {
+      return iconMatch[1].trim();
     }
     return undefined;
   }
