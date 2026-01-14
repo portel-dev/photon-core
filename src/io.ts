@@ -220,17 +220,122 @@ interface SelectOptions {
   default?: string | string[];
   multi?: boolean;
   required?: boolean;
+  /** Layout style for rendering options */
+  layout?: 'list' | 'grid' | 'cards';
+  /** Number of columns for grid/cards layout */
+  columns?: number;
+  /** Filter buttons to show (e.g., ['All', 'Vegetarian', 'Vegan']) */
+  filters?: string[];
+  /** Which option field to filter on (default: 'category') */
+  filterField?: string;
+  /** Show search box for filtering options */
+  searchable?: boolean;
+  /** Placeholder text for search box */
+  searchPlaceholder?: string;
 }
 
-/** Select option type */
-type SelectOption = string | { value: string; label: string; description?: string };
+/**
+ * Rich select option for e-commerce, catalogs, and other common use cases.
+ *
+ * Supports simple strings for basic options, or rich objects for
+ * product cards, catalog items, and other visual selections.
+ *
+ * @example Simple string options
+ * ['Red', 'Green', 'Blue']
+ *
+ * @example Rich product options
+ * [
+ *   {
+ *     value: 'prod-123',
+ *     label: 'Wireless Headphones',
+ *     description: 'Premium sound quality',
+ *     image: 'https://example.com/headphones.jpg',
+ *     price: 99.99,
+ *     badge: 'Sale',
+ *   }
+ * ]
+ */
+type SelectOption = string | {
+  /** Unique identifier returned when selected */
+  value: string;
+  /** Display label (product name, item title) */
+  label: string;
+  /** Secondary text (short description) */
+  description?: string;
+  /** Image URL (product photo, thumbnail) */
+  image?: string;
+  /** Price in currency units (rendered with locale formatting) */
+  price?: number;
+  /** Original price for showing discounts */
+  originalPrice?: number;
+  /** Currency code (default: USD) */
+  currency?: string;
+  /** Badge text (Sale, New, Low Stock, etc.) */
+  badge?: string;
+  /** Badge color/type for styling */
+  badgeType?: 'default' | 'success' | 'warning' | 'error' | 'info';
+  /** Quantity (for cart items) */
+  quantity?: number;
+  /** Enable +/- quantity controls */
+  adjustable?: boolean;
+  /** Minimum quantity (0 = can remove, default: 1) */
+  minQuantity?: number;
+  /** Maximum quantity allowed */
+  maxQuantity?: number;
+  /** Category for filtering (e.g., 'vegetarian', 'spicy') */
+  category?: string | string[];
+  /** Whether the option is disabled/unavailable */
+  disabled?: boolean;
+  /** Reason for being disabled (Out of stock, etc.) */
+  disabledReason?: string;
+  /** Pre-selected state for multi-select */
+  selected?: boolean;
+  /** Additional metadata (not rendered, returned with selection) */
+  meta?: Record<string, any>;
+};
 
 /**
  * Ask for selection from options
  *
- * @example
+ * Supports simple string arrays for basic choices, or rich option objects
+ * for product catalogs, shopping carts, and other visual selections.
+ *
+ * @example Basic selection
  * const env = yield io.ask.select('Choose environment:', ['dev', 'staging', 'prod']);
+ *
+ * @example Multi-select features
  * const features = yield io.ask.select('Enable features:', ['auth', 'logs'], { multi: true });
+ *
+ * @example Product selection (e-commerce)
+ * const items = yield io.ask.select('Select items to purchase:', [
+ *   {
+ *     value: 'prod-1',
+ *     label: 'Wireless Mouse',
+ *     description: 'Ergonomic design',
+ *     image: 'https://example.com/mouse.jpg',
+ *     price: 29.99,
+ *     badge: 'Bestseller'
+ *   },
+ *   {
+ *     value: 'prod-2',
+ *     label: 'Mechanical Keyboard',
+ *     description: 'Cherry MX switches',
+ *     image: 'https://example.com/keyboard.jpg',
+ *     price: 149.99,
+ *     originalPrice: 199.99,
+ *     badge: 'Sale'
+ *   }
+ * ], { multi: true, layout: 'cards', columns: 2 });
+ *
+ * @example Shopping cart review
+ * const confirmed = yield io.ask.select('Review your cart:', cartItems.map(item => ({
+ *   value: item.id,
+ *   label: item.name,
+ *   image: item.thumbnail,
+ *   price: item.price,
+ *   quantity: item.qty,
+ *   selected: true  // Pre-selected
+ * })), { multi: true, layout: 'list' });
  */
 function select(message: string, options: SelectOption[], config?: SelectOptions): AskSelect {
   return { ask: 'select', message, options, ...config };

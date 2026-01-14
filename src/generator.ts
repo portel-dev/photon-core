@@ -203,14 +203,70 @@ export interface AskConfirm extends AskBase {
  *   multi: true
  * };
  */
+/**
+ * Rich select option for e-commerce, catalogs, and other common use cases.
+ */
+export type SelectOptionObject = {
+  /** Unique identifier returned when selected */
+  value: string;
+  /** Display label (product name, item title) */
+  label: string;
+  /** Secondary text (short description) */
+  description?: string;
+  /** Image URL (product photo, thumbnail) */
+  image?: string;
+  /** Price in currency units (rendered with locale formatting) */
+  price?: number;
+  /** Original price for showing discounts */
+  originalPrice?: number;
+  /** Currency code (default: USD) */
+  currency?: string;
+  /** Badge text (Sale, New, Low Stock, etc.) */
+  badge?: string;
+  /** Badge color/type for styling */
+  badgeType?: 'default' | 'success' | 'warning' | 'error' | 'info';
+  /** Quantity (for cart items) */
+  quantity?: number;
+  /** Enable +/- quantity controls */
+  adjustable?: boolean;
+  /** Minimum quantity (0 = can remove, default: 1) */
+  minQuantity?: number;
+  /** Maximum quantity allowed */
+  maxQuantity?: number;
+  /** Category for filtering (e.g., 'vegetarian', 'spicy') */
+  category?: string | string[];
+  /** Whether the option is disabled/unavailable */
+  disabled?: boolean;
+  /** Reason for being disabled (Out of stock, etc.) */
+  disabledReason?: string;
+  /** Pre-selected state for multi-select */
+  selected?: boolean;
+  /** Additional metadata (not rendered, returned with selection) */
+  meta?: Record<string, any>;
+};
+
+export type SelectOption = string | SelectOptionObject;
+
 export interface AskSelect extends AskBase {
   ask: 'select';
-  /** Available options */
-  options: Array<string | { value: string; label: string; description?: string }>;
+  /** Available options - simple strings or rich option objects */
+  options: SelectOption[];
   /** Allow selecting multiple options */
   multi?: boolean;
   /** Default selected value(s) */
   default?: string | string[];
+  /** Layout style for rendering options */
+  layout?: 'list' | 'grid' | 'cards';
+  /** Number of columns for grid/cards layout */
+  columns?: number;
+  /** Filter buttons to show (e.g., ['All', 'Vegetarian', 'Vegan']) */
+  filters?: string[];
+  /** Which option field to filter on (default: 'category') */
+  filterField?: string;
+  /** Show search box for filtering options */
+  searchable?: boolean;
+  /** Placeholder text for search box */
+  searchPlaceholder?: string;
 }
 
 /**

@@ -213,6 +213,10 @@ export {
   type AskForm,
   type AskUrl,
 
+  // Rich select option types (e-commerce, catalogs)
+  type SelectOption,
+  type SelectOptionObject,
+
   // Form schema types
   type FormSchema,
   type FormSchemaProperty,
@@ -306,3 +310,10 @@ export {
 
 // IO Helper API
 export { io, emit, ask } from './io.js';
+
+// ===== SMART RENDERING (HTML/Web UI) =====
+// Design system tokens and utilities
+export * from './design-system/index.js';
+
+// Smart rendering modules for auto-UI generation
+export * from './rendering/index.js';

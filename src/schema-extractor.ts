@@ -233,6 +233,19 @@ export class SchemaExtractor {
     const properties: Record<string, any> = {};
     const required: string[] = [];
 
+    // Handle union types (e.g., { ip: string } | string)
+    // Extract properties from the first object type member
+    if (ts.isUnionTypeNode(typeNode)) {
+      for (const memberType of typeNode.types) {
+        if (ts.isTypeLiteralNode(memberType)) {
+          // Found an object type in the union, extract its properties
+          return this.buildSchemaFromType(memberType, sourceFile);
+        }
+      }
+      // No object type found in union, return empty
+      return { properties, required };
+    }
+
     // Handle type literal (object type)
     if (ts.isTypeLiteralNode(typeNode)) {
       typeNode.members.forEach((member) => {
