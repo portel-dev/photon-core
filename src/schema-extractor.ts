@@ -129,6 +129,7 @@ export class SchemaExtractor {
         // Otherwise, it's a regular tool
         else {
           const outputFormat = this.extractFormat(jsdoc);
+          const layoutHints = this.extractLayoutHints(jsdoc);
           const buttonLabel = this.extractButtonLabel(jsdoc);
           const icon = this.extractIcon(jsdoc);
           const yields = isGenerator ? this.extractYieldsFromJSDoc(jsdoc) : undefined;
@@ -140,6 +141,7 @@ export class SchemaExtractor {
             description,
             inputSchema,
             ...(outputFormat ? { outputFormat } : {}),
+            ...(layoutHints ? { layoutHints } : {}),
             ...(buttonLabel ? { buttonLabel } : {}),
             ...(icon ? { icon } : {}),
             ...(isGenerator ? { isGenerator: true } : {}),
@@ -909,30 +911,65 @@ export class SchemaExtractor {
 
   /**
    * Extract format hint from @format tag
+   * Supports nested syntax: @format list {@title name, @subtitle email}
    * Example: @format table
    * Example: @format json
    * Example: @format code:typescript
+   * Example: @format list {@title name, @subtitle email, @style inset}
    */
   private extractFormat(jsdocContent: string): OutputFormat | undefined {
+    // Match format with optional nested hints: @format list {...}
+    // The nested hints are extracted separately by extractLayoutHints
+    const formatMatch = jsdocContent.match(/@format\s+(\w+)(?::(\w+))?/i);
+    if (!formatMatch) return undefined;
+
+    const format = formatMatch[1].toLowerCase();
+    const subtype = formatMatch[2];
+
     // Match structural formats
-    const structuralMatch = jsdocContent.match(/@format\s+(primitive|table|tree|list|none)/i);
-    if (structuralMatch) {
-      return structuralMatch[1].toLowerCase() as OutputFormat;
+    if (['primitive', 'table', 'tree', 'list', 'none', 'card', 'grid', 'chips', 'kv'].includes(format)) {
+      return format as OutputFormat;
     }
 
     // Match content formats
-    const contentMatch = jsdocContent.match(/@format\s+(json|markdown|yaml|xml|html)/i);
-    if (contentMatch) {
-      return contentMatch[1].toLowerCase() as OutputFormat;
+    if (['json', 'markdown', 'yaml', 'xml', 'html', 'mermaid'].includes(format)) {
+      return format as OutputFormat;
     }
 
     // Match code format (with optional language)
-    const codeMatch = jsdocContent.match(/@format\s+code(?::(\w+))?/i);
-    if (codeMatch) {
-      return codeMatch[1] ? `code:${codeMatch[1]}` as OutputFormat : 'code';
+    if (format === 'code') {
+      return subtype ? `code:${subtype}` as OutputFormat : 'code';
     }
 
     return undefined;
+  }
+
+  /**
+   * Extract layout hints from nested @format syntax
+   * Example: @format list {@title name, @subtitle email, @icon avatar, @style inset}
+   * Returns: { title: 'name', subtitle: 'email', icon: 'avatar', style: 'inset' }
+   */
+  private extractLayoutHints(jsdocContent: string): Record<string, string> | undefined {
+    // Match @format TYPE {hints}
+    const match = jsdocContent.match(/@format\s+\w+(?::\w+)?\s*\{([^}]+)\}/i);
+    if (!match) return undefined;
+
+    const hintsString = match[1];
+    const hints: Record<string, string> = {};
+
+    // Parse comma-separated hints: @title name, @subtitle email:link
+    const parts = hintsString.split(',').map(s => s.trim());
+
+    for (const part of parts) {
+      // Match @key value or @key value:renderer
+      const hintMatch = part.match(/@(\w+)\s+([^\s,]+(?:\s+[^\s@,][^\s,]*)*)/);
+      if (hintMatch) {
+        const [, key, value] = hintMatch;
+        hints[key.toLowerCase()] = value.trim();
+      }
+    }
+
+    return Object.keys(hints).length > 0 ? hints : undefined;
   }
 
   /**

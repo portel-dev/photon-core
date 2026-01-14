@@ -48,6 +48,12 @@ export interface ExtractedSchema {
     required?: string[];
   };
   outputFormat?: OutputFormat;
+  /** Layout hints from nested @format syntax: @format list {@title name, @subtitle email} */
+  layoutHints?: Record<string, string>;
+  /** Custom button label from @returns {@label} tag */
+  buttonLabel?: string;
+  /** Icon from @icon tag (emoji or icon name) */
+  icon?: string;
   /** True if this method is an async generator (uses yield for prompts) */
   isGenerator?: boolean;
   /** Yield information for generator methods (used by REST APIs) */
