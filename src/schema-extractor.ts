@@ -307,7 +307,7 @@ export class SchemaExtractor {
       return schema;
     }
 
-    // Handle type reference (e.g., Array<string>)
+    // Handle type reference (e.g., Array<string>, DiagramType)
     if (ts.isTypeReferenceNode(typeNode)) {
       const typeName = typeNode.typeName.getText(sourceFile);
 
@@ -317,7 +317,13 @@ export class SchemaExtractor {
         return schema;
       }
 
-      // For other type references, default to object
+      // Try to resolve type alias
+      const resolvedType = this.resolveTypeAlias(typeName, sourceFile);
+      if (resolvedType) {
+        return this.typeNodeToSchema(resolvedType, sourceFile);
+      }
+
+      // For unresolved type references, default to object
       schema.type = 'object';
       return schema;
     }
@@ -381,6 +387,28 @@ export class SchemaExtractor {
     }
 
     return schema;
+  }
+
+  /**
+   * Resolve a type alias to its underlying type node
+   * Searches the source file for type alias declarations
+   */
+  private resolveTypeAlias(typeName: string, sourceFile: ts.SourceFile): ts.TypeNode | null {
+    let resolved: ts.TypeNode | null = null;
+
+    const visit = (node: ts.Node) => {
+      if (resolved) return; // Already found
+
+      if (ts.isTypeAliasDeclaration(node) && node.name.text === typeName) {
+        resolved = node.type;
+        return;
+      }
+
+      ts.forEachChild(node, visit);
+    };
+
+    visit(sourceFile);
+    return resolved;
   }
 
   /**
