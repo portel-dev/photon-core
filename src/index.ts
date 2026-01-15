@@ -317,3 +317,7 @@ export * from './design-system/index.js';
 
 // Smart rendering modules for auto-UI generation
 export * from './rendering/index.js';
+
+// ===== UCP (Universal Commerce Protocol) =====
+// Agentic commerce with checkout, identity, orders, and AP2 payments
+export * from './ucp/index.js';
