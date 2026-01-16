@@ -11,6 +11,20 @@ import * as os from 'os';
 
 export const DEFAULT_PHOTON_DIR = path.join(os.homedir(), '.photon');
 
+/**
+ * Expand tilde (~) to user's home directory
+ * Shell does this automatically, but Node.js CLI args don't get shell expansion
+ */
+function expandTilde(filePath: string): string {
+  if (filePath.startsWith('~/')) {
+    return path.join(os.homedir(), filePath.slice(2));
+  }
+  if (filePath === '~') {
+    return os.homedir();
+  }
+  return filePath;
+}
+
 export interface ResolverOptions {
   /** File extensions to look for (default: ['.photon.ts', '.photon.js']) */
   extensions?: string[];
@@ -33,7 +47,7 @@ export async function resolvePath(
   options?: ResolverOptions
 ): Promise<string | null> {
   const opts = { ...defaultOptions, ...options };
-  const dir = workingDir || opts.defaultDir;
+  const dir = expandTilde(workingDir || opts.defaultDir);
 
   // If absolute path provided, check if it exists
   if (path.isAbsolute(name)) {
@@ -77,7 +91,7 @@ export async function listFiles(
   options?: ResolverOptions
 ): Promise<string[]> {
   const opts = { ...defaultOptions, ...options };
-  const dir = workingDir || opts.defaultDir;
+  const dir = expandTilde(workingDir || opts.defaultDir);
 
   try {
     // Ensure directory exists
@@ -111,7 +125,7 @@ export async function listFiles(
  * Ensure directory exists
  */
 export async function ensureDir(dir?: string): Promise<void> {
-  const targetDir = dir || DEFAULT_PHOTON_DIR;
+  const targetDir = expandTilde(dir || DEFAULT_PHOTON_DIR);
   await fs.mkdir(targetDir, { recursive: true });
 }
 
