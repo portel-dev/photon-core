@@ -382,6 +382,24 @@ export function generateComponentCSS(): string {
   background: var(--color-surface-container-high);
 }
 
+/* Inline chips (for array values in cards) */
+.inline-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.inline-chips .chip {
+  padding: 2px var(--space-2);
+  font-size: var(--text-label-sm);
+}
+
+/* Muted text helper */
+span.muted {
+  color: var(--color-on-surface-variant);
+  font-size: 0.9em;
+}
+
 /* Text Component */
 .smart-text {
   color: var(--color-on-surface);
@@ -767,7 +785,35 @@ function renderFieldValue(value, field, typeHints) {
     }
   }
 
+  // Handle arrays nicely
+  if (Array.isArray(value)) {
+    if (value.length === 0) {
+      return '<span class="muted">None</span>';
+    }
+    // Array of strings - render as inline chips
+    if (typeof value[0] === 'string') {
+      return '<span class="inline-chips">' + value.map(v => '<span class="chip">' + escapeHtml(v) + '</span>').join('') + '</span>';
+    }
+    // Array of objects - render as count with preview
+    if (typeof value[0] === 'object') {
+      // Show first item preview and count
+      const preview = value[0].title || value[0].name || Object.values(value[0])[0];
+      if (value.length === 1) {
+        return escapeHtml(String(preview));
+      }
+      return escapeHtml(String(preview)) + ' <span class="muted">+' + (value.length - 1) + ' more</span>';
+    }
+    // Array of primitives
+    return value.map(v => escapeHtml(String(v))).join(', ');
+  }
+
+  // Handle nested objects
   if (typeof value === 'object') {
+    // For small objects, show key-value inline
+    const keys = Object.keys(value);
+    if (keys.length <= 3) {
+      return keys.map(k => '<span class="muted">' + escapeHtml(k) + ':</span> ' + escapeHtml(String(value[k]))).join(' · ');
+    }
     return escapeHtml(JSON.stringify(value));
   }
 
