@@ -63,6 +63,29 @@ export interface ExtractedSchema {
   isStateful?: boolean;
   /** True if this method should auto-execute when selected (idempotent, no required params) */
   autorun?: boolean;
+
+  // ═══ DAEMON FEATURES ═══
+
+  /**
+   * Webhook endpoint path (from @webhook tag or handle* prefix)
+   * - true: use method name as path (e.g., handleGithubPush → /webhook/handleGithubPush)
+   * - string: custom path (e.g., @webhook stripe → /webhook/stripe)
+   */
+  webhook?: boolean | string;
+
+  /**
+   * Cron schedule expression (from @scheduled or @cron tag, or scheduled* prefix)
+   * Standard 5-field format: minute hour day-of-month month day-of-week
+   * Example: "0 0 * * *" (daily at midnight)
+   */
+  scheduled?: string;
+
+  /**
+   * Distributed lock name (from @locked tag)
+   * - true: use method name as lock (e.g., batchUpdate → lock "batchUpdate")
+   * - string: custom lock name (e.g., @locked board:write)
+   */
+  locked?: boolean | string;
 }
 
 export interface PhotonMCPClass {

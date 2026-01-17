@@ -142,6 +142,11 @@ export class SchemaExtractor {
           const isStateful = this.hasStatefulTag(jsdoc);
           const autorun = this.hasAutorunTag(jsdoc);
 
+          // Daemon features
+          const webhook = this.extractWebhook(jsdoc, methodName);
+          const scheduled = this.extractScheduled(jsdoc, methodName);
+          const locked = this.extractLocked(jsdoc, methodName);
+
           tools.push({
             name: methodName,
             description,
@@ -154,6 +159,10 @@ export class SchemaExtractor {
             ...(yields && yields.length > 0 ? { yields } : {}),
             ...(isStateful ? { isStateful: true } : {}),
             ...(autorun ? { autorun: true } : {}),
+            // Daemon features
+            ...(webhook !== undefined ? { webhook } : {}),
+            ...(scheduled ? { scheduled } : {}),
+            ...(locked !== undefined ? { locked } : {}),
           });
         }
       };
@@ -1004,6 +1013,75 @@ export class SchemaExtractor {
    */
   private hasAutorunTag(jsdocContent: string): boolean {
     return /@autorun/i.test(jsdocContent);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // DAEMON FEATURE EXTRACTION
+  // ═══════════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Extract webhook configuration from @webhook tag or handle* prefix
+   * - @webhook → use method name as path
+   * - @webhook stripe → custom path "stripe"
+   * - handle* prefix → auto-detected as webhook
+   */
+  private extractWebhook(jsdocContent: string, methodName: string): boolean | string | undefined {
+    // Check for @webhook tag
+    const webhookMatch = jsdocContent.match(/@webhook(?:\s+(\S+))?/i);
+    if (webhookMatch) {
+      // If custom path specified, return it; otherwise return true
+      return webhookMatch[1]?.trim() || true;
+    }
+
+    // Check for handle* prefix (convention)
+    if (methodName.startsWith('handle')) {
+      return true;
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Extract scheduled cron expression from @scheduled, @cron tag, or scheduled* prefix
+   * - @scheduled 0 0 * * * → cron expression
+   * - @cron 0 0 * * * → cron expression
+   * - scheduled* prefix requires @cron tag for the expression
+   */
+  private extractScheduled(jsdocContent: string, methodName: string): string | undefined {
+    // Check for @scheduled with cron expression
+    const scheduledMatch = jsdocContent.match(/@scheduled\s+([*\d,\-\/]+(?:\s+[*\d,\-\/]+){4})/i);
+    if (scheduledMatch) {
+      return scheduledMatch[1].trim();
+    }
+
+    // Check for @cron tag
+    const cronMatch = jsdocContent.match(/@cron\s+([*\d,\-\/]+(?:\s+[*\d,\-\/]+){4})/i);
+    if (cronMatch) {
+      return cronMatch[1].trim();
+    }
+
+    // scheduled* prefix without explicit cron - method exists but needs @cron
+    if (methodName.startsWith('scheduled') && !cronMatch && !scheduledMatch) {
+      // Could log warning: scheduled* method missing @cron tag
+      return undefined;
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Extract lock configuration from @locked tag
+   * - @locked → use method name as lock
+   * - @locked board:write → custom lock name
+   */
+  private extractLocked(jsdocContent: string, methodName: string): boolean | string | undefined {
+    const lockedMatch = jsdocContent.match(/@locked(?:\s+(\S+))?/i);
+    if (lockedMatch) {
+      // If custom lock name specified, return it; otherwise return true
+      return lockedMatch[1]?.trim() || true;
+    }
+
+    return undefined;
   }
 
   /**
