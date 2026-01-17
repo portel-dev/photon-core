@@ -321,3 +321,7 @@ export * from './rendering/index.js';
 // ===== UCP (Universal Commerce Protocol) =====
 // Agentic commerce with checkout, identity, orders, and AP2 payments
 export * from './ucp/index.js';
+
+// ===== CHANNEL-BASED PUB/SUB =====
+// Cross-process messaging with pluggable brokers (daemon, Redis, HTTP, etc.)
+export * from './channels/index.js';

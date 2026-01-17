@@ -41,6 +41,7 @@
 
 import { MCPClient, MCPClientFactory, createMCPProxy } from '@portel/mcp';
 import { executionContext } from '@portel/cli';
+import { getBroker } from './channels/index.js';
 
 /**
  * Simple base class for creating Photon MCPs
@@ -52,12 +53,49 @@ import { executionContext } from '@portel/cli';
 export class PhotonMCP {
   /**
    * Emit an event/progress update
-   * @param data Data to emit
+   *
+   * If data includes a `channel` property, the message is also published
+   * to the channel broker for cross-process notification.
+   *
+   * @param data Data to emit (can include channel, event, data properties for pub/sub)
+   *
+   * @example
+   * ```typescript
+   * // Simple emit (local only)
+   * this.emit({ status: 'processing', progress: 50 });
+   *
+   * // Emit with channel (broadcasts to subscribers)
+   * this.emit({
+   *   channel: 'board:my-board',
+   *   event: 'task-moved',
+   *   data: { taskId: '123', newColumn: 'Done' }
+   * });
+   * ```
    */
   protected emit(data: any): void {
     const store = executionContext.getStore();
+
+    // Send to local output handler (current caller)
     if (store?.outputHandler) {
       store.outputHandler(data);
+    }
+
+    // If channel is specified, also publish to broker for cross-process notification
+    if (data && typeof data.channel === 'string') {
+      const broker = getBroker();
+      broker.publish({
+        channel: data.channel,
+        event: data.event || 'message',
+        data: data.data !== undefined ? data.data : data,
+        timestamp: Date.now(),
+        source: this.constructor.name,
+      }).catch((err) => {
+        // Silent fail - channel pub is best-effort
+        // Log only in debug mode
+        if (process.env.PHOTON_DEBUG) {
+          console.error('Channel publish error:', err);
+        }
+      });
     }
   }
   /**
