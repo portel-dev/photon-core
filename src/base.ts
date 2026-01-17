@@ -42,6 +42,7 @@
 import { MCPClient, MCPClientFactory, createMCPProxy } from '@portel/mcp';
 import { executionContext } from '@portel/cli';
 import { getBroker } from './channels/index.js';
+import { withLock as withLockHelper } from './decorators.js';
 
 /**
  * Simple base class for creating Photon MCPs
@@ -255,5 +256,35 @@ export class PhotonMCP {
       return [];
     }
     return this._mcpFactory.listServers();
+  }
+
+  /**
+   * Execute a function with a distributed lock
+   *
+   * Acquires the lock before executing, releases after (even on error).
+   * If the lock cannot be acquired, throws an error.
+   *
+   * @param lockName Name of the lock to acquire
+   * @param fn Function to execute while holding the lock
+   * @param timeout Optional lock timeout in ms (default 30000)
+   *
+   * @example
+   * ```typescript
+   * async moveTask(params: { taskId: string; column: string }) {
+   *   return this.withLock('board:write', async () => {
+   *     const task = await this.loadTask(params.taskId);
+   *     task.column = params.column;
+   *     await this.saveTask(task);
+   *     return task;
+   *   });
+   * }
+   * ```
+   */
+  protected async withLock<T>(
+    lockName: string,
+    fn: () => Promise<T>,
+    timeout?: number
+  ): Promise<T> {
+    return withLockHelper(lockName, fn, timeout);
   }
 }

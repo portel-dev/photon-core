@@ -325,3 +325,30 @@ export * from './ucp/index.js';
 // ===== CHANNEL-BASED PUB/SUB =====
 // Cross-process messaging with pluggable brokers (daemon, Redis, HTTP, etc.)
 export * from './channels/index.js';
+
+// ===== DECORATORS =====
+// High-level decorators for daemon features (scheduled jobs, webhooks, locks)
+export {
+  // Decorators
+  scheduled,
+  webhook,
+  locked,
+
+  // Metadata accessors
+  getScheduledMetadata,
+  getScheduledMethods,
+  getWebhookMetadata,
+  getWebhookMethods,
+  getLockedMetadata,
+
+  // Lock management
+  withLock,
+  setLockManager,
+  getLockManager,
+
+  // Types
+  type ScheduledMetadata,
+  type WebhookMetadata,
+  type LockedMetadata,
+  type LockManager,
+} from './decorators.js';
