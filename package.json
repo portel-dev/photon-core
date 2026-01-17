@@ -23,7 +23,8 @@
     "build": "tsc",
     "clean": "rm -rf dist",
     "prepublishOnly": "npm run clean && npm run build",
-    "test": "echo \"Error: no test specified\" && exit 0"
+    "test": "npm run build && npx tsx tests/channels.test.ts",
+    "test:channels": "npx tsx tests/channels.test.ts"
   },
   "keywords": [
     "photon",
@@ -56,7 +57,8 @@
     "typescript": "^5.7.2"
   },
   "devDependencies": {
-    "@types/node": "^22.10.2"
+    "@types/node": "^22.10.2",
+    "tsx": "^4.21.0"
   },
   "engines": {
     "node": ">=18.0.0"
