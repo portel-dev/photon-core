@@ -1175,13 +1175,16 @@ export class SchemaExtractor {
   }
 
   /**
-   * Extract icon from @icon tag
+   * Extract icon from @icon tag (standalone, not inside layout hints)
    * Example: @icon calculator
    * Example: @icon 🧮
    * Example: @icon mdi:calculator
+   * Note: Does NOT match @icon inside layout hints like {@icon fieldname}
    */
   private extractIcon(jsdocContent: string): string | undefined {
-    const iconMatch = jsdocContent.match(/@icon\s+([^\s@*]+)/i);
+    // First, remove layout hints blocks to avoid matching @icon inside them
+    const withoutLayoutHints = jsdocContent.replace(/\{[^}]+\}/g, '');
+    const iconMatch = withoutLayoutHints.match(/@icon\s+([^\s@*,]+)/i);
     if (iconMatch) {
       return iconMatch[1].trim();
     }
