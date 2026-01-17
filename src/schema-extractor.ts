@@ -1026,11 +1026,13 @@ export class SchemaExtractor {
    * - handle* prefix → auto-detected as webhook
    */
   private extractWebhook(jsdocContent: string, methodName: string): boolean | string | undefined {
-    // Check for @webhook tag
-    const webhookMatch = jsdocContent.match(/@webhook(?:\s+(\S+))?/i);
+    // Check for @webhook tag with optional path
+    // Path must start with a word character (to exclude JSDoc asterisks and closing)
+    const webhookMatch = jsdocContent.match(/@webhook(?:\s+(\w[\w\-\/]*))?/i);
     if (webhookMatch) {
-      // If custom path specified, return it; otherwise return true
-      return webhookMatch[1]?.trim() || true;
+      const path = webhookMatch[1]?.trim();
+      // Return custom path if specified, otherwise true for bare @webhook
+      return path || true;
     }
 
     // Check for handle* prefix (convention)
@@ -1075,10 +1077,12 @@ export class SchemaExtractor {
    * - @locked board:write → custom lock name
    */
   private extractLocked(jsdocContent: string, methodName: string): boolean | string | undefined {
-    const lockedMatch = jsdocContent.match(/@locked(?:\s+(\S+))?/i);
+    // Lock name must start with a word character (to exclude JSDoc asterisks and closing)
+    const lockedMatch = jsdocContent.match(/@locked(?:\s+(\w[\w\-:]*))?/i);
     if (lockedMatch) {
-      // If custom lock name specified, return it; otherwise return true
-      return lockedMatch[1]?.trim() || true;
+      const lockName = lockedMatch[1]?.trim();
+      // Return custom lock name if specified, otherwise true for bare @locked
+      return lockName || true;
     }
 
     return undefined;
