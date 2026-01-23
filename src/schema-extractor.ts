@@ -708,6 +708,8 @@ export class SchemaExtractor {
         .replace(/\{@label\s+[^}]+\}/g, '')
         .replace(/\{@placeholder\s+[^}]+\}/g, '')
         .replace(/\{@hint\s+[^}]+\}/g, '')
+        .replace(/\{@hidden\s*\}/g, '')
+        .replace(/\{@accept\s+[^}]+\}/g, '')
         .replace(/\s+/g, ' ')  // Collapse multiple spaces
         .trim();
       paramDocs.set(paramName, cleanDesc);
@@ -719,7 +721,7 @@ export class SchemaExtractor {
   /**
    * Extract parameter constraints from JSDoc @param tags
    * Supports inline tags: {@min}, {@max}, {@pattern}, {@format}, {@default}, {@unique},
-   * {@example}, {@multipleOf}, {@deprecated}, {@readOnly}, {@writeOnly}
+   * {@example}, {@multipleOf}, {@deprecated}, {@readOnly}, {@writeOnly}, {@accept}
    */
   private extractParamConstraints(jsdocContent: string): Map<string, any> {
     const constraints = new Map<string, any>();
@@ -856,6 +858,12 @@ export class SchemaExtractor {
         paramConstraints.hidden = true;
       }
 
+      // Extract {@accept pattern} - file type filter for file picker (e.g., "*.ts,*.js" or ".ts,.js")
+      const acceptMatch = description.match(/\{@accept\s+([^}]+)\}/);
+      if (acceptMatch) {
+        paramConstraints.accept = acceptMatch[1].trim();
+      }
+
       if (Object.keys(paramConstraints).length > 0) {
         constraints.set(paramName, paramConstraints);
       }
@@ -965,6 +973,10 @@ export class SchemaExtractor {
       // Apply hidden flag for UI forms
       if (constraints.hidden === true) {
         s.hidden = true;
+      }
+      // Apply accept pattern for file picker filtering
+      if (constraints.accept !== undefined) {
+        s.accept = constraints.accept;
       }
     };
 
