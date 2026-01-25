@@ -449,6 +449,67 @@ const resumed = await maybeStatefulExecute(
 
 ---
 
+### Channel-Based Pub/Sub
+
+Photon Core provides a pluggable channel broker architecture for cross-process messaging. This enables real-time updates between MCP processes, Beam UI, and other services.
+
+```typescript
+import { PhotonMCP } from '@portel/photon-core';
+
+export default class KanbanBoard extends PhotonMCP {
+  async moveTask(params: { taskId: string; column: string }) {
+    const task = await this.updateTask(params);
+
+    // Emit to local output handler (current caller)
+    this.emit({ emit: 'board-update', board: 'default' });
+
+    // Also publish to channel for cross-process subscribers
+    this.emit({
+      channel: 'kanban:default',  // Format: photonName:subChannel
+      event: 'task-moved',
+      data: { task }
+    });
+
+    return task;
+  }
+}
+```
+
+**Broker Types:**
+
+| Broker | Use Case | Configuration |
+|--------|----------|---------------|
+| `daemon` | Local dev, single-server | Default (uses Unix sockets) |
+| `redis` | Multi-server, production | `PHOTON_REDIS_URL` |
+| `http` | Webhook integrations | `PHOTON_CHANNEL_HTTP_URL` |
+| `noop` | Testing, disabled | `PHOTON_CHANNEL_BROKER=noop` |
+
+**Subscribing to channels:**
+
+```typescript
+import { getBroker } from '@portel/photon-core';
+
+const broker = getBroker();
+
+// Subscribe
+const sub = await broker.subscribe('kanban:default', (message) => {
+  console.log('Received:', message.event, message.data);
+});
+
+// Later: unsubscribe
+sub.unsubscribe();
+```
+
+**Environment Variables:**
+- `PHOTON_CHANNEL_BROKER` - Explicit broker type (`daemon`, `redis`, `http`, `noop`)
+- `PHOTON_NAME` - Photon name for daemon socket path
+- `PHOTON_REDIS_URL` - Redis connection URL (auto-enables redis broker)
+- `PHOTON_CHANNEL_HTTP_URL` - HTTP webhook URL (auto-enables http broker)
+
+See [CHANNELS.md](./CHANNELS.md) for full architecture documentation.
+
+---
+
 ## 🏗️ Building Custom Runtimes
 
 Photon Core is designed to be the foundation for custom runtimes. Here are examples:
