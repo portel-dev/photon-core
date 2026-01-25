@@ -52,7 +52,15 @@ export class DaemonBroker implements ChannelBroker {
   }
 
   async publish(message: ChannelMessage): Promise<void> {
-    const socketPath = getSocketPath(this.photonName, this.socketDir);
+    // Determine photon name: use configured name, or extract from channel format "photonName:subChannel"
+    let targetPhoton = this.photonName;
+    if (targetPhoton === 'unknown' && message.channel?.includes(':')) {
+      // Extract photon name from channel (e.g., "kanban:default" -> "kanban")
+      const colonIndex = message.channel.indexOf(':');
+      targetPhoton = message.channel.slice(0, colonIndex);
+    }
+
+    const socketPath = getSocketPath(targetPhoton, this.socketDir);
 
     // Check if socket exists
     if (process.platform !== 'win32' && !fs.existsSync(socketPath)) {
