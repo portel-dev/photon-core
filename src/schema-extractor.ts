@@ -10,12 +10,14 @@
 
 import * as fs from 'fs/promises';
 import * as ts from 'typescript';
-import { ExtractedSchema, ConstructorParam, TemplateInfo, StaticInfo, OutputFormat, YieldInfo, MCPDependency, PhotonDependency, ResolvedInjection, PhotonAssets, UIAsset, PromptAsset, ResourceAsset } from './types.js';
+import { ExtractedSchema, ConstructorParam, TemplateInfo, StaticInfo, OutputFormat, YieldInfo, MCPDependency, PhotonDependency, ResolvedInjection, PhotonAssets, UIAsset, PromptAsset, ResourceAsset, ConfigSchema, ConfigParam } from './types.js';
 
 export interface ExtractedMetadata {
   tools: ExtractedSchema[];
   templates: TemplateInfo[];
   statics: StaticInfo[];
+  /** Configuration schema from configure() method */
+  configSchema?: ConfigSchema;
 }
 
 /**
@@ -43,6 +45,13 @@ export class SchemaExtractor {
     const templates: TemplateInfo[] = [];
     const statics: StaticInfo[] = [];
 
+    // Configuration schema tracking
+    let configSchema: ConfigSchema = {
+      hasConfigureMethod: false,
+      hasGetConfigMethod: false,
+      params: [],
+    };
+
     try {
       // If source doesn't contain a class declaration, wrap it in one
       let sourceToParse = source;
@@ -65,6 +74,34 @@ export class SchemaExtractor {
         // Skip private methods (prefixed with _)
         if (methodName.startsWith('_')) {
           return;
+        }
+
+        // Handle configuration convention methods specially
+        if (methodName === 'configure') {
+          configSchema.hasConfigureMethod = true;
+          const jsdoc = this.getJSDocComment(member, sourceFile);
+          configSchema.description = this.extractDescription(jsdoc);
+
+          // Extract configure() parameters as config schema
+          const paramsType = this.getFirstParameterType(member, sourceFile);
+          if (paramsType) {
+            const { properties, required } = this.buildSchemaFromType(paramsType, sourceFile);
+            const paramDocs = this.extractParamDocs(jsdoc);
+
+            configSchema.params = Object.keys(properties).map(name => ({
+              name,
+              type: properties[name].type || 'string',
+              description: paramDocs.get(name) || properties[name].description,
+              required: required.includes(name),
+              defaultValue: properties[name].default,
+            }));
+          }
+          return; // Don't add configure() as a tool
+        }
+
+        if (methodName === 'getConfig') {
+          configSchema.hasGetConfigMethod = true;
+          return; // Don't add getConfig() as a tool
         }
 
         const jsdoc = this.getJSDocComment(member, sourceFile);
@@ -188,7 +225,12 @@ export class SchemaExtractor {
       console.error('Failed to parse TypeScript source:', error.message);
     }
 
-    return { tools, templates, statics };
+    // Only include configSchema if there's a configure() method
+    const result: ExtractedMetadata = { tools, templates, statics };
+    if (configSchema.hasConfigureMethod) {
+      result.configSchema = configSchema;
+    }
+    return result;
   }
 
   /**

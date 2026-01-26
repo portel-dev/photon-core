@@ -334,3 +334,15 @@ export {
   getLockManager,
   type LockManager,
 } from './decorators.js';
+
+// ===== CONFIGURATION CONVENTION =====
+// Utilities for photons implementing the configure() convention
+export {
+  getPhotonConfigDir,
+  getPhotonConfigPath,
+  loadPhotonConfig,
+  savePhotonConfig,
+  hasPhotonConfig,
+  deletePhotonConfig,
+  listConfiguredPhotons,
+} from './config.js';

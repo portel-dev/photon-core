@@ -125,22 +125,29 @@ export class PhotonMCP {
 
   /**
    * Get all tool methods from this class
-   * Returns all public async methods except lifecycle hooks
+   * Returns all public async methods except lifecycle hooks and configuration methods
    */
   static getToolMethods(): string[] {
     const prototype = this.prototype;
     const methods: string[] = [];
 
+    // Methods that are conventions, not tools
+    const conventionMethods = new Set([
+      'constructor',
+      'onInitialize',  // Lifecycle hook
+      'onShutdown',    // Lifecycle hook
+      'configure',     // Configuration convention
+      'getConfig',     // Configuration convention
+    ]);
+
     // Get all property names from prototype chain
     let current = prototype;
     while (current && current !== PhotonMCP.prototype) {
       Object.getOwnPropertyNames(current).forEach((name) => {
-        // Skip constructor, private methods (starting with _), and lifecycle hooks
+        // Skip private methods (starting with _) and convention methods
         if (
-          name !== 'constructor' &&
           !name.startsWith('_') &&
-          name !== 'onInitialize' &&
-          name !== 'onShutdown' &&
+          !conventionMethods.has(name) &&
           typeof (prototype as any)[name] === 'function' &&
           !methods.includes(name)
         ) {

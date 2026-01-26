@@ -501,3 +501,65 @@ export interface WorkflowRun {
     ts: number;
   };
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CONFIGURATION CONVENTION
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Configuration parameter extracted from configure() method
+ */
+export interface ConfigParam {
+  /** Parameter name */
+  name: string;
+  /** Parameter type (string, number, boolean, etc.) */
+  type: string;
+  /** Description from JSDoc */
+  description?: string;
+  /** Whether the parameter is required */
+  required: boolean;
+  /** Default value if any */
+  defaultValue?: any;
+}
+
+/**
+ * Configuration schema extracted from a Photon's configure() method
+ *
+ * The configure() method is a by-convention method for photon configuration.
+ * Similar to how main() makes a photon a UI application, configure() makes
+ * it a configurable photon.
+ *
+ * When present, the framework will:
+ * 1. Extract parameter schema from the method signature
+ * 2. Present a configuration UI during install/setup
+ * 3. Store config at ~/.photon/{photonName}/config.json
+ * 4. Make config available via getConfig()
+ *
+ * Example:
+ * ```typescript
+ * export default class MyPhoton extends PhotonMCP {
+ *   async configure(params: {
+ *     apiEndpoint: string;
+ *     maxRetries?: number;
+ *   }) {
+ *     // Save config - framework handles storage
+ *     return { success: true };
+ *   }
+ *
+ *   async getConfig() {
+ *     // Read config - framework handles loading
+ *     return loadPhotonConfig('my-photon');
+ *   }
+ * }
+ * ```
+ */
+export interface ConfigSchema {
+  /** Whether configure() method exists */
+  hasConfigureMethod: boolean;
+  /** Whether getConfig() method exists */
+  hasGetConfigMethod: boolean;
+  /** Configuration parameters from configure() signature */
+  params: ConfigParam[];
+  /** Description from configure() JSDoc */
+  description?: string;
+}
