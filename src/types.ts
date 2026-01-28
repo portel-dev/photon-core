@@ -192,6 +192,24 @@ export interface PhotonDependency {
   sourceType: 'marketplace' | 'github' | 'npm' | 'local';
 }
 
+/**
+ * CLI Dependency - System command-line tool required by a Photon
+ *
+ * Declared via @cli annotation:
+ * ```
+ * /**
+ *  * @cli git - https://git-scm.com/downloads
+ *  * @cli ffmpeg - https://ffmpeg.org/download.html
+ *  *\/
+ * ```
+ */
+export interface CLIDependency {
+  /** CLI command name (e.g., 'git', 'ffmpeg') */
+  name: string;
+  /** Install URL or instructions */
+  installUrl?: string;
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // PHOTON ASSETS - Static files referenced via @ui, @prompt, @resource
 // ════════════════════════════════════════════════════════════════════════════

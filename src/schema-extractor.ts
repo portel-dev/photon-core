@@ -10,7 +10,7 @@
 
 import * as fs from 'fs/promises';
 import * as ts from 'typescript';
-import { ExtractedSchema, ConstructorParam, TemplateInfo, StaticInfo, OutputFormat, YieldInfo, MCPDependency, PhotonDependency, ResolvedInjection, PhotonAssets, UIAsset, PromptAsset, ResourceAsset, ConfigSchema, ConfigParam } from './types.js';
+import { ExtractedSchema, ConstructorParam, TemplateInfo, StaticInfo, OutputFormat, YieldInfo, MCPDependency, PhotonDependency, CLIDependency, ResolvedInjection, PhotonAssets, UIAsset, PromptAsset, ResourceAsset, ConfigSchema, ConfigParam } from './types.js';
 
 export interface ExtractedMetadata {
   tools: ExtractedSchema[];
@@ -1416,6 +1416,40 @@ export class SchemaExtractor {
 
     // Default: Marketplace (simple name like "rss-feed")
     return 'marketplace';
+  }
+
+  /**
+   * Extract CLI dependencies from source code
+   * Parses @cli tags in file-level or class-level JSDoc comments
+   *
+   * Format: @cli <name> - <install_url>
+   *
+   * Example:
+   * ```
+   * /**
+   *  * @cli git - https://git-scm.com/downloads
+   *  * @cli ffmpeg - https://ffmpeg.org/download.html
+   *  *\/
+   * ```
+   */
+  extractCLIDependencies(source: string): CLIDependency[] {
+    const dependencies: CLIDependency[] = [];
+
+    // Match @cli <name> or @cli <name> - <url> pattern
+    // The URL is optional
+    const cliRegex = /@cli\s+(\w[\w-]*)\s*(?:-\s*([^\s*@\n]+))?/g;
+
+    let match;
+    while ((match = cliRegex.exec(source)) !== null) {
+      const [, name, installUrl] = match;
+
+      dependencies.push({
+        name: name.trim(),
+        installUrl: installUrl?.trim(),
+      });
+    }
+
+    return dependencies;
   }
 
   /**
