@@ -11,6 +11,16 @@
       "import": "./dist/index.js",
       "require": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./design-system/tokens": {
+      "types": "./dist/design-system/tokens.d.ts",
+      "import": "./dist/design-system/tokens.js",
+      "default": "./dist/design-system/tokens.js"
+    },
+    "./mcp-apps": {
+      "types": "./dist/mcp-apps.d.ts",
+      "import": "./dist/mcp-apps.js",
+      "default": "./dist/mcp-apps.js"
     }
   },
   "files": [
