@@ -652,21 +652,24 @@ export class SchemaExtractor {
    * Extract main description from JSDoc comment
    */
   private extractDescription(jsdocContent: string): string {
-    // Split by @param to get only the description part
-    const beforeParams = jsdocContent.split(/@param/)[0];
+    // Split by @param to get only the description part (also stop at other @tags)
+    const beforeTags = jsdocContent.split(/@(?:param|example|returns?|throws?|see|since|deprecated|version|author|license|ui|icon|format|stateful|autorun|webhook|cron|scheduled|locked|Template|Static|mcp|photon|cli|tags|dependencies|csp|visibility)\b/)[0];
 
     // Remove leading * from each line and trim
-    const lines = beforeParams
+    const lines = beforeTags
       .split('\n')
       .map((line) => line.trim().replace(/^\*\s?/, ''))
-      .filter((line) => line && !line.startsWith('@')); // Exclude @tags and empty lines
+      .filter((line) => line !== ''); // Keep non-empty lines
 
-    // Take only the last meaningful line (the actual method description)
-    // This filters out file headers
-    const meaningfulLines = lines.filter(line => line.length > 5); // Filter out short lines
-    const description = meaningfulLines.length > 0
-      ? meaningfulLines[meaningfulLines.length - 1]
-      : lines.join(' ');
+    // Take lines up to the first markdown heading (## sections are extended docs)
+    const descLines: string[] = [];
+    for (const line of lines) {
+      if (line.startsWith('#')) break;
+      descLines.push(line);
+    }
+
+    // Join all description lines into a single string
+    const description = descLines.join(' ');
 
     // Clean up multiple spaces
     return description.replace(/\s+/g, ' ').trim() || 'No description';
