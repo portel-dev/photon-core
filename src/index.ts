@@ -335,6 +335,20 @@ export {
   type LockManager,
 } from './decorators.js';
 
+// ===== MCP APPS STANDARD =====
+// Types and helpers for MCP Apps Extension (2026-01-26) compliance
+export {
+  type McpAppsInitialize,
+  type McpAppsToolInput,
+  type McpAppsToolResult,
+  type McpAppsHostContextChanged,
+  type McpAppsResourceTeardown,
+  type McpAppsModelContextUpdate,
+  type PlatformContext,
+  createMcpAppsInitialize,
+  createThemeChangeMessages,
+} from './mcp-apps.js';
+
 // ===== CONFIGURATION CONVENTION =====
 // Utilities for photons implementing the configure() convention
 export {

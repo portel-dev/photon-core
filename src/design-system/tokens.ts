@@ -15,15 +15,15 @@
 export const spacing = {
   // Base unit: 4px (for fine adjustments)
   '0': '0',
-  '1': '4px',    // xs - minimal spacing
-  '2': '8px',    // sm - tight spacing
-  '3': '12px',   // md - default spacing
-  '4': '16px',   // lg - comfortable spacing
-  '5': '20px',   // xl - generous spacing
-  '6': '24px',   // 2xl - section spacing
-  '8': '32px',   // 3xl - large section spacing
-  '10': '40px',  // 4xl - hero spacing
-  '12': '48px',  // 5xl - page spacing
+  '1': '4px', // xs - minimal spacing
+  '2': '8px', // sm - tight spacing
+  '3': '12px', // md - default spacing
+  '4': '16px', // lg - comfortable spacing
+  '5': '20px', // xl - generous spacing
+  '6': '24px', // 2xl - section spacing
+  '8': '32px', // 3xl - large section spacing
+  '10': '40px', // 4xl - hero spacing
+  '12': '48px', // 5xl - page spacing
 } as const;
 
 // Semantic spacing aliases
@@ -179,8 +179,8 @@ const colorPalette = {
   },
 } as const;
 
-// System colors (semantic tokens - what components use)
-export const colors = {
+// System colors - Dark Theme (default)
+export const colorsDark = {
   // Surfaces
   surface: colorPalette.neutral[5],
   surfaceContainer: colorPalette.neutral[10],
@@ -225,6 +225,66 @@ export const colors = {
   scrim: 'rgba(0, 0, 0, 0.5)',
 } as const;
 
+// System colors - Light Theme
+export const colorsLight = {
+  // Surfaces (inverted - light backgrounds)
+  surface: colorPalette.neutral[100], // white
+  surfaceContainer: colorPalette.neutral[95],
+  surfaceContainerHigh: colorPalette.neutral[90],
+  surfaceContainerHighest: colorPalette.neutral[80],
+  surfaceBright: colorPalette.neutral[100],
+
+  // Text on surfaces (dark text on light)
+  onSurface: colorPalette.neutral[10],
+  onSurfaceVariant: colorPalette.neutral[30],
+  onSurfaceMuted: colorPalette.neutral[50],
+
+  // Primary (darker for light theme)
+  primary: colorPalette.primary[40],
+  primaryContainer: colorPalette.primary[90],
+  onPrimary: colorPalette.neutral[100], // white text on primary
+  onPrimaryContainer: colorPalette.primary[10],
+
+  // Success
+  success: colorPalette.success[40],
+  successContainer: colorPalette.success[90],
+  onSuccess: colorPalette.neutral[100], // white text
+  onSuccessContainer: colorPalette.success[10],
+
+  // Warning
+  warning: colorPalette.warning[40],
+  warningContainer: colorPalette.warning[90],
+  onWarning: colorPalette.neutral[100], // white text
+  onWarningContainer: colorPalette.warning[10],
+
+  // Error
+  error: colorPalette.error[40],
+  errorContainer: colorPalette.error[90],
+  onError: colorPalette.neutral[100], // white text
+  onErrorContainer: colorPalette.error[10],
+
+  // Outline (darker for light theme)
+  outline: colorPalette.neutral[50],
+  outlineVariant: colorPalette.neutral[80],
+
+  // Scrim (overlay)
+  scrim: 'rgba(0, 0, 0, 0.3)' as const,
+};
+
+// Default export (dark theme for backwards compatibility)
+export const colors = colorsDark;
+
+// Theme type
+export type ThemeMode = 'light' | 'dark' | 'system';
+
+// Theme colors type (union of both)
+export type ThemeColors = typeof colorsDark | typeof colorsLight;
+
+// Get colors for a specific theme
+export function getThemeColors(theme: 'light' | 'dark'): ThemeColors {
+  return theme === 'light' ? colorsLight : colorsDark;
+}
+
 // =============================================================================
 // ELEVATION - Material Design 3 Shadows
 // =============================================================================
@@ -244,10 +304,10 @@ export const elevation = {
 
 export const radius = {
   none: '0',
-  sm: '6px',    // Small elements (chips, badges)
-  md: '10px',   // Cards, inputs (iOS default)
-  lg: '14px',   // Large cards
-  xl: '20px',   // Modal, sheet
+  sm: '6px', // Small elements (chips, badges)
+  md: '10px', // Cards, inputs (iOS default)
+  lg: '14px', // Large cards
+  xl: '20px', // Modal, sheet
   full: '9999px', // Pills, circles
 } as const;
 
@@ -299,11 +359,61 @@ export const zIndex = {
 // CSS CUSTOM PROPERTIES GENERATOR
 // =============================================================================
 
+/**
+ * Generate color CSS variables for a specific theme
+ */
+function generateColorVars(themeColors: ThemeColors): string {
+  return `
+  /* Colors - Surfaces */
+  --color-surface: ${themeColors.surface};
+  --color-surface-container: ${themeColors.surfaceContainer};
+  --color-surface-container-high: ${themeColors.surfaceContainerHigh};
+  --color-surface-container-highest: ${themeColors.surfaceContainerHighest};
+  --color-surface-bright: ${themeColors.surfaceBright};
+
+  /* Colors - Text */
+  --color-on-surface: ${themeColors.onSurface};
+  --color-on-surface-variant: ${themeColors.onSurfaceVariant};
+  --color-on-surface-muted: ${themeColors.onSurfaceMuted};
+
+  /* Colors - Primary */
+  --color-primary: ${themeColors.primary};
+  --color-primary-container: ${themeColors.primaryContainer};
+  --color-on-primary: ${themeColors.onPrimary};
+  --color-on-primary-container: ${themeColors.onPrimaryContainer};
+
+  /* Colors - Success */
+  --color-success: ${themeColors.success};
+  --color-success-container: ${themeColors.successContainer};
+  --color-on-success: ${themeColors.onSuccess};
+  --color-on-success-container: ${themeColors.onSuccessContainer};
+
+  /* Colors - Warning */
+  --color-warning: ${themeColors.warning};
+  --color-warning-container: ${themeColors.warningContainer};
+  --color-on-warning: ${themeColors.onWarning};
+  --color-on-warning-container: ${themeColors.onWarningContainer};
+
+  /* Colors - Error */
+  --color-error: ${themeColors.error};
+  --color-error-container: ${themeColors.errorContainer};
+  --color-on-error: ${themeColors.onError};
+  --color-on-error-container: ${themeColors.onErrorContainer};
+
+  /* Colors - Outline */
+  --color-outline: ${themeColors.outline};
+  --color-outline-variant: ${themeColors.outlineVariant};
+
+  /* Colors - Scrim */
+  --color-scrim: ${themeColors.scrim};`;
+}
+
 export function generateTokensCSS(): string {
   return `
 /* ==========================================================================
    Photon Design System - Design Tokens
    Based on Material Design 3 + Apple HIG
+   Supports: dark (default), light, system preference
    ========================================================================== */
 
 :root {
@@ -363,48 +473,8 @@ export function generateTokensCSS(): string {
   --weight-semibold: ${fontWeight.semibold};
   --weight-bold: ${fontWeight.bold};
 
-  /* Colors - Surfaces */
-  --color-surface: ${colors.surface};
-  --color-surface-container: ${colors.surfaceContainer};
-  --color-surface-container-high: ${colors.surfaceContainerHigh};
-  --color-surface-container-highest: ${colors.surfaceContainerHighest};
-  --color-surface-bright: ${colors.surfaceBright};
-
-  /* Colors - Text */
-  --color-on-surface: ${colors.onSurface};
-  --color-on-surface-variant: ${colors.onSurfaceVariant};
-  --color-on-surface-muted: ${colors.onSurfaceMuted};
-
-  /* Colors - Primary */
-  --color-primary: ${colors.primary};
-  --color-primary-container: ${colors.primaryContainer};
-  --color-on-primary: ${colors.onPrimary};
-  --color-on-primary-container: ${colors.onPrimaryContainer};
-
-  /* Colors - Success */
-  --color-success: ${colors.success};
-  --color-success-container: ${colors.successContainer};
-  --color-on-success: ${colors.onSuccess};
-  --color-on-success-container: ${colors.onSuccessContainer};
-
-  /* Colors - Warning */
-  --color-warning: ${colors.warning};
-  --color-warning-container: ${colors.warningContainer};
-  --color-on-warning: ${colors.onWarning};
-  --color-on-warning-container: ${colors.onWarningContainer};
-
-  /* Colors - Error */
-  --color-error: ${colors.error};
-  --color-error-container: ${colors.errorContainer};
-  --color-on-error: ${colors.onError};
-  --color-on-error-container: ${colors.onErrorContainer};
-
-  /* Colors - Outline */
-  --color-outline: ${colors.outline};
-  --color-outline-variant: ${colors.outlineVariant};
-
-  /* Colors - Scrim */
-  --color-scrim: ${colors.scrim};
+  /* Default: Dark Theme Colors */
+  ${generateColorVars(colorsDark)}
 
   /* Elevation */
   --elevation-0: ${elevation['0']};
@@ -447,5 +517,259 @@ export function generateTokensCSS(): string {
   --z-popover: ${zIndex.popover};
   --z-toast: ${zIndex.toast};
 }
+
+/* Light Theme Override */
+[data-theme="light"],
+.light {
+  ${generateColorVars(colorsLight)}
+}
+
+/* System Preference: Light Mode */
+@media (prefers-color-scheme: light) {
+  [data-theme="system"] {
+    ${generateColorVars(colorsLight)}
+  }
+}
 `;
+}
+
+// =============================================================================
+// THEME TOKENS FOR MCP APPS / PLATFORM BRIDGES
+// =============================================================================
+
+/**
+ * Get theme tokens as a flat object for MCP Apps ui/initialize
+ * Compatible with OpenAI Apps SDK and MCP Apps Extension (SEP-1865)
+ */
+export function getThemeTokens(theme: 'light' | 'dark'): Record<string, string> {
+  const themeColors = theme === 'light' ? colorsLight : colorsDark;
+
+  return {
+    // ═══════════════════════════════════════════════════════════════════════
+    // DESIGN SYSTEM TOKENS (Material Design 3 naming)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    // Colors
+    '--color-surface': themeColors.surface,
+    '--color-surface-container': themeColors.surfaceContainer,
+    '--color-surface-container-high': themeColors.surfaceContainerHigh,
+    '--color-surface-container-highest': themeColors.surfaceContainerHighest,
+    '--color-surface-bright': themeColors.surfaceBright,
+    '--color-on-surface': themeColors.onSurface,
+    '--color-on-surface-variant': themeColors.onSurfaceVariant,
+    '--color-on-surface-muted': themeColors.onSurfaceMuted,
+    '--color-primary': themeColors.primary,
+    '--color-primary-container': themeColors.primaryContainer,
+    '--color-on-primary': themeColors.onPrimary,
+    '--color-on-primary-container': themeColors.onPrimaryContainer,
+    '--color-success': themeColors.success,
+    '--color-success-container': themeColors.successContainer,
+    '--color-on-success': themeColors.onSuccess,
+    '--color-on-success-container': themeColors.onSuccessContainer,
+    '--color-warning': themeColors.warning,
+    '--color-warning-container': themeColors.warningContainer,
+    '--color-on-warning': themeColors.onWarning,
+    '--color-on-warning-container': themeColors.onWarningContainer,
+    '--color-error': themeColors.error,
+    '--color-error-container': themeColors.errorContainer,
+    '--color-on-error': themeColors.onError,
+    '--color-on-error-container': themeColors.onErrorContainer,
+    '--color-outline': themeColors.outline,
+    '--color-outline-variant': themeColors.outlineVariant,
+    '--color-scrim': themeColors.scrim,
+
+    // Spacing
+    '--space-0': spacing['0'],
+    '--space-1': spacing['1'],
+    '--space-2': spacing['2'],
+    '--space-3': spacing['3'],
+    '--space-4': spacing['4'],
+    '--space-6': spacing['6'],
+    '--space-8': spacing['8'],
+
+    // Typography
+    '--font-sans': fontFamily.sans,
+    '--font-mono': fontFamily.mono,
+    '--text-body-md': fontSize['body-md'],
+    '--text-body-sm': fontSize['body-sm'],
+    '--text-title-md': fontSize['title-md'],
+    '--text-label-md': fontSize['label-md'],
+
+    // Border Radius
+    '--radius-sm': radius.sm,
+    '--radius-md': radius.md,
+    '--radius-lg': radius.lg,
+    '--radius-full': radius.full,
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // COMMON ALIASES - For compatibility with various app conventions
+    // Apps use different naming conventions; these aliases ensure apps work
+    // regardless of whether they use --bg, --background, --bg-primary, etc.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    // Background aliases (apps use: --bg, --background, --bg-primary, --bg-secondary)
+    '--bg': themeColors.surface,
+    '--background': themeColors.surface,
+    '--bg-primary': themeColors.surface,
+    '--bg-secondary': themeColors.surfaceContainer,
+    '--bg-tertiary': themeColors.surfaceContainerHigh,
+    '--bg-card': themeColors.surfaceContainer,
+    '--card': themeColors.surfaceContainer,
+    '--card-background': themeColors.surfaceContainer,
+
+    // Text/foreground aliases (apps use: --text, --foreground, --text-primary, --text-muted)
+    '--text': themeColors.onSurface,
+    '--foreground': themeColors.onSurface,
+    '--text-primary': themeColors.onSurface,
+    '--text-secondary': themeColors.onSurfaceVariant,
+    '--text-muted': themeColors.onSurfaceMuted,
+    '--muted': themeColors.onSurfaceMuted,
+    '--muted-foreground': themeColors.onSurfaceMuted,
+
+    // Border aliases (apps use: --border, --border-color)
+    '--border': themeColors.outline,
+    '--border-color': themeColors.outline,
+    '--border-muted': themeColors.outlineVariant,
+
+    // Accent/primary aliases (apps use: --accent, --primary, --accent-color)
+    '--accent': themeColors.primary,
+    '--primary': themeColors.primary,
+    '--accent-color': themeColors.primary,
+    '--accent-foreground': themeColors.onPrimary,
+    '--accent-hover': themeColors.primaryContainer,
+
+    // Status colors (common naming)
+    '--success': themeColors.success,
+    '--warning': themeColors.warning,
+    '--error': themeColors.error,
+    '--danger': themeColors.error,
+
+    // Input/form aliases
+    '--input': themeColors.surfaceContainerHigh,
+    '--input-border': themeColors.outline,
+    '--ring': themeColors.primary,
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // MCP APPS STANDARD CSS VARIABLES (2026-01-26 spec)
+    // Maps standard names to closest Photon semantic tokens.
+    // Both Photon-native and standard MCP Apps names are emitted.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    // --- Background Colors ---
+    '--color-background-primary': themeColors.surface,
+    '--color-background-secondary': themeColors.surfaceContainer,
+    '--color-background-tertiary': themeColors.surfaceContainerHigh,
+    '--color-background-inverse': themeColors.surfaceBright,
+    '--color-background-brand': themeColors.primary,
+    '--color-background-info': themeColors.primaryContainer,
+    '--color-background-danger': themeColors.errorContainer,
+    '--color-background-success': themeColors.successContainer,
+    '--color-background-warning': themeColors.warningContainer,
+    '--color-background-ghost': 'transparent',
+    '--color-background-disabled': themeColors.surfaceContainerHigh,
+
+    // --- Text Colors ---
+    '--color-text-primary': themeColors.onSurface,
+    '--color-text-secondary': themeColors.onSurfaceVariant,
+    '--color-text-tertiary': themeColors.onSurfaceMuted,
+    '--color-text-inverse': themeColors.onPrimary,
+    '--color-text-brand': themeColors.primary,
+    '--color-text-info': themeColors.primary,
+    '--color-text-danger': themeColors.error,
+    '--color-text-success': themeColors.success,
+    '--color-text-warning': themeColors.warning,
+    '--color-text-ghost': themeColors.onSurfaceVariant,
+    '--color-text-disabled': themeColors.onSurfaceMuted,
+    '--color-text-link': themeColors.primary,
+    '--color-text-on-brand': themeColors.onPrimary,
+    '--color-text-on-info': themeColors.onPrimaryContainer,
+    '--color-text-on-danger': themeColors.onErrorContainer,
+    '--color-text-on-success': themeColors.onSuccessContainer,
+    '--color-text-on-warning': themeColors.onWarningContainer,
+
+    // --- Border Colors ---
+    '--color-border-primary': themeColors.outline,
+    '--color-border-secondary': themeColors.outlineVariant,
+    '--color-border-brand': themeColors.primary,
+    '--color-border-info': themeColors.primary,
+    '--color-border-danger': themeColors.error,
+    '--color-border-success': themeColors.success,
+    '--color-border-warning': themeColors.warning,
+    '--color-border-disabled': themeColors.outlineVariant,
+    '--color-border-focus': themeColors.primary,
+
+    // --- Border Colors (additional spec variants) ---
+    '--color-border-tertiary': themeColors.outlineVariant,
+    '--color-border-inverse': themeColors.onSurface,
+    '--color-border-ghost': themeColors.outlineVariant,
+
+    // --- Ring (focus) ---
+    '--color-ring-primary': themeColors.primary,
+    '--color-ring-secondary': themeColors.outlineVariant,
+    '--color-ring-inverse': themeColors.onSurface,
+    '--color-ring-brand': themeColors.primary,
+    '--color-ring-info': themeColors.primary,
+    '--color-ring-danger': themeColors.error,
+    '--color-ring-success': themeColors.success,
+    '--color-ring-warning': themeColors.warning,
+
+    // --- Icon Colors ---
+    '--color-icon-primary': themeColors.onSurface,
+    '--color-icon-secondary': themeColors.onSurfaceVariant,
+    '--color-icon-brand': themeColors.primary,
+    '--color-icon-info': themeColors.primary,
+    '--color-icon-danger': themeColors.error,
+    '--color-icon-success': themeColors.success,
+    '--color-icon-warning': themeColors.warning,
+
+    // --- Font Weights ---
+    '--font-weight-normal': fontWeight.regular,
+    '--font-weight-medium': fontWeight.medium,
+    '--font-weight-semibold': fontWeight.semibold,
+    '--font-weight-bold': fontWeight.bold,
+
+    // --- Font Text Sizes ---
+    '--font-text-xs-size': fontSize['label-sm'],
+    '--font-text-xs-line-height': lineHeight['label-sm'],
+    '--font-text-sm-size': fontSize['body-sm'],
+    '--font-text-sm-line-height': lineHeight['body-sm'],
+    '--font-text-md-size': fontSize['body-md'],
+    '--font-text-md-line-height': lineHeight['body-md'],
+    '--font-text-lg-size': fontSize['body-lg'],
+    '--font-text-lg-line-height': lineHeight['body-lg'],
+
+    // --- Font Heading Sizes ---
+    '--font-heading-xs-size': fontSize['title-sm'],
+    '--font-heading-xs-line-height': lineHeight['title-sm'],
+    '--font-heading-sm-size': fontSize['title-md'],
+    '--font-heading-sm-line-height': lineHeight['title-md'],
+    '--font-heading-md-size': fontSize['title-lg'],
+    '--font-heading-md-line-height': lineHeight['title-lg'],
+    '--font-heading-lg-size': fontSize['headline-sm'],
+    '--font-heading-lg-line-height': lineHeight['headline-sm'],
+    '--font-heading-xl-size': fontSize['headline-md'],
+    '--font-heading-xl-line-height': lineHeight['headline-md'],
+    '--font-heading-2xl-size': fontSize['headline-lg'],
+    '--font-heading-2xl-line-height': lineHeight['headline-lg'],
+    '--font-heading-3xl-size': fontSize['display-sm'],
+    '--font-heading-3xl-line-height': lineHeight['display-sm'],
+
+    // --- Border Radius ---
+    '--border-radius-xs': '4px',
+    '--border-radius-sm': radius.sm,
+    '--border-radius-md': radius.md,
+    '--border-radius-lg': radius.lg,
+    '--border-radius-xl': radius.xl,
+    '--border-radius-full': radius.full,
+
+    // --- Shadows ---
+    '--shadow-hairline': `0 0 0 1px ${themeColors.outlineVariant}`,
+    '--shadow-sm': elevation['1'],
+    '--shadow-md': elevation['2'],
+    '--shadow-lg': elevation['3'],
+
+    // --- Border Width ---
+    '--border-width-regular': '1px',
+    '--border-width-thick': '2px',
+  };
 }
