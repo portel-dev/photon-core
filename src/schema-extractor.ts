@@ -184,6 +184,9 @@ export class SchemaExtractor {
           const scheduled = this.extractScheduled(jsdoc, methodName);
           const locked = this.extractLocked(jsdoc, methodName);
 
+          // Check for static keyword on the method
+          const isStaticMethod = member.modifiers?.some(m => m.kind === ts.SyntaxKind.StaticKeyword) || false;
+
           tools.push({
             name: methodName,
             description,
@@ -196,6 +199,7 @@ export class SchemaExtractor {
             ...(yields && yields.length > 0 ? { yields } : {}),
             ...(isStateful ? { isStateful: true } : {}),
             ...(autorun ? { autorun: true } : {}),
+            ...(isStaticMethod ? { isStatic: true } : {}),
             // Daemon features
             ...(webhook !== undefined ? { webhook } : {}),
             ...(scheduled ? { scheduled } : {}),
