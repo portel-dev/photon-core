@@ -360,3 +360,83 @@ export {
   deletePhotonConfig,
   listConfiguredPhotons,
 } from './config.js';
+
+// ===== CLASS DETECTION =====
+// Shared Photon class detection for loaders
+export {
+  isClass,
+  hasAsyncMethods,
+  findPhotonClass,
+  findPhotonClasses,
+} from './class-detection.js';
+
+// ===== ENVIRONMENT UTILITIES =====
+// Env var resolution for constructor injection
+export {
+  toEnvVarName,
+  parseEnvValue,
+  generateExampleValue,
+  summarizeConstructorParams,
+  generateConfigErrorMessage,
+  resolveEnvArgs,
+  type MissingParamInfo,
+  type EnvConstructorParam,
+} from './env-utils.js';
+
+// ===== TYPESCRIPT COMPILER =====
+// esbuild-based .photon.ts compilation with caching
+export { compilePhotonTS } from './compiler.js';
+
+// ===== MIME TYPES =====
+// Extension-to-MIME mapping for assets
+export { getMimeType } from './mime-types.js';
+
+// ===== VERSION CHECK =====
+// @runtime tag parsing and semver-lite compatibility check
+export {
+  parseRuntimeRequirement,
+  checkRuntimeCompatibility,
+} from './version-check.js';
+
+// ===== VALIDATION =====
+// Input validation utilities and error base classes
+export {
+  PhotonError,
+  ValidationError,
+  type ValidationResult,
+  type Validator,
+  combineResults,
+  isString,
+  isNumber,
+  isBoolean,
+  isObject,
+  isArray,
+  notEmpty,
+  hasLength,
+  matchesPattern,
+  isEmail,
+  isUrl,
+  inRange,
+  isPositive,
+  isInteger,
+  hasArrayLength,
+  arrayOf,
+  hasFields,
+  oneOf,
+  validate,
+  validateOrThrow,
+  pathExists,
+  hasExtension,
+  assertDefined,
+  assertString,
+  assertNumber,
+  assertObject,
+  assertArray,
+} from './validation.js';
+
+// ===== ASSET DISCOVERY =====
+// Discover UI, prompt, and resource assets from Photon files
+export {
+  discoverAssets,
+  autoDiscoverAssets,
+} from './asset-discovery.js';
