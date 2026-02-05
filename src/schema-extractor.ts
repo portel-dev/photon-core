@@ -573,7 +573,6 @@ export class SchemaExtractor {
 
   /**
    * Extract constructor parameters for config injection
-   * Also detects @persist tags to mark params for settings UI persistence
    */
   extractConstructorParams(source: string): ConstructorParam[] {
     const params: ConstructorParam[] = [];
@@ -590,10 +589,6 @@ export class SchemaExtractor {
         if (ts.isClassDeclaration(node)) {
           node.members.forEach((member) => {
             if (ts.isConstructorDeclaration(member)) {
-              // Extract @persist tags from constructor JSDoc
-              const jsdoc = this.getJSDocComment(member, sourceFile);
-              const persistedParams = this.extractPersistedParams(jsdoc);
-
               member.parameters.forEach((param) => {
                 if (param.name && ts.isIdentifier(param.name)) {
                   const name = param.name.getText(sourceFile);
@@ -613,7 +608,6 @@ export class SchemaExtractor {
                     hasDefault,
                     defaultValue,
                     isPrimitive: this.isPrimitiveType(type),
-                    isPersisted: persistedParams.has(name),
                   });
                 }
               });
@@ -630,22 +624,6 @@ export class SchemaExtractor {
     }
 
     return params;
-  }
-
-  /**
-   * Extract @persist parameter names from JSDoc
-   * Format: @persist paramName
-   */
-  private extractPersistedParams(jsdocContent: string): Set<string> {
-    const persisted = new Set<string>();
-    const persistRegex = /@persist\s+(\w+)/g;
-
-    let match;
-    while ((match = persistRegex.exec(jsdocContent)) !== null) {
-      persisted.add(match[1]);
-    }
-
-    return persisted;
   }
 
   /**
