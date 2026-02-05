@@ -106,7 +106,8 @@ export async function autoDiscoverAssets(
             id,
             path: `./ui/${file}`,
             resolvedPath: path.join(uiDir, file),
-            mimeType: getMimeType(file),
+            // Don't set mimeType for UI assets - let server decide based on client capabilities
+            // Server will use getUIMimeType() to return text/html;profile=mcp-app for MCP Apps clients
           });
         }
       }
