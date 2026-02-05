@@ -105,6 +105,8 @@ export interface ConstructorParam {
   defaultValue?: any;
   /** True if type is string, number, or boolean (inject from env var) */
   isPrimitive: boolean;
+  /** True if param has @persist tag — Beam persists and shows in settings UI */
+  isPersisted?: boolean;
 }
 
 /**
