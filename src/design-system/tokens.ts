@@ -122,6 +122,15 @@ const colorPalette = {
     100: '#ffffff',
   },
 
+  // Light-theme neutrals (cool blue-gray undertone)
+  neutralLight: {
+    88: '#C4CDD5',   // surface-container-highest / borders
+    94: '#DFE3E8',   // surface-container-high
+    96: '#EBEEF2',   // surface-container
+    98: '#F4F6F8',   // bg-default — soft blue-gray
+    99: '#F9FAFB',   // surface — soft off-white
+  },
+
   // Primary (blue - trust, action)
   primary: {
     10: '#001d36',
@@ -225,19 +234,19 @@ export const colorsDark = {
   scrim: 'rgba(0, 0, 0, 0.5)',
 } as const;
 
-// System colors - Light Theme
+// System colors - Light Theme (cool blue-gray, WCAG compliant)
 export const colorsLight = {
-  // Surfaces (inverted - light backgrounds)
-  surface: colorPalette.neutral[100], // white
-  surfaceContainer: colorPalette.neutral[95],
-  surfaceContainerHigh: colorPalette.neutral[90],
-  surfaceContainerHighest: colorPalette.neutral[80],
-  surfaceBright: colorPalette.neutral[100],
+  // Surfaces (soft blue-gray, not pure white or warm cream)
+  surface: colorPalette.neutralLight[99],            // #F9FAFB — soft off-white
+  surfaceContainer: colorPalette.neutralLight[98],    // #F4F6F8 — cool blue-gray
+  surfaceContainerHigh: colorPalette.neutralLight[96], // #EBEEF2
+  surfaceContainerHighest: colorPalette.neutralLight[94], // #DFE3E8
+  surfaceBright: colorPalette.neutral[100],           // #FFFFFF — keep for overlays/modals
 
-  // Text on surfaces (dark text on light)
-  onSurface: colorPalette.neutral[10],
-  onSurfaceVariant: colorPalette.neutral[30],
-  onSurfaceMuted: colorPalette.neutral[50],
+  // Text on surfaces (charcoal with blue undertone, not pure black)
+  onSurface: '#1F2937',         // 11.5:1 on #F4F6F8 — WCAG AAA
+  onSurfaceVariant: '#4B5563',  // warm dark gray
+  onSurfaceMuted: '#6B7280',    // 4.63:1 on #F4F6F8 — WCAG AA
 
   // Primary (darker for light theme)
   primary: colorPalette.primary[40],
@@ -263,12 +272,12 @@ export const colorsLight = {
   onError: colorPalette.neutral[100], // white text
   onErrorContainer: colorPalette.error[10],
 
-  // Outline (darker for light theme)
-  outline: colorPalette.neutral[50],
-  outlineVariant: colorPalette.neutral[80],
+  // Outline (softer for light theme)
+  outline: '#9CA3AF',          // softer than old #808080
+  outlineVariant: '#E5E7EB',   // light border, not #cccccc
 
-  // Scrim (overlay)
-  scrim: 'rgba(0, 0, 0, 0.3)' as const,
+  // Scrim (overlay — lighter than dark theme's 0.5)
+  scrim: 'rgba(0, 0, 0, 0.2)' as const,
 };
 
 // Default export (dark theme for backwards compatibility)
@@ -296,6 +305,16 @@ export const elevation = {
   '3': '0px 1px 3px 0px rgba(0, 0, 0, 0.30), 0px 4px 8px 3px rgba(0, 0, 0, 0.15)',
   '4': '0px 2px 3px 0px rgba(0, 0, 0, 0.30), 0px 6px 10px 4px rgba(0, 0, 0, 0.15)',
   '5': '0px 4px 4px 0px rgba(0, 0, 0, 0.30), 0px 8px 12px 6px rgba(0, 0, 0, 0.15)',
+} as const;
+
+// Light theme elevation — softer shadows for light backgrounds
+export const elevationLight = {
+  '0': 'none',
+  '1': '0px 1px 3px rgba(0, 0, 0, 0.08), 0px 1px 2px rgba(0, 0, 0, 0.06)',
+  '2': '0px 2px 4px rgba(0, 0, 0, 0.08), 0px 4px 6px rgba(0, 0, 0, 0.05)',
+  '3': '0px 4px 6px rgba(0, 0, 0, 0.07), 0px 10px 15px rgba(0, 0, 0, 0.05)',
+  '4': '0px 10px 15px rgba(0, 0, 0, 0.07), 0px 20px 25px rgba(0, 0, 0, 0.04)',
+  '5': '0px 20px 25px rgba(0, 0, 0, 0.07), 0px 25px 50px rgba(0, 0, 0, 0.05)',
 } as const;
 
 // =============================================================================
@@ -522,12 +541,28 @@ export function generateTokensCSS(): string {
 [data-theme="light"],
 .light {
   ${generateColorVars(colorsLight)}
+
+  /* Light-mode elevation (softer shadows) */
+  --elevation-0: ${elevationLight['0']};
+  --elevation-1: ${elevationLight['1']};
+  --elevation-2: ${elevationLight['2']};
+  --elevation-3: ${elevationLight['3']};
+  --elevation-4: ${elevationLight['4']};
+  --elevation-5: ${elevationLight['5']};
 }
 
 /* System Preference: Light Mode */
 @media (prefers-color-scheme: light) {
   [data-theme="system"] {
     ${generateColorVars(colorsLight)}
+
+    /* Light-mode elevation (softer shadows) */
+    --elevation-0: ${elevationLight['0']};
+    --elevation-1: ${elevationLight['1']};
+    --elevation-2: ${elevationLight['2']};
+    --elevation-3: ${elevationLight['3']};
+    --elevation-4: ${elevationLight['4']};
+    --elevation-5: ${elevationLight['5']};
   }
 }
 `;
@@ -764,9 +799,9 @@ export function getThemeTokens(theme: 'light' | 'dark'): Record<string, string> 
 
     // --- Shadows ---
     '--shadow-hairline': `0 0 0 1px ${themeColors.outlineVariant}`,
-    '--shadow-sm': elevation['1'],
-    '--shadow-md': elevation['2'],
-    '--shadow-lg': elevation['3'],
+    '--shadow-sm': theme === 'light' ? elevationLight['1'] : elevation['1'],
+    '--shadow-md': theme === 'light' ? elevationLight['2'] : elevation['2'],
+    '--shadow-lg': theme === 'light' ? elevationLight['3'] : elevation['3'],
 
     // --- Border Width ---
     '--border-width-regular': '1px',
