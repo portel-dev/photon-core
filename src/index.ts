@@ -449,3 +449,43 @@ export {
   ReactiveSet,
   type Emitter,
 } from './collections/index.js';
+
+// ===== PURPOSE-DRIVEN UI TYPES =====
+// Polymorphic return types that auto-render with appropriate UI
+export {
+  // Base
+  PhotonUIType,
+  isPhotonUIType,
+
+  // Data Display
+  Table,
+  type TableColumn,
+  type TableOptions,
+  type ColumnType,
+  Cards,
+  type CardFieldMapping,
+  type CardsOptions,
+
+  // Visualization
+  Chart,
+  type ChartType,
+  type ChartSeries,
+  type ChartDataPoint,
+  type ChartOptions,
+  Stats,
+  type StatItem,
+  type StatFormat,
+  type StatsOptions,
+  Progress,
+  type ProgressBar,
+  type ProgressStep,
+  type ProgressStyle,
+  type StepStatus,
+  type ProgressOptions,
+
+  // Interactive
+  Form,
+  type FormField,
+  type FieldType,
+  type FormOptions,
+} from './ui-types/index.js';
