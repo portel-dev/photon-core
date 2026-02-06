@@ -122,13 +122,14 @@ const colorPalette = {
     100: '#ffffff',
   },
 
-  // Light-theme neutrals (cool blue-gray undertone)
+  // Light-theme neutrals (cool blue-gray undertone, higher contrast)
   neutralLight: {
-    88: '#C4CDD5',   // surface-container-highest / borders
-    94: '#DFE3E8',   // surface-container-high
+    85: '#BCC5CF',   // heavy borders / dividers
+    88: '#C4CDD5',   // surface-container-highest
+    91: '#D5DBE1',   // surface-container-high
+    94: '#E5E9EE',   // bg-app — visible structure
     96: '#EBEEF2',   // surface-container
-    98: '#F4F6F8',   // bg-default — soft blue-gray
-    99: '#F9FAFB',   // surface — soft off-white
+    98: '#F6F7F9',   // surface — slightly off-white panels
   },
 
   // Primary (blue - trust, action)
@@ -236,17 +237,17 @@ export const colorsDark = {
 
 // System colors - Light Theme (cool blue-gray, WCAG compliant)
 export const colorsLight = {
-  // Surfaces (soft blue-gray, not pure white or warm cream)
-  surface: colorPalette.neutralLight[99],            // #F9FAFB — soft off-white
-  surfaceContainer: colorPalette.neutralLight[98],    // #F4F6F8 — cool blue-gray
-  surfaceContainerHigh: colorPalette.neutralLight[96], // #EBEEF2
-  surfaceContainerHighest: colorPalette.neutralLight[94], // #DFE3E8
-  surfaceBright: colorPalette.neutral[100],           // #FFFFFF — keep for overlays/modals
+  // Surfaces (cool blue-gray, higher contrast between levels)
+  surface: colorPalette.neutralLight[98],             // #F6F7F9 — panels
+  surfaceContainer: colorPalette.neutralLight[96],    // #EBEEF2 — containers
+  surfaceContainerHigh: colorPalette.neutralLight[91], // #D5DBE1
+  surfaceContainerHighest: colorPalette.neutralLight[88], // #C4CDD5
+  surfaceBright: colorPalette.neutral[100],           // #FFFFFF — overlays/modals
 
-  // Text on surfaces (charcoal with blue undertone, not pure black)
-  onSurface: '#1F2937',         // 11.5:1 on #F4F6F8 — WCAG AAA
-  onSurfaceVariant: '#4B5563',  // warm dark gray
-  onSurfaceMuted: '#6B7280',    // 4.63:1 on #F4F6F8 — WCAG AA
+  // Text on surfaces (deep charcoal, high contrast)
+  onSurface: '#1A2332',         // 12.3:1 on #E5E9EE — WCAG AAA
+  onSurfaceVariant: '#3D4C5C',  // darker variant for readability
+  onSurfaceMuted: '#556270',    // 5.1:1 on #E5E9EE — WCAG AA
 
   // Primary (darker for light theme)
   primary: colorPalette.primary[40],
@@ -272,9 +273,9 @@ export const colorsLight = {
   onError: colorPalette.neutral[100], // white text
   onErrorContainer: colorPalette.error[10],
 
-  // Outline (softer for light theme)
-  outline: '#9CA3AF',          // softer than old #808080
-  outlineVariant: '#E5E7EB',   // light border, not #cccccc
+  // Outline (visible but not harsh)
+  outline: '#8B95A3',          // stronger than before for visibility
+  outlineVariant: '#D1D5DB',   // visible border, not washed out
 
   // Scrim (overlay — lighter than dark theme's 0.5)
   scrim: 'rgba(0, 0, 0, 0.2)' as const,
@@ -307,13 +308,13 @@ export const elevation = {
   '5': '0px 4px 4px 0px rgba(0, 0, 0, 0.30), 0px 8px 12px 6px rgba(0, 0, 0, 0.15)',
 } as const;
 
-// Light theme elevation — softer shadows for light backgrounds
+// Light theme elevation — visible but not harsh
 export const elevationLight = {
   '0': 'none',
-  '1': '0px 1px 3px rgba(0, 0, 0, 0.08), 0px 1px 2px rgba(0, 0, 0, 0.06)',
-  '2': '0px 2px 4px rgba(0, 0, 0, 0.08), 0px 4px 6px rgba(0, 0, 0, 0.05)',
-  '3': '0px 4px 6px rgba(0, 0, 0, 0.07), 0px 10px 15px rgba(0, 0, 0, 0.05)',
-  '4': '0px 10px 15px rgba(0, 0, 0, 0.07), 0px 20px 25px rgba(0, 0, 0, 0.04)',
+  '1': '0px 1px 3px rgba(0, 0, 0, 0.1), 0px 1px 2px rgba(0, 0, 0, 0.08)',
+  '2': '0px 2px 6px rgba(0, 0, 0, 0.1), 0px 4px 8px rgba(0, 0, 0, 0.06)',
+  '3': '0px 4px 8px rgba(0, 0, 0, 0.1), 0px 10px 20px rgba(0, 0, 0, 0.06)',
+  '4': '0px 10px 15px rgba(0, 0, 0, 0.09), 0px 20px 25px rgba(0, 0, 0, 0.05)',
   '5': '0px 20px 25px rgba(0, 0, 0, 0.07), 0px 25px 50px rgba(0, 0, 0, 0.05)',
 } as const;
 
