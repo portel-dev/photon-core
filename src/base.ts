@@ -53,6 +53,13 @@ import { withLock as withLockHelper } from './decorators.js';
  */
 export class PhotonMCP {
   /**
+   * Photon name (MCP name) - set by runtime loader
+   * Used to identify the source of emitted events for injected photon routing
+   * @internal
+   */
+  _photonName?: string;
+
+  /**
    * Emit an event/progress update
    *
    * If data includes a `channel` property, the message is also published
@@ -76,9 +83,14 @@ export class PhotonMCP {
   protected emit(data: any): void {
     const store = executionContext.getStore();
 
+    // Include source photon name for injected photon event routing
+    const emitData = this._photonName && typeof data === 'object' && data !== null
+      ? { ...data, _source: this._photonName }
+      : data;
+
     // Send to local output handler (current caller)
     if (store?.outputHandler) {
-      store.outputHandler(data);
+      store.outputHandler(emitData);
     }
 
     // If channel is specified, also publish to broker for cross-process notification

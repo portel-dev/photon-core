@@ -373,6 +373,8 @@ export interface PhotonMCPClassExtended extends PhotonMCPClass {
   statics: StaticInfo[];
   /** Assets from the Photon's asset folder (UI, prompts, resources) */
   assets?: PhotonAssets;
+  /** Names of injected @photon dependencies (for client-side event routing) */
+  injectedPhotons?: string[];
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
