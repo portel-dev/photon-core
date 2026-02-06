@@ -111,12 +111,6 @@ export function renderFieldToText(
     case 'reference':
       return opts.displaySource ? getFieldValue(record, opts.displaySource) : String(value);
 
-    case 'actions':
-      return field.actions?.map(a => `[${a.label}]`).join(' ') ?? '';
-
-    case 'custom':
-      return field.render ? field.render(value, record) : String(value);
-
     default:
       return String(value);
   }
