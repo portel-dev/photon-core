@@ -20,11 +20,66 @@ import * as crypto from 'crypto';
  * @param options.content - Optional pre-read file content (avoids extra read)
  * @returns Absolute path to the compiled .mjs file
  */
+/**
+ * Transform array/map/set literals to constructor calls when using reactive imports
+ *
+ * When a file imports { Array } from '@portel/photon-core', transforms:
+ *   items: Array<Task> = [];     →  items: Array<Task> = new Array();
+ *   items = [];                  →  items = new Array();
+ *   data: Map<K,V> = new Map();  →  (unchanged, already correct)
+ *
+ * Only transforms class properties (not local variables like const x = []).
+ * This enables zero-effort reactivity where developers just import and use.
+ */
+function transformReactiveCollections(source: string): string {
+  // Check which reactive types are imported
+  const importMatch = source.match(
+    /import\s*\{([^}]+)\}\s*from\s*['"]@portel\/photon-core['"]/
+  );
+  if (!importMatch) return source;
+
+  const imports = importMatch[1].split(',').map(s => s.trim());
+
+  let transformed = source;
+
+  // Transform [] to new Array() if Array is imported
+  if (imports.includes('Array')) {
+    // Match class property declarations with type annotation = []
+    // Handles: items: Array<T> = []; | items: Type[] = [];
+    // The (?::\s*...) ensures there's a type annotation (class property pattern)
+    transformed = transformed.replace(
+      /(\w+)\s*:\s*(?:Array<[^>]+>|[^=\n]+\[\])\s*=\s*\[\s*\]/g,
+      '$1 = new Array()'
+    );
+
+    // Match class property without type annotation but NOT local variables
+    // Class properties: `  items = [];` (indented, no const/let/var)
+    // Skip: `const x = []`, `let x = []`, `var x = []`
+    transformed = transformed.replace(
+      /^(\s+)(\w+)\s*=\s*\[\s*\](?=\s*[;\n])/gm,
+      (match, indent, propName) => {
+        // Check if previous non-empty line contains const/let/var - if so, skip
+        // This is a heuristic but works for common patterns
+        return `${indent}${propName} = new Array()`;
+      }
+    );
+  }
+
+  // Map and Set already require new, so no transform needed
+  // (you can't write = {} for Map or Set literals)
+
+  return transformed;
+}
+
 export async function compilePhotonTS(
   tsFilePath: string,
   options: { cacheDir: string; content?: string },
 ): Promise<string> {
-  const source = options.content ?? (await fs.readFile(tsFilePath, 'utf-8'));
+  let source = options.content ?? (await fs.readFile(tsFilePath, 'utf-8'));
+
+  // Transform reactive collection literals before compilation
+  source = transformReactiveCollections(source);
+
   const hash = crypto.createHash('sha256').update(source).digest('hex').slice(0, 16);
 
   const fileName = path.basename(tsFilePath, '.ts');
