@@ -241,4 +241,46 @@ export class Cards extends PhotonUIType {
       options: this._options,
     };
   }
+
+  /**
+   * Render as plain text for MCP clients
+   */
+  toString(): string {
+    const lines: string[] = [];
+
+    if (this._options.title) {
+      lines.push(`## ${this._options.title}`, '');
+    }
+
+    if (this._items.length === 0) {
+      lines.push('(No items)');
+      return lines.join('\n');
+    }
+
+    for (const item of this._items) {
+      // Heading
+      const heading = this._fields.heading ? item[this._fields.heading] : null;
+      if (heading) lines.push(`### ${heading}`);
+
+      // Subtitle
+      const subtitle = this._fields.subtitle ? item[this._fields.subtitle] : null;
+      if (subtitle) lines.push(`*${subtitle}*`);
+
+      // Badge
+      const badge = this._fields.badge ? item[this._fields.badge] : null;
+      if (badge) lines.push(`[${badge}]`);
+
+      // Description
+      const desc = this._fields.description ? item[this._fields.description] : null;
+      if (desc) lines.push('', desc);
+
+      // Link
+      const link = this._fields.link ? item[this._fields.link] : null;
+      if (link) lines.push('', `Link: ${link}`);
+
+      lines.push('');
+    }
+
+    return lines.join('\n').trim();
+  }
 }

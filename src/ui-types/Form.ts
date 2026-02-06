@@ -317,4 +317,47 @@ export class Form extends PhotonUIType {
       options: this._options,
     };
   }
+
+  /**
+   * Render as plain text for MCP clients
+   * Shows the form structure (fields are not interactive in plain text)
+   */
+  toString(): string {
+    const lines: string[] = [];
+
+    if (this._options.title) {
+      lines.push(`## ${this._options.title}`);
+    }
+    if (this._options.description) {
+      lines.push(this._options.description);
+    }
+    if (this._options.title || this._options.description) {
+      lines.push('');
+    }
+
+    lines.push('**Form Fields:**');
+    for (const field of this._fields) {
+      if (field.type === 'hidden') continue;
+
+      let line = `- ${field.label ?? field.name}`;
+      if (field.required) line += ' (required)';
+
+      // Show options for select/radio
+      if (field.options && field.options.length > 0) {
+        const opts = field.options.map(o => typeof o === 'string' ? o : o.label);
+        line += `: [${opts.join(', ')}]`;
+      } else {
+        line += `: (${field.type})`;
+      }
+
+      if (field.helpText) line += ` - ${field.helpText}`;
+      lines.push(line);
+    }
+
+    if (this._options.submitLabel) {
+      lines.push('', `[${this._options.submitLabel}]`);
+    }
+
+    return lines.join('\n');
+  }
 }

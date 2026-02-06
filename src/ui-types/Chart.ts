@@ -199,4 +199,41 @@ export class Chart extends PhotonUIType {
       options: this._options,
     };
   }
+
+  /**
+   * Render as plain text for MCP clients
+   */
+  toString(): string {
+    const lines: string[] = [];
+
+    if (this._options.title) {
+      lines.push(`## ${this._options.title}`);
+      if (this._options.subtitle) lines.push(this._options.subtitle);
+      lines.push('');
+    }
+
+    // Pie/doughnut: show as list
+    if ((this._type === 'pie' || this._type === 'doughnut') && this._data.length > 0) {
+      const total = this._data.reduce((sum, d) => sum + d.value, 0);
+      for (const d of this._data) {
+        const pct = total > 0 ? ((d.value / total) * 100).toFixed(1) : '0';
+        lines.push(`- ${d.label}: ${d.value} (${pct}%)`);
+      }
+      return lines.join('\n');
+    }
+
+    // Series charts: show as table
+    if (this._series.length > 0 && this._labels.length > 0) {
+      const headers = ['', ...this._series.map(s => s.name)];
+      lines.push('| ' + headers.join(' | ') + ' |');
+      lines.push('| ' + headers.map(() => '---').join(' | ') + ' |');
+
+      for (let i = 0; i < this._labels.length; i++) {
+        const row = [this._labels[i], ...this._series.map(s => String(s.data[i] ?? ''))];
+        lines.push('| ' + row.join(' | ') + ' |');
+      }
+    }
+
+    return lines.join('\n');
+  }
 }

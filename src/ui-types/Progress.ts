@@ -190,4 +190,48 @@ export class Progress extends PhotonUIType {
       options: this._options,
     };
   }
+
+  /**
+   * Render as plain text for MCP clients
+   */
+  toString(): string {
+    const lines: string[] = [];
+
+    if (this._options.title) {
+      lines.push(this._options.title);
+    }
+
+    // Steps display
+    if (this._steps.length > 0) {
+      const stepMarkers = this._steps.map(s => {
+        switch (s.status) {
+          case 'completed': return `[✓] ${s.label}`;
+          case 'current': return `[●] ${s.label}`;
+          case 'error': return `[✗] ${s.label}`;
+          default: return `[ ] ${s.label}`;
+        }
+      });
+      lines.push(stepMarkers.join(' → '));
+      return lines.join('\n');
+    }
+
+    // Multiple bars
+    if (this._bars.length > 0) {
+      for (const bar of this._bars) {
+        const pct = Math.round((bar.value / (bar.max ?? 100)) * 100);
+        const filled = Math.round(pct / 5);
+        const barStr = '█'.repeat(filled) + '░'.repeat(20 - filled);
+        lines.push(`${bar.label}: [${barStr}] ${pct}%`);
+      }
+      return lines.join('\n');
+    }
+
+    // Single progress bar
+    const pct = Math.round((this._value / this._max) * 100);
+    const filled = Math.round(pct / 5);
+    const barStr = '█'.repeat(filled) + '░'.repeat(20 - filled);
+    lines.push(`[${barStr}] ${pct}%`);
+
+    return lines.join('\n');
+  }
 }

@@ -156,4 +156,49 @@ export class Stats extends PhotonUIType {
       options: this._options,
     };
   }
+
+  /**
+   * Render as plain text for MCP clients
+   */
+  toString(): string {
+    const lines: string[] = [];
+
+    if (this._options.title) {
+      lines.push(`## ${this._options.title}`, '');
+    }
+
+    for (const stat of this._stats) {
+      let value = String(stat.value);
+
+      // Format value
+      if (stat.format === 'currency' || stat.prefix) {
+        value = (stat.prefix ?? '$') + value;
+      }
+      if (stat.format === 'percent' || stat.suffix === '%') {
+        value = value + '%';
+      } else if (stat.suffix) {
+        value = value + ' ' + stat.suffix;
+      }
+      if (stat.format === 'compact' && typeof stat.value === 'number') {
+        value = this._formatCompact(stat.value);
+      }
+
+      // Add trend
+      let line = `**${stat.label}**: ${value}`;
+      if (stat.trend) {
+        const arrow = stat.trendUp ? '↑' : stat.trendUp === false ? '↓' : '';
+        line += ` (${arrow}${stat.trend})`;
+      }
+
+      lines.push(line);
+    }
+
+    return lines.join('\n');
+  }
+
+  private _formatCompact(num: number): string {
+    if (num >= 1_000_000) return (num / 1_000_000).toFixed(1) + 'M';
+    if (num >= 1_000) return (num / 1_000).toFixed(1) + 'K';
+    return String(num);
+  }
 }

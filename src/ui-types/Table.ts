@@ -230,4 +230,32 @@ export class Table extends PhotonUIType {
       options: this._options,
     };
   }
+
+  /**
+   * Render as plain text/markdown for MCP clients
+   */
+  toString(): string {
+    if (this._rows.length === 0) {
+      return this._options.title ? `${this._options.title}\n\n(No data)` : '(No data)';
+    }
+
+    const lines: string[] = [];
+
+    if (this._options.title) {
+      lines.push(`## ${this._options.title}`, '');
+    }
+
+    // Header row
+    const headers = this._columns.map(c => c.label);
+    lines.push('| ' + headers.join(' | ') + ' |');
+    lines.push('| ' + headers.map(() => '---').join(' | ') + ' |');
+
+    // Data rows
+    for (const row of this._rows) {
+      const cells = this._columns.map(c => String(row[c.key] ?? ''));
+      lines.push('| ' + cells.join(' | ') + ' |');
+    }
+
+    return lines.join('\n');
+  }
 }

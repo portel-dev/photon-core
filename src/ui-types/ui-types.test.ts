@@ -274,6 +274,63 @@ test('Form with layout options', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════
+// toString() Tests (Plain MCP Output)
+// ═══════════════════════════════════════════════════════════════
+
+console.log('\n📦 toString() - Plain MCP Output\n');
+
+test('Table.toString() renders markdown table', () => {
+  const table = new Table()
+    .column('name', 'Name')
+    .column('age', 'Age')
+    .rows([{ name: 'Alice', age: 30 }]);
+
+  const str = table.toString();
+  assert(str.includes('| Name | Age |'), 'Has header row');
+  assert(str.includes('| Alice | 30 |'), 'Has data row');
+});
+
+test('Chart.toString() renders series as table', () => {
+  const chart = new Chart('line')
+    .labels(['Jan', 'Feb'])
+    .series('Revenue', [100, 200]);
+
+  const str = chart.toString();
+  assert(str.includes('Revenue'), 'Has series name');
+  assert(str.includes('100'), 'Has data');
+});
+
+test('Stats.toString() renders formatted stats', () => {
+  const stats = new Stats()
+    .currency('Revenue', 5000)
+    .stat('Users', 100, { trend: '+5%', trendUp: true });
+
+  const str = stats.toString();
+  assert(str.includes('$5000'), 'Currency formatted');
+  assert(str.includes('↑+5%'), 'Trend with arrow');
+});
+
+test('Progress.toString() renders progress bar', () => {
+  const progress = new Progress(50);
+  const str = progress.toString();
+  assert(str.includes('█'), 'Has filled blocks');
+  assert(str.includes('░'), 'Has empty blocks');
+  assert(str.includes('50%'), 'Shows percentage');
+});
+
+test('Progress.toString() renders steps', () => {
+  const progress = new Progress('steps')
+    .step('A', 'completed')
+    .step('B', 'current')
+    .step('C', 'pending');
+
+  const str = progress.toString();
+  assert(str.includes('[✓] A'), 'Completed step');
+  assert(str.includes('[●] B'), 'Current step');
+  assert(str.includes('[ ] C'), 'Pending step');
+});
+
+// ═══════════════════════════════════════════════════════════════
 // Summary
 // ═══════════════════════════════════════════════════════════════
 
