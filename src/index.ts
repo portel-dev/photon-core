@@ -440,3 +440,12 @@ export {
   discoverAssets,
   autoDiscoverAssets,
 } from './asset-discovery.js';
+
+// ===== MANAGED COLLECTIONS =====
+// Auto-emit events on mutations for seamless real-time sync
+export {
+  ReactiveArray,
+  ReactiveMap,
+  ReactiveSet,
+  type Emitter,
+} from './collections/index.js';

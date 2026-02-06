@@ -33,7 +33,7 @@
     "build": "tsc",
     "clean": "rm -rf dist",
     "prepublishOnly": "npm run clean && npm run build",
-    "test": "npm run build && npx tsx tests/channels.test.ts && npx tsx tests/shared-utils.test.ts",
+    "test": "npm run build && npx tsx tests/channels.test.ts && npx tsx tests/shared-utils.test.ts && npx tsx tests/collections.test.ts",
     "test:channels": "npx tsx tests/channels.test.ts"
   },
   "keywords": [
