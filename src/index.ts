@@ -453,6 +453,11 @@ export {
   ReactiveMap,
   ReactiveSet,
   type Emitter,
+  // Level 2+: Rich queryable collection with rendering hints
+  Collection,
+  type RenderHint,
+  type RenderFormat,
+  type CompareOp,
 } from './collections/index.js';
 
 // ===== PURPOSE-DRIVEN UI TYPES =====

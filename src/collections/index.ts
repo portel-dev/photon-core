@@ -52,6 +52,7 @@
 export { ReactiveArray, type Emitter } from './ReactiveArray.js';
 export { ReactiveMap } from './ReactiveMap.js';
 export { ReactiveSet } from './ReactiveSet.js';
+export { Collection, type RenderHint, type RenderFormat, type CompareOp } from './Collection.js';
 
 // Level 1 exports: Shadow global types for zero-effort reactivity
 // Just `import { Array } from '@portel/photon-core'` and use normally
