@@ -510,6 +510,104 @@ See [CHANNELS.md](./CHANNELS.md) for full architecture documentation.
 
 ---
 
+### Managed Collections
+
+Reactive collections that auto-emit events on mutations, enabling seamless real-time sync between server and client.
+
+#### Level 1: Zero Effort (just import)
+
+```typescript
+import { PhotonMCP } from '@portel/photon-core';
+
+export default class TodoList extends PhotonMCP {
+  items: Task[] = [];  // Compiler transforms to ReactiveArray
+
+  async add(text: string) {
+    this.items.push({ id: crypto.randomUUID(), text });
+    // Auto-emits 'items:added' — no manual wiring
+  }
+}
+```
+
+The compiler detects `extends PhotonMCP` with `= []` array initializers and transforms them to `ReactiveArray` instances. The runtime auto-wires `_propertyName` and `_emitter` after instantiation.
+
+**Available reactive types:** `Array` (alias for `ReactiveArray`), `Map` (`ReactiveMap`), `Set` (`ReactiveSet`)
+
+**Event naming (Firebase-style):**
+
+| Operation | Event | Data |
+|-----------|-------|------|
+| `push(item)` | `{prop}:added` | The item |
+| `pop()` / `splice(i, 1)` | `{prop}:removed` | The removed item |
+| `set(i, val)` | `{prop}:updated` | `{ index, value, previous }` |
+| `replaceAll(items)` | `{prop}:changed` | All items |
+
+#### Level 2: Rich Collections
+
+`Collection<T>` extends `ReactiveArray<T>` with Laravel-style query chaining and auto-UI rendering hints.
+
+```typescript
+import { PhotonMCP, Collection } from '@portel/photon-core';
+
+type Product = { name: string; price: number; stock: number; category: string };
+
+export default class ProductCatalog extends PhotonMCP {
+  products = new Collection<Product>();
+
+  async catalog() {
+    return this.products.where('stock', '>', 0).sortBy('price');
+  }
+
+  async dashboard() {
+    return this.products.where('category', 'Electronics').as('cards');
+  }
+
+  async cheapest() {
+    return this.products.sortBy('price').first();
+  }
+}
+```
+
+**Query methods** (immutable — return new `Collection<T>`):
+
+| Method | Example |
+|--------|---------|
+| `where(key, op?, val)` | `.where('price', '>', 100)` or `.where('status', 'active')` |
+| `query(fn)` | `.query(p => p.stock > 0)` |
+| `collect(fn)` | `.collect(p => ({ ...p, label: p.name }))` |
+| `pluck(key)` | `.pluck('name')` → `Collection<string>` |
+| `sortBy(key \| fn, dir?)` | `.sortBy('price', 'desc')` |
+| `groupBy(key \| fn)` | `.groupBy('category')` → `Record<string, Collection<T>>` |
+| `unique(key?)` | `.unique('category')` |
+| `take(n)` / `skip(n)` | `.take(10)` |
+
+**Terminal methods:**
+
+| Method | Return |
+|--------|--------|
+| `first(fn?)` / `last(fn?)` | `T \| undefined` |
+| `count()` / `isEmpty()` | `number` / `boolean` |
+| `sum(key?)` / `avg(key?)` | `number` |
+| `min(key?)` / `max(key?)` | `T \| undefined` |
+| `aggregate(fn, init)` | `U` |
+
+**Rendering hints** for auto-UI:
+
+```typescript
+// .as() attaches a format hint — auto-UI renders accordingly
+this.products.where('stock', '>', 0).as('table');
+this.products.where('category', 'Electronics').as('cards');
+```
+
+Formats: `'table'` | `'cards'` | `'list'` | `'chart'` | `'grid'` | `'chips'`
+
+Without `.as()`, `toJSON()` returns a plain array (backward compatible). With `.as()`, it returns:
+```json
+{ "_photonType": "collection:cards", "items": [...], "count": 3 }
+```
+
+---
+
 ## 🏗️ Building Custom Runtimes
 
 Photon Core is designed to be the foundation for custom runtimes. Here are examples:
