@@ -444,6 +444,11 @@ export {
 // ===== MANAGED COLLECTIONS =====
 // Auto-emit events on mutations for seamless real-time sync
 export {
+  // Level 1: Zero-effort - just import and use (runtime auto-wires)
+  Array,  // Shadows global Array
+  Map,    // Shadows global Map
+  Set,    // Shadows global Set
+  // Level 2: Explicit control - use .create() for custom wiring
   ReactiveArray,
   ReactiveMap,
   ReactiveSet,

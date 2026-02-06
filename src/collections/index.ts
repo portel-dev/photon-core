@@ -5,18 +5,28 @@
  * emit events when their contents change. This enables seamless real-time sync
  * between server and client.
  *
- * @example
+ * ## Level 1: Zero Effort (just add import)
+ *
  * ```typescript
- * import { ReactiveArray } from '@portel/photon-core';
+ * import { Array } from '@portel/photon-core';
  *
  * export default class TodoList {
- *   items = ReactiveArray.create<Task>('items', (event, data) => this.emit(event, data));
+ *   items: Array<Task> = [];  // Shadows global Array, auto-wired by runtime
  *
  *   add(text: string) {
  *     this.items.push({ id: crypto.randomUUID(), text });
- *     // Auto-emits 'items:added' - UI updates automatically!
+ *     // Auto-emits 'items:added' - no manual wiring needed!
  *   }
  * }
+ * ```
+ *
+ * ## Level 2: Explicit Control
+ *
+ * ```typescript
+ * import { ReactiveArray } from '@portel/photon-core';
+ *
+ * // Use .create() for explicit control over property name and emitter
+ * items = ReactiveArray.create<Task>('items', customEmitter, initialItems);
  * ```
  *
  * On the client:
@@ -42,3 +52,9 @@
 export { ReactiveArray, type Emitter } from './ReactiveArray.js';
 export { ReactiveMap } from './ReactiveMap.js';
 export { ReactiveSet } from './ReactiveSet.js';
+
+// Level 1 exports: Shadow global types for zero-effort reactivity
+// Just `import { Array } from '@portel/photon-core'` and use normally
+export { ReactiveArray as Array } from './ReactiveArray.js';
+export { ReactiveMap as Map } from './ReactiveMap.js';
+export { ReactiveSet as Set } from './ReactiveSet.js';
