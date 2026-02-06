@@ -2,7 +2,7 @@
  * Tests for Purpose-Driven UI Types
  */
 
-import { Table, Chart, Cards, Stats, Progress, Form, isPhotonUIType } from './index.js';
+import { Table, Chart, Cards, Stats, Progress, Form, Field, isPhotonUIType, renderFieldToText } from './index.js';
 
 let passed = 0;
 let failed = 0;
@@ -271,6 +271,107 @@ test('Form with layout options', () => {
   assert(json.options.columns === 2, '2 columns');
   assert(json.options.showReset === true, 'Show reset');
   assert(json.options.confirmSubmit === 'Are you sure?', 'Confirm message');
+});
+
+// ═══════════════════════════════════════════════════════════════
+// Field System Tests
+// ═══════════════════════════════════════════════════════════════
+
+console.log('\n📦 Field System\n');
+
+test('Field.text renders correctly', () => {
+  const field = Field.text('name', { label: 'Full Name' });
+  const record = { name: 'John Doe' };
+  const text = renderFieldToText(field, record);
+  assert(text === 'John Doe', `Expected 'John Doe', got '${text}'`);
+});
+
+test('Field.email renders correctly', () => {
+  const field = Field.email('email');
+  const record = { email: 'test@example.com' };
+  const text = renderFieldToText(field, record);
+  assert(text === 'test@example.com', `Expected email, got '${text}'`);
+});
+
+test('Field.currency formats correctly', () => {
+  const field = Field.currency('price', { currency: 'USD' });
+  const record = { price: 1234.5 };
+  const text = renderFieldToText(field, record);
+  assert(text.includes('1,234.50') || text.includes('1234.50'), `Expected currency format, got '${text}'`);
+});
+
+test('Field.date with relative format', () => {
+  const field = Field.date('createdAt', { format: 'relative' });
+  const record = { createdAt: new Date(Date.now() - 3600000) }; // 1 hour ago
+  const text = renderFieldToText(field, record);
+  assert(text.includes('h ago') || text.includes('hour'), `Expected relative date, got '${text}'`);
+});
+
+test('Field.rating renders stars', () => {
+  const field = Field.rating('rating', { max: 5 });
+  const record = { rating: 4 };
+  const text = renderFieldToText(field, record);
+  assert(text.includes('★★★★'), `Expected 4 stars, got '${text}'`);
+});
+
+test('Field.badge renders value', () => {
+  const field = Field.badge('status', { colors: { active: 'green' } });
+  const record = { status: 'active' };
+  const text = renderFieldToText(field, record);
+  assert(text === 'active', `Expected 'active', got '${text}'`);
+});
+
+test('Field.price with discount', () => {
+  const field = Field.price('salePrice', { originalSource: 'originalPrice', currency: 'USD', showDiscount: true });
+  const record = { salePrice: 80, originalPrice: 100 };
+  const text = renderFieldToText(field, record);
+  assert(text.includes('80') && text.includes('100'), `Expected both prices, got '${text}'`);
+});
+
+test('Field.stock shows status', () => {
+  const field = Field.stock('quantity', { lowStockThreshold: 5 });
+  const record = { quantity: 3 };
+  const text = renderFieldToText(field, record);
+  assert(text.includes('Low Stock'), `Expected 'Low Stock', got '${text}'`);
+});
+
+test('Field.actions renders buttons', () => {
+  const field = Field.actions([
+    { label: 'Edit', method: 'edit' },
+    { label: 'Delete', method: 'delete' },
+  ]);
+  const record = {};
+  const text = renderFieldToText(field, record);
+  assert(text.includes('[Edit]') && text.includes('[Delete]'), `Expected action buttons, got '${text}'`);
+});
+
+test('Table with Field system', () => {
+  const table = new Table()
+    .text('name')
+    .email('email')
+    .badge('status', { colors: { active: 'green' } })
+    .rows([
+      { name: 'Alice', email: 'alice@test.com', status: 'active' },
+    ]);
+
+  const json = table.toJSON();
+  assert(json.fields.length === 3, `Expected 3 fields, got ${json.fields.length}`);
+  assert(json.fields[0].type === 'text', 'First field should be text');
+  assert(json.fields[1].type === 'email', 'Second field should be email');
+});
+
+test('Table.toString with Field system', () => {
+  const table = new Table()
+    .text('name', { label: 'Name' })
+    .currency('price', { currency: 'USD' })
+    .rows([
+      { name: 'Widget', price: 29.99 },
+    ]);
+
+  const str = table.toString();
+  assert(str.includes('Name'), 'Should have Name header');
+  assert(str.includes('Widget'), 'Should have Widget');
+  assert(str.includes('29.99') || str.includes('$29.99'), 'Should have price');
 });
 
 // ═══════════════════════════════════════════════════════════════

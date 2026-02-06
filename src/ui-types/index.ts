@@ -34,6 +34,55 @@
 // Base
 export { PhotonUIType, isPhotonUIType } from './base.js';
 
+// Field System
+export {
+  Field,
+  type FieldDefinition,
+  type FieldType,
+  type FieldAlignment,
+  type BaseFieldOptions,
+  // Field-specific options
+  type TextFieldOptions,
+  type EmailFieldOptions,
+  type UrlFieldOptions,
+  type PhoneFieldOptions,
+  type NumberFieldOptions,
+  type CurrencyFieldOptions,
+  type PercentFieldOptions,
+  type DateFieldOptions,
+  type DateFormat,
+  type TimeFieldOptions,
+  type DateRangeFieldOptions,
+  type BooleanFieldOptions,
+  type ImageFieldOptions,
+  type AvatarFieldOptions,
+  type GalleryFieldOptions,
+  type FileFieldOptions,
+  type BadgeFieldOptions,
+  type TagsFieldOptions,
+  type RatingFieldOptions,
+  type PriceFieldOptions,
+  type StockFieldOptions,
+  type QuantityFieldOptions,
+  type UserFieldOptions,
+  type ReferenceFieldOptions,
+  type ActionItem,
+  type ActionsFieldOptions,
+  type CustomFieldOptions,
+  type RenderFunction,
+  // Utilities
+  getFieldValue,
+  formatFieldLabel,
+  interpolateTemplate,
+} from './Field.js';
+
+// Field Rendering
+export {
+  renderFieldToText,
+  renderFieldToStructured,
+  type RenderedField,
+} from './FieldRenderer.js';
+
 // Data Display
 export { Table, type TableColumn, type TableOptions, type ColumnType } from './Table.js';
 export { Cards, type CardFieldMapping, type CardsOptions } from './Cards.js';
@@ -44,4 +93,4 @@ export { Stats, type StatItem, type StatFormat, type StatsOptions } from './Stat
 export { Progress, type ProgressBar, type ProgressStep, type ProgressStyle, type StepStatus, type ProgressOptions } from './Progress.js';
 
 // Interactive
-export { Form, type FormField, type FieldType, type FormOptions } from './Form.js';
+export { Form, type FormField, type FieldType as FormFieldType, type FormOptions } from './Form.js';

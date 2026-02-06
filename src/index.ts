@@ -457,6 +457,32 @@ export {
   PhotonUIType,
   isPhotonUIType,
 
+  // Field System (React Admin-style)
+  Field,
+  type FieldDefinition,
+  type FieldType,
+  type FieldAlignment,
+  type BaseFieldOptions,
+  type TextFieldOptions,
+  type NumberFieldOptions,
+  type CurrencyFieldOptions,
+  type DateFieldOptions,
+  type DateFormat,
+  type ImageFieldOptions,
+  type BadgeFieldOptions,
+  type RatingFieldOptions,
+  type PriceFieldOptions,
+  type StockFieldOptions,
+  type ActionItem,
+  type ActionsFieldOptions,
+  type RenderFunction,
+  getFieldValue,
+  formatFieldLabel,
+  interpolateTemplate,
+  renderFieldToText,
+  renderFieldToStructured,
+  type RenderedField,
+
   // Data Display
   Table,
   type TableColumn,
@@ -486,6 +512,6 @@ export {
   // Interactive
   Form,
   type FormField,
-  type FieldType,
+  type FieldType as FormFieldType,
   type FormOptions,
 } from './ui-types/index.js';
