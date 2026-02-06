@@ -21,52 +21,94 @@ import * as crypto from 'crypto';
  * @returns Absolute path to the compiled .mjs file
  */
 /**
- * Transform array/map/set literals to constructor calls when using reactive imports
+ * Transform arrays to reactive collections for PhotonMCP classes
  *
- * When a file imports { Array } from '@portel/photon-core', transforms:
- *   items: Array<Task> = [];     →  items: Array<Task> = new Array();
- *   items = [];                  →  items = new Array();
- *   data: Map<K,V> = new Map();  →  (unchanged, already correct)
+ * ZERO-EFFORT REACTIVITY: If a class extends PhotonMCP and has array properties,
+ * this transform automatically:
+ * 1. Injects `import { Array as ReactiveArray } from '@portel/photon-core'`
+ * 2. Transforms `= []` to `= new ReactiveArray()` for class properties
  *
- * Only transforms class properties (not local variables like const x = []).
- * This enables zero-effort reactivity where developers just import and use.
+ * Result: Developers write normal code, arrays are automatically reactive.
+ *
+ * ```typescript
+ * // Developer writes this (normal TypeScript):
+ * export default class TodoList extends PhotonMCP {
+ *   items: Task[] = [];
+ *   async add(text: string) { this.items.push({...}); }
+ * }
+ *
+ * // Compiler transforms to:
+ * import { Array as ReactiveArray } from '@portel/photon-core';
+ * export default class TodoList extends PhotonMCP {
+ *   items = new ReactiveArray();
+ *   async add(text: string) { this.items.push({...}); }  // Auto-emits!
+ * }
+ * ```
  */
 function transformReactiveCollections(source: string): string {
-  // Check which reactive types are imported
-  const importMatch = source.match(
-    /import\s*\{([^}]+)\}\s*from\s*['"]@portel\/photon-core['"]/
-  );
-  if (!importMatch) return source;
+  // Check if this is a PhotonMCP class (extends PhotonMCP)
+  const isPhotonMCP = /class\s+\w+\s+extends\s+PhotonMCP\b/.test(source);
+  if (!isPhotonMCP) return source;
 
-  const imports = importMatch[1].split(',').map(s => s.trim());
+  // Check if there are array properties with = [] that need transformation
+  // Look for patterns like: `items: Type[] = []` or `items = []` (class properties)
+  const hasArrayLiterals =
+    /\w+\s*:\s*[^=\n]+\[\]\s*=\s*\[\s*\]/.test(source) || // typed: Type[] = []
+    /^\s+\w+\s*=\s*\[\s*\](?=\s*[;\n])/m.test(source);     // simple: prop = []
+
+  if (!hasArrayLiterals) return source;
 
   let transformed = source;
 
-  // Transform [] to new Array() if Array is imported
-  if (imports.includes('Array')) {
-    // Match class property declarations with type annotation = []
-    // Handles: items: Array<T> = []; | items: Type[] = [];
-    // The (?::\s*...) ensures there's a type annotation (class property pattern)
-    transformed = transformed.replace(
-      /(\w+)\s*:\s*(?:Array<[^>]+>|[^=\n]+\[\])\s*=\s*\[\s*\]/g,
-      '$1 = new Array()'
+  // Check if Array is already imported from photon-core
+  const hasArrayImport = /import\s*\{[^}]*\bArray\b[^}]*\}\s*from\s*['"]@portel\/photon-core['"]/.test(source);
+
+  if (!hasArrayImport) {
+    // Inject ReactiveArray import (using alias to avoid shadowing issues)
+    // Find the photon-core import and add ReactiveArray to it, or add new import
+    const photonCoreImport = source.match(
+      /import\s*\{([^}]+)\}\s*from\s*['"]@portel\/photon-core['"]/
     );
 
-    // Match class property without type annotation but NOT local variables
-    // Class properties: `  items = [];` (indented, no const/let/var)
-    // Skip: `const x = []`, `let x = []`, `var x = []`
-    transformed = transformed.replace(
-      /^(\s+)(\w+)\s*=\s*\[\s*\](?=\s*[;\n])/gm,
-      (match, indent, propName) => {
-        // Check if previous non-empty line contains const/let/var - if so, skip
-        // This is a heuristic but works for common patterns
-        return `${indent}${propName} = new Array()`;
+    if (photonCoreImport) {
+      // Add to existing import
+      const existingImports = photonCoreImport[1];
+      transformed = transformed.replace(
+        photonCoreImport[0],
+        `import { ${existingImports}, Array as ReactiveArray } from '@portel/photon-core'`
+      );
+    } else {
+      // Add new import at the top (after any existing imports)
+      const lastImportMatch = source.match(/^import\s+.+$/gm);
+      if (lastImportMatch) {
+        const lastImport = lastImportMatch[lastImportMatch.length - 1];
+        transformed = transformed.replace(
+          lastImport,
+          `${lastImport}\nimport { Array as ReactiveArray } from '@portel/photon-core';`
+        );
+      } else {
+        // No imports, add at top
+        transformed = `import { Array as ReactiveArray } from '@portel/photon-core';\n${transformed}`;
       }
-    );
+    }
   }
 
-  // Map and Set already require new, so no transform needed
-  // (you can't write = {} for Map or Set literals)
+  // Determine the Array constructor name to use
+  const arrayConstructor = hasArrayImport ? 'Array' : 'ReactiveArray';
+
+  // Transform class property declarations with type annotation = []
+  // Handles: items: Task[] = []; | items: Array<T> = [];
+  transformed = transformed.replace(
+    /(\w+)\s*:\s*(?:Array<[^>]+>|[^=\n]+\[\])\s*=\s*\[\s*\]/g,
+    `$1 = new ${arrayConstructor}()`
+  );
+
+  // Transform class property without type annotation (indented, at start of line)
+  // Skip local variables (const/let/var)
+  transformed = transformed.replace(
+    /^(\s+)(\w+)\s*=\s*\[\s*\](?=\s*[;\n])/gm,
+    `$1$2 = new ${arrayConstructor}()`
+  );
 
   return transformed;
 }
