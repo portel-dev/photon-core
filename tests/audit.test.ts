@@ -276,6 +276,55 @@ async function testClear() {
   });
 }
 
+async function testPrune() {
+  console.log('\nPrune:');
+
+  await test('removes records older than retention period', async () => {
+    const audit = new AuditTrail();
+    const now = Date.now();
+
+    // Old record (40 days ago)
+    audit.record({
+      id: 'exec_old', photon: 'prune-test', method: 'old',
+      input: {}, output: 'ok', duration_ms: 1,
+      timestamp: new Date(now - 40 * 24 * 60 * 60 * 1000).toISOString(),
+      parent_id: null, error: null,
+    });
+
+    // Recent record (1 day ago)
+    audit.record({
+      id: 'exec_recent', photon: 'prune-test', method: 'recent',
+      input: {}, output: 'ok', duration_ms: 1,
+      timestamp: new Date(now - 1 * 24 * 60 * 60 * 1000).toISOString(),
+      parent_id: null, error: null,
+    });
+
+    // Prune with 30-day retention
+    const removed = audit.prune(30 * 24 * 60 * 60 * 1000, 'prune-test');
+    assert.equal(removed, 1);
+
+    const results = await audit.query('prune-test');
+    assert.equal(results.length, 1);
+    assert.equal(results[0].id, 'exec_recent');
+  });
+
+  await test('removes empty log files after prune', async () => {
+    const audit = new AuditTrail();
+    const now = Date.now();
+
+    // Only old records
+    audit.record({
+      id: 'exec_all_old', photon: 'prune-empty-test', method: 'old',
+      input: {}, output: 'ok', duration_ms: 1,
+      timestamp: new Date(now - 60 * 24 * 60 * 60 * 1000).toISOString(),
+      parent_id: null, error: null,
+    });
+
+    audit.prune(30 * 24 * 60 * 60 * 1000, 'prune-empty-test');
+    assert.ok(!audit.listPhotons().includes('prune-empty-test'));
+  });
+}
+
 (async () => {
   console.log('Execution Audit Trail Tests\n' + '='.repeat(50));
 
@@ -285,6 +334,7 @@ async function testClear() {
   await testQuery();
   await testGet();
   await testTrace();
+  await testPrune();
   await testClear();
 
   // Cleanup

@@ -62,6 +62,9 @@ export interface AuditQueryOptions {
   errorsOnly?: boolean;
 }
 
+/** Default retention period: 30 days in milliseconds */
+const DEFAULT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
 /**
  * Generate a unique execution ID
  */
@@ -92,11 +95,18 @@ function getLogPath(photonId: string): string {
  * Append-only JSONL storage for reliability.
  */
 export class AuditTrail {
+  /** Write counter for auto-prune scheduling */
+  private _writeCount = 0;
+
+  /** How often to auto-prune (every N writes) */
+  private _pruneInterval = 100;
+
   /**
    * Record a tool execution
    *
    * Called by the runtime before/after every tool call.
    * Uses append to avoid read-modify-write races.
+   * Auto-prunes records older than 30 days every 100 writes.
    */
   record(entry: ExecutionRecord): void {
     const logPath = getLogPath(entry.photon);
@@ -108,6 +118,17 @@ export class AuditTrail {
 
     const line = JSON.stringify(entry) + '\n';
     fs.appendFileSync(logPath, line);
+
+    // Auto-prune on schedule (non-blocking, best-effort)
+    this._writeCount++;
+    if (this._writeCount >= this._pruneInterval) {
+      this._writeCount = 0;
+      try {
+        this.prune(DEFAULT_RETENTION_MS, entry.photon);
+      } catch {
+        // Prune is best-effort — never fail a record() because of it
+      }
+    }
   }
 
   /**
@@ -280,6 +301,57 @@ export class AuditTrail {
       .filter(d => d.isDirectory())
       .filter(d => fs.existsSync(path.join(baseDir, d.name, 'executions.jsonl')))
       .map(d => d.name);
+  }
+
+  /**
+   * Prune records older than retention period
+   *
+   * Rewrites log files keeping only records within the retention window.
+   * Called automatically on every 100th record() call, or manually.
+   *
+   * @param retentionMs Max age in ms (default: 30 days)
+   * @param photonId Prune a specific photon, or all if omitted
+   * @returns Number of records removed
+   */
+  prune(retentionMs: number = DEFAULT_RETENTION_MS, photonId?: string): number {
+    const cutoff = new Date(Date.now() - retentionMs).toISOString();
+    let totalRemoved = 0;
+
+    const photons = photonId ? [photonId] : this.listPhotons();
+
+    for (const id of photons) {
+      const logPath = getLogPath(id);
+      if (!fs.existsSync(logPath)) continue;
+
+      const content = fs.readFileSync(logPath, 'utf-8');
+      const lines = content.trim().split('\n').filter(Boolean);
+      const kept: string[] = [];
+
+      for (const line of lines) {
+        try {
+          const record = JSON.parse(line) as ExecutionRecord;
+          if (record.timestamp >= cutoff) {
+            kept.push(line);
+          } else {
+            totalRemoved++;
+          }
+        } catch {
+          // Drop malformed lines during prune
+          totalRemoved++;
+        }
+      }
+
+      if (kept.length === 0) {
+        // Remove empty log file and directory
+        fs.unlinkSync(logPath);
+        const dir = path.dirname(logPath);
+        try { fs.rmdirSync(dir); } catch { /* not empty, fine */ }
+      } else if (kept.length < lines.length) {
+        fs.writeFileSync(logPath, kept.join('\n') + '\n');
+      }
+    }
+
+    return totalRemoved;
   }
 
   /**
