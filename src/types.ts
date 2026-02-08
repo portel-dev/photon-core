@@ -63,6 +63,8 @@ export interface ExtractedSchema {
   isStateful?: boolean;
   /** True if this method should auto-execute when selected (idempotent, no required params) */
   autorun?: boolean;
+  /** True if this method runs in background — returns execution ID immediately */
+  isAsync?: boolean;
   /** True if this is a static method (class-level, no instance needed) */
   isStatic?: boolean;
 

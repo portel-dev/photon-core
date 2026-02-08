@@ -178,6 +178,7 @@ export class SchemaExtractor {
           const yields = isGenerator ? this.extractYieldsFromJSDoc(jsdoc) : undefined;
           const isStateful = this.hasStatefulTag(jsdoc);
           const autorun = this.hasAutorunTag(jsdoc);
+          const isAsync = this.hasAsyncTag(jsdoc);
 
           // Daemon features
           const webhook = this.extractWebhook(jsdoc, methodName);
@@ -199,6 +200,7 @@ export class SchemaExtractor {
             ...(yields && yields.length > 0 ? { yields } : {}),
             ...(isStateful ? { isStateful: true } : {}),
             ...(autorun ? { autorun: true } : {}),
+            ...(isAsync ? { isAsync: true } : {}),
             ...(isStaticMethod ? { isStatic: true } : {}),
             // Daemon features
             ...(webhook !== undefined ? { webhook } : {}),
@@ -657,7 +659,7 @@ export class SchemaExtractor {
    */
   private extractDescription(jsdocContent: string): string {
     // Split by @param to get only the description part (also stop at other @tags)
-    const beforeTags = jsdocContent.split(/@(?:param|example|returns?|throws?|see|since|deprecated|version|author|license|ui|icon|format|stateful|autorun|webhook|cron|scheduled|locked|Template|Static|mcp|photon|cli|tags|dependencies|csp|visibility)\b/)[0];
+    const beforeTags = jsdocContent.split(/@(?:param|example|returns?|throws?|see|since|deprecated|version|author|license|ui|icon|format|stateful|autorun|async|webhook|cron|scheduled|locked|Template|Static|mcp|photon|cli|tags|dependencies|csp|visibility)\b/)[0];
 
     // Remove leading * from each line and trim
     const lines = beforeTags
@@ -1074,6 +1076,14 @@ export class SchemaExtractor {
    */
   private hasAutorunTag(jsdocContent: string): boolean {
     return /@autorun/i.test(jsdocContent);
+  }
+
+  /**
+   * Check if JSDoc contains @async tag
+   * Indicates this method runs in background — returns execution ID immediately
+   */
+  private hasAsyncTag(jsdocContent: string): boolean {
+    return /@async\b/i.test(jsdocContent);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════════

@@ -158,6 +158,53 @@ export class PhotonMCP {
     }
   }
   /**
+   * Cross-photon call handler - injected by runtime
+   * @internal
+   */
+  _callHandler?: (photon: string, method: string, params: Record<string, any>) => Promise<any>;
+
+  /**
+   * Call another photon's method through the daemon
+   *
+   * Routes the call through the daemon for cross-process execution.
+   * The target photon must be installed and loaded by the daemon.
+   *
+   * @param target Dot-separated target: 'photonName.methodName'
+   * @param params Parameters to pass to the method
+   * @returns The method's return value
+   *
+   * @example
+   * ```typescript
+   * // Call billing photon's generate method
+   * const invoice = await this.call('billing.generate', { orderId: '123' });
+   *
+   * // Call shipping photon
+   * const label = await this.call('shipping.createLabel', { orderId: '123' });
+   * ```
+   *
+   * @throws Error if call handler is not set or target format is invalid
+   */
+  protected async call(target: string, params: Record<string, any> = {}): Promise<any> {
+    const dotIndex = target.indexOf('.');
+    if (dotIndex === -1) {
+      throw new Error(
+        `Invalid call target: '${target}'. Expected format: 'photonName.methodName' (e.g., 'billing.generate')`
+      );
+    }
+
+    const photonName = target.slice(0, dotIndex);
+    const methodName = target.slice(dotIndex + 1);
+
+    if (!this._callHandler) {
+      throw new Error(
+        `Cross-photon calls not available. To use this.call('${target}'), the Photon must be run in a runtime with a daemon (e.g., Beam or CLI with daemon enabled).`
+      );
+    }
+
+    return this._callHandler(photonName, methodName, params);
+  }
+
+  /**
    * MCP client factory - injected by runtime
    * @internal
    */
