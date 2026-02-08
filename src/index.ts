@@ -434,6 +434,24 @@ export {
   assertArray,
 } from './validation.js';
 
+// ===== EXECUTION AUDIT TRAIL =====
+// Zero-effort execution recording for debugging and observability
+export {
+  AuditTrail,
+  getAuditTrail,
+  setAuditTrail,
+  generateExecutionId,
+  type ExecutionRecord,
+  type AuditQueryOptions,
+} from './audit.js';
+
+// ===== SCOPED MEMORY =====
+// Framework-level key-value storage (this.memory on PhotonMCP)
+export {
+  MemoryProvider,
+  type MemoryScope,
+} from './memory.js';
+
 // ===== ASSET DISCOVERY =====
 // Discover UI, prompt, and resource assets from Photon files
 export {

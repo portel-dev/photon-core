@@ -43,6 +43,7 @@ import { MCPClient, MCPClientFactory, createMCPProxy } from '@portel/mcp';
 import { executionContext } from '@portel/cli';
 import { getBroker } from './channels/index.js';
 import { withLock as withLockHelper } from './decorators.js';
+import { MemoryProvider } from './memory.js';
 
 /**
  * Simple base class for creating Photon MCPs
@@ -58,6 +59,51 @@ export class PhotonMCP {
    * @internal
    */
   _photonName?: string;
+
+  /**
+   * Scoped memory provider - lazy-initialized on first access
+   * @internal
+   */
+  private _memory?: MemoryProvider;
+
+  /**
+   * Session ID for session-scoped memory - set by runtime
+   * @internal
+   */
+  _sessionId?: string;
+
+  /**
+   * Scoped key-value storage for photon data
+   *
+   * Provides persistent storage with 3 scopes:
+   * - `photon` (default): Private to this photon
+   * - `session`: Per-user session
+   * - `global`: Shared across all photons
+   *
+   * @example
+   * ```typescript
+   * // Store and retrieve data
+   * await this.memory.set('items', [{ id: '1', text: 'Buy milk' }]);
+   * const items = await this.memory.get<Item[]>('items');
+   *
+   * // Global scope (shared across photons)
+   * await this.memory.set('theme', 'dark', 'global');
+   *
+   * // Atomic update
+   * await this.memory.update<number>('count', n => (n ?? 0) + 1);
+   * ```
+   */
+  get memory(): MemoryProvider {
+    if (!this._memory) {
+      const name = this._photonName || this.constructor.name
+        .replace(/MCP$/, '')
+        .replace(/([A-Z])/g, '-$1')
+        .toLowerCase()
+        .replace(/^-/, '');
+      this._memory = new MemoryProvider(name, this._sessionId);
+    }
+    return this._memory;
+  }
 
   /**
    * Emit an event/progress update
