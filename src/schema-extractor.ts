@@ -1541,7 +1541,7 @@ export class SchemaExtractor {
     const params = this.extractConstructorParams(source);
     const mcpDeps = this.extractMCPDependencies(source);
     const photonDeps = this.extractPhotonDependencies(source);
-    const isStateful = /@stateful\s+true/.test(source);
+    const isStateful = /@stateful\b/.test(source);
 
     // Build lookup maps
     const mcpMap = new Map(mcpDeps.map(d => [d.name, d]));
