@@ -365,6 +365,7 @@ export {
 // Shared Photon class detection for loaders
 export {
   isClass,
+  hasMethods,
   hasAsyncMethods,
   findPhotonClass,
   findPhotonClasses,

@@ -109,14 +109,11 @@ export class SchemaExtractor {
         // Check if this is an async generator method (has asterisk token)
         const isGenerator = member.asteriskToken !== undefined;
 
-        // Extract parameter type information
-        // Extract parameter type (may be undefined for no-arg methods)
-        const paramsType = this.getFirstParameterType(member, sourceFile);
-
-        // Build schema from TypeScript type (empty for no-arg methods)
-        const { properties, required } = paramsType
-          ? this.buildSchemaFromType(paramsType, sourceFile)
-          : { properties: {}, required: [] };
+        // Extract parameter schema from method signature
+        // Supports both patterns:
+        //   add(item: string)              → { item: { type: "string" } }
+        //   add(params: { item: string })  → { item: { type: "string" } }
+        const { properties, required, simpleParams } = this.extractMethodParams(member, sourceFile);
 
         // Extract descriptions from JSDoc
         const paramDocs = this.extractParamDocs(jsdoc);
@@ -202,6 +199,7 @@ export class SchemaExtractor {
             ...(autorun ? { autorun: true } : {}),
             ...(isAsync ? { isAsync: true } : {}),
             ...(isStaticMethod ? { isStatic: true } : {}),
+            ...(simpleParams ? { simpleParams: true } : {}),
             // Daemon features
             ...(webhook !== undefined ? { webhook } : {}),
             ...(scheduled ? { scheduled } : {}),
@@ -215,10 +213,15 @@ export class SchemaExtractor {
         // Look for class declarations
         if (ts.isClassDeclaration(node)) {
           node.members.forEach((member) => {
-            // Look for async methods (including async generators with *)
-            if (ts.isMethodDeclaration(member) &&
-                member.modifiers?.some(m => m.kind === ts.SyntaxKind.AsyncKeyword)) {
-              processMethod(member);
+            // Process all public methods (sync or async)
+            // Skip private/protected — only public methods become tools
+            if (ts.isMethodDeclaration(member)) {
+              const isPrivate = member.modifiers?.some(
+                m => m.kind === ts.SyntaxKind.PrivateKeyword || m.kind === ts.SyntaxKind.ProtectedKeyword
+              );
+              if (!isPrivate) {
+                processMethod(member);
+              }
             }
           });
         }
@@ -280,6 +283,61 @@ export class SchemaExtractor {
 
     const firstParam = method.parameters[0];
     return firstParam.type;
+  }
+
+  /**
+   * Extract method parameters into JSON schema properties.
+   *
+   * Handles two patterns:
+   *   1. Object param: add(params: { item: string }) → extracts inner properties
+   *   2. Simple params: add(item: string) or add(a: number, b: number) → each param becomes a property
+   */
+  private extractMethodParams(method: ts.MethodDeclaration, sourceFile: ts.SourceFile): { properties: Record<string, any>, required: string[], simpleParams?: boolean } {
+    if (method.parameters.length === 0) {
+      return { properties: {}, required: [] };
+    }
+
+    const firstParam = method.parameters[0];
+    const firstType = firstParam.type;
+
+    // Pattern 1: Single object param — add(params: { item: string })
+    // Unwrap the object type's properties directly
+    if (firstType && method.parameters.length === 1) {
+      // Direct type literal: { item: string }
+      if (ts.isTypeLiteralNode(firstType)) {
+        return this.buildSchemaFromType(firstType, sourceFile);
+      }
+      // Union containing object literal: { item: string } | string
+      if (ts.isUnionTypeNode(firstType)) {
+        for (const memberType of firstType.types) {
+          if (ts.isTypeLiteralNode(memberType)) {
+            return this.buildSchemaFromType(memberType, sourceFile);
+          }
+        }
+      }
+    }
+
+    // Pattern 2: Simple typed params — add(item: string) or add(a: number, b: number)
+    // Flag as simpleParams so the runtime destructures the params object into individual args
+    const properties: Record<string, any> = {};
+    const required: string[] = [];
+
+    for (const param of method.parameters) {
+      const paramName = param.name.getText(sourceFile);
+      const isOptional = param.questionToken !== undefined || param.initializer !== undefined;
+
+      if (!isOptional) {
+        required.push(paramName);
+      }
+
+      if (param.type) {
+        properties[paramName] = this.typeNodeToSchema(param.type, sourceFile);
+      } else {
+        properties[paramName] = { type: 'string' };
+      }
+    }
+
+    return { properties, required, simpleParams: true };
   }
 
   /**

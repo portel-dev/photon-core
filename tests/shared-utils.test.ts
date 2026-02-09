@@ -13,6 +13,7 @@ import assert from 'node:assert/strict';
 // Class detection
 import {
   isClass,
+  hasMethods,
   hasAsyncMethods,
   findPhotonClass,
   findPhotonClasses,
@@ -138,6 +139,22 @@ async function run() {
     assert.ok(!hasAsyncMethods(Foo));
   });
 
+  test('hasMethods detects instance method', () => {
+    class Foo { bar() {} }
+    assert.ok(hasMethods(Foo));
+  });
+
+  test('hasMethods returns false for empty class', () => {
+    class Foo {}
+    assert.ok(!hasMethods(Foo));
+  });
+
+  test('findPhotonClass accepts sync default export', () => {
+    class List { add(item: string) {} remove(item: string) {} }
+    const mod = { default: List } as any;
+    assert.strictEqual(findPhotonClass(mod), List);
+  });
+
   test('findPhotonClass prefers default export', () => {
     class A { async foo() {} }
     class B { async bar() {} }
@@ -151,8 +168,29 @@ async function run() {
     assert.strictEqual(findPhotonClass(mod), MyPhoton);
   });
 
+  test('findPhotonClass named export prefers async over sync', () => {
+    class Helper { format() {} }
+    class MyPhoton { async run() {} }
+    const mod = { Helper, MyPhoton } as any;
+    assert.strictEqual(findPhotonClass(mod), MyPhoton);
+  });
+
+  test('findPhotonClass falls back to sync named export', () => {
+    class MyPhoton { add() {} remove() {} }
+    const mod = { MyPhoton } as any;
+    assert.strictEqual(findPhotonClass(mod), MyPhoton);
+  });
+
   test('findPhotonClass returns null for empty module', () => {
     assert.strictEqual(findPhotonClass({}), null);
+  });
+
+  test('findPhotonClasses finds sync classes', () => {
+    class A { a() {} }
+    class B { b() {} }
+    const mod = { A, B } as any;
+    const result = findPhotonClasses(mod);
+    assert.strictEqual(result.length, 2);
   });
 
   test('findPhotonClasses finds multiple', () => {

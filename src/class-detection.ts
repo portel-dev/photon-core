@@ -52,40 +52,72 @@ export function hasAsyncMethods(ClassConstructor: new (...args: unknown[]) => un
 }
 
 /**
+ * Check if a class has any public methods (instance or static)
+ */
+export function hasMethods(ClassConstructor: new (...args: unknown[]) => unknown): boolean {
+  const prototype = ClassConstructor.prototype;
+  for (const key of Object.getOwnPropertyNames(prototype)) {
+    if (key === 'constructor') continue;
+    const descriptor = Object.getOwnPropertyDescriptor(prototype, key);
+    if (descriptor && typeof descriptor.value === 'function') {
+      return true;
+    }
+  }
+
+  for (const key of Object.getOwnPropertyNames(ClassConstructor)) {
+    if (['length', 'name', 'prototype'].includes(key)) continue;
+    const descriptor = Object.getOwnPropertyDescriptor(ClassConstructor, key);
+    if (descriptor && typeof descriptor.value === 'function') {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
  * Find a single Photon class in a module
  *
  * Priority: default export first, then named exports.
- * Returns the first class with async methods, or null.
+ * Default exports are trusted unconditionally — the file is named .photon.ts,
+ * so the user's intent is clear. For named exports, async methods are used
+ * as a heuristic to distinguish photon classes from helper classes.
  */
 export function findPhotonClass(module: Record<string, unknown>): (new (...args: unknown[]) => unknown) | null {
-  // Try default export first
+  // Default export = the user's photon class. Trust it.
   if (module.default && isClass(module.default)) {
-    if (hasAsyncMethods(module.default)) {
-      return module.default;
-    }
+    return module.default;
   }
 
-  // Try named exports
+  // Named exports: prefer classes with async methods (likely the photon),
+  // but fall back to any class with public methods if none are async
+  let fallback: (new (...args: unknown[]) => unknown) | null = null;
+
   for (const exportedItem of Object.values(module)) {
-    if (isClass(exportedItem) && hasAsyncMethods(exportedItem)) {
-      return exportedItem;
+    if (isClass(exportedItem)) {
+      if (hasAsyncMethods(exportedItem)) {
+        return exportedItem;
+      }
+      if (!fallback && hasMethods(exportedItem)) {
+        fallback = exportedItem;
+      }
     }
   }
 
-  return null;
+  return fallback;
 }
 
 /**
  * Find all Photon classes in a module
  *
- * Returns every exported class that has async methods.
+ * Returns every exported class that has methods.
  * Used by NCP which may load multiple classes from one file.
  */
 export function findPhotonClasses(module: Record<string, unknown>): Array<new (...args: unknown[]) => unknown> {
   const classes: Array<new (...args: unknown[]) => unknown> = [];
 
   for (const exportedItem of Object.values(module)) {
-    if (isClass(exportedItem) && hasAsyncMethods(exportedItem)) {
+    if (isClass(exportedItem) && hasMethods(exportedItem)) {
       classes.push(exportedItem);
     }
   }
