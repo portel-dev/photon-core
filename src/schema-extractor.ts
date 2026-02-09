@@ -1541,6 +1541,7 @@ export class SchemaExtractor {
     const params = this.extractConstructorParams(source);
     const mcpDeps = this.extractMCPDependencies(source);
     const photonDeps = this.extractPhotonDependencies(source);
+    const isStateful = /@stateful\s+true/.test(source);
 
     // Build lookup maps
     const mcpMap = new Map(mcpDeps.map(d => [d.name, d]));
@@ -1572,6 +1573,15 @@ export class SchemaExtractor {
           param,
           injectionType: 'photon' as const,
           photonDependency: photonMap.get(param.name),
+        };
+      }
+
+      // Non-primitive with default on @stateful class → persisted state
+      if (isStateful && param.hasDefault) {
+        return {
+          param,
+          injectionType: 'state' as const,
+          stateKey: param.name,
         };
       }
 

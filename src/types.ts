@@ -112,7 +112,7 @@ export interface ConstructorParam {
 /**
  * Injection type for constructor parameters
  */
-export type InjectionType = 'env' | 'mcp' | 'photon';
+export type InjectionType = 'env' | 'mcp' | 'photon' | 'state';
 
 /**
  * Resolved injection info for a constructor parameter
@@ -126,6 +126,8 @@ export interface ResolvedInjection {
   photonDependency?: PhotonDependency;
   /** For 'env' - the environment variable name */
   envVarName?: string;
+  /** For 'state' - the key name in the persisted snapshot JSON */
+  stateKey?: string;
 }
 
 /**
