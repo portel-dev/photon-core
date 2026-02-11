@@ -1258,6 +1258,21 @@ export class SchemaExtractor {
       return subtype ? `code:${subtype}` as OutputFormat : 'code';
     }
 
+    // Match chart format (with optional chart type: bar, pie, line, donut, area)
+    if (format === 'chart') {
+      return subtype ? `chart:${subtype}` as OutputFormat : 'chart';
+    }
+
+    // Match visualization formats
+    if (['metric', 'gauge', 'timeline', 'dashboard', 'cart'].includes(format)) {
+      return format as OutputFormat;
+    }
+
+    // Match container formats
+    if (['panels', 'tabs', 'accordion', 'stack', 'columns'].includes(format)) {
+      return format as OutputFormat;
+    }
+
     return undefined;
   }
 

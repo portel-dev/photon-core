@@ -4,13 +4,17 @@
 
 /**
  * Output format types
- * - Structural: primitive, table, tree, list, none
- * - Content: json, markdown, yaml, xml, html, code, code:<lang>
+ * - Structural: primitive, table, tree, list, none, card, grid, chips, kv
+ * - Content: json, markdown, yaml, xml, html, mermaid, code, code:<lang>
+ * - Visualization: chart, chart:<type>, metric, gauge, timeline, dashboard, cart
+ * - Container: panels, tabs, accordion, stack, columns
  */
 export type OutputFormat =
   | 'primitive' | 'table' | 'tree' | 'list' | 'none'
   | 'json' | 'markdown' | 'yaml' | 'xml' | 'html' | 'mermaid'
-  | 'card' | 'grid' | 'chips' | 'kv' | 'tabs' | 'accordion'
+  | 'card' | 'grid' | 'chips' | 'kv'
+  | 'chart' | `chart:${string}` | 'metric' | 'gauge' | 'timeline' | 'dashboard' | 'cart'
+  | 'panels' | 'tabs' | 'accordion' | 'stack' | 'columns'
   | `code` | `code:${string}`;
 
 export interface PhotonTool {
