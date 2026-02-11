@@ -135,6 +135,82 @@ test('sort emits changed event', () => {
   assert(events[0].event === 'items:changed', 'event should be items:changed');
 });
 
+console.log('\n🧪 ReactiveArray Auto-Stamp Tests\n');
+
+test('push auto-stamps objects with _addedAt', () => {
+  const events: { event: string; data: unknown }[] = [];
+  const arr = ReactiveArray.create<Record<string, unknown>>('items', (e, d) => events.push({ event: e, data: d }));
+  const item = { id: 1, name: 'test' };
+  arr.push(item);
+  assert(typeof item._addedAt === 'number', '_addedAt should be a number');
+  assert(item._addedAt <= Date.now(), '_addedAt should be <= now');
+  assert(item._addedAt > Date.now() - 1000, '_addedAt should be recent');
+});
+
+test('push does not stamp objects with existing createdAt', () => {
+  const events: { event: string; data: unknown }[] = [];
+  const arr = ReactiveArray.create<Record<string, unknown>>('items', (e, d) => events.push({ event: e, data: d }));
+  const item = { id: 1, createdAt: 1234567890 };
+  arr.push(item);
+  assert(item._addedAt === undefined, '_addedAt should not be set when createdAt exists');
+  assert(item.createdAt === 1234567890, 'createdAt should be preserved');
+});
+
+test('push does not stamp objects with existing created_at', () => {
+  const events: { event: string; data: unknown }[] = [];
+  const arr = ReactiveArray.create<Record<string, unknown>>('items', (e, d) => events.push({ event: e, data: d }));
+  const item = { id: 1, created_at: '2025-01-01' };
+  arr.push(item);
+  assert(item._addedAt === undefined, '_addedAt should not be set when created_at exists');
+});
+
+test('push does not stamp primitives', () => {
+  const events: { event: string; data: unknown }[] = [];
+  const arr = ReactiveArray.create<number>('items', (e, d) => events.push({ event: e, data: d }));
+  arr.push(42);
+  assert(arr[0] === 42, 'primitive should be unchanged');
+});
+
+test('push does not stamp arrays', () => {
+  const events: { event: string; data: unknown }[] = [];
+  const arr = ReactiveArray.create<number[]>('items', (e, d) => events.push({ event: e, data: d }));
+  const inner = [1, 2, 3];
+  arr.push(inner);
+  assert((inner as any)._addedAt === undefined, 'arrays should not be stamped');
+});
+
+test('unshift auto-stamps objects with _addedAt', () => {
+  const events: { event: string; data: unknown }[] = [];
+  const arr = ReactiveArray.create<Record<string, unknown>>('items', (e, d) => events.push({ event: e, data: d }));
+  const item = { id: 1, name: 'test' };
+  arr.unshift(item);
+  assert(typeof item._addedAt === 'number', '_addedAt should be stamped on unshift');
+});
+
+test('splice auto-stamps inserted objects with _addedAt', () => {
+  const events: { event: string; data: unknown }[] = [];
+  const arr = ReactiveArray.create<Record<string, unknown>>('items', (e, d) => events.push({ event: e, data: d }), [{ id: 0 }]);
+  const newItem = { id: 1, name: 'spliced' };
+  arr.splice(0, 0, newItem);
+  assert(typeof newItem._addedAt === 'number', '_addedAt should be stamped on splice insert');
+});
+
+test('set auto-stamps objects with _updatedAt', () => {
+  const events: { event: string; data: unknown }[] = [];
+  const arr = ReactiveArray.create<Record<string, unknown>>('items', (e, d) => events.push({ event: e, data: d }), [{ id: 0 }]);
+  const updated = { id: 0, name: 'updated' };
+  arr.set(0, updated);
+  assert(typeof updated._updatedAt === 'number', '_updatedAt should be stamped on set');
+  assert(updated._updatedAt! <= Date.now(), '_updatedAt should be <= now');
+});
+
+test('set does not stamp primitives with _updatedAt', () => {
+  const events: { event: string; data: unknown }[] = [];
+  const arr = ReactiveArray.create<number>('items', (e, d) => events.push({ event: e, data: d }), [1]);
+  arr.set(0, 42);
+  assert(arr[0] === 42, 'primitive should just be set');
+});
+
 console.log('\n🧪 ReactiveMap Tests\n');
 
 test('creates empty map', () => {

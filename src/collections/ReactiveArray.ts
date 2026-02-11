@@ -51,10 +51,27 @@ export class ReactiveArray<T> extends Array<T> {
   }
 
   /**
+   * Auto-stamp plain objects with `_addedAt` timestamp on add operations.
+   * Only stamps if no recognized timestamp field already exists.
+   */
+  private _stampAdded(items: T[]): void {
+    const now = Date.now();
+    for (const item of items) {
+      if (item && typeof item === 'object' && !Array.isArray(item)) {
+        const rec = item as Record<string, unknown>;
+        if (rec._addedAt === undefined && rec.createdAt === undefined && rec.created_at === undefined) {
+          rec._addedAt = now;
+        }
+      }
+    }
+  }
+
+  /**
    * Add one or more elements to the end of the array.
    * Emits `{prop}:added` for each item.
    */
   push(...items: T[]): number {
+    this._stampAdded(items);
     const result = super.push(...items);
     items.forEach((item) => this._emitter(`${this._propertyName}:added`, item));
     return result;
@@ -89,6 +106,7 @@ export class ReactiveArray<T> extends Array<T> {
    * Emits `{prop}:added` for each item.
    */
   unshift(...items: T[]): number {
+    this._stampAdded(items);
     const result = super.unshift(...items);
     items.forEach((item) => this._emitter(`${this._propertyName}:added`, item));
     return result;
@@ -99,6 +117,7 @@ export class ReactiveArray<T> extends Array<T> {
    * Emits `{prop}:removed` for deleted items and `{prop}:added` for inserted items.
    */
   splice(start: number, deleteCount?: number, ...items: T[]): T[] {
+    this._stampAdded(items);
     const removed = super.splice(start, deleteCount ?? 0, ...items);
     removed.forEach((item) =>
       this._emitter(`${this._propertyName}:removed`, item)
@@ -112,6 +131,9 @@ export class ReactiveArray<T> extends Array<T> {
    * Emits `{prop}:updated` with `{ index, value, previous }`.
    */
   set(index: number, value: T): void {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      (value as Record<string, unknown>)._updatedAt = Date.now();
+    }
     const previous = this[index];
     this[index] = value;
     this._emitter(`${this._propertyName}:updated`, { index, value, previous });
