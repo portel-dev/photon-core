@@ -122,14 +122,14 @@ const colorPalette = {
     100: '#ffffff',
   },
 
-  // Light-theme neutrals (cool blue-gray undertone, higher contrast)
+  // Light-theme neutrals (warm cream/beige undertone)
   neutralLight: {
-    85: '#BCC5CF',   // heavy borders / dividers
-    88: '#C4CDD5',   // surface-container-highest
-    91: '#D5DBE1',   // surface-container-high
-    94: '#E5E9EE',   // bg-app — visible structure
-    96: '#EBEEF2',   // surface-container
-    98: '#F6F7F9',   // surface — slightly off-white panels
+    85: '#C8C0B8',   // heavy borders / dividers
+    88: '#D0C9C1',   // surface-container-highest
+    91: '#DDD7CF',   // surface-container-high
+    94: '#EAE4DD',   // bg-app — warm cream structure
+    96: '#F0EBE5',   // surface-container
+    98: '#F8F5F1',   // surface — warm off-white panels
   },
 
   // Primary (blue - trust, action)
@@ -244,10 +244,10 @@ export const colorsLight = {
   surfaceContainerHighest: colorPalette.neutralLight[88], // #C4CDD5
   surfaceBright: colorPalette.neutral[100],           // #FFFFFF — overlays/modals
 
-  // Text on surfaces (deep charcoal, high contrast)
-  onSurface: '#1A2332',         // 12.3:1 on #E5E9EE — WCAG AAA
-  onSurfaceVariant: '#3D4C5C',  // darker variant for readability
-  onSurfaceMuted: '#556270',    // 5.1:1 on #E5E9EE — WCAG AA
+  // Text on surfaces (warm charcoal, high contrast)
+  onSurface: '#2C2420',         // warm brown-charcoal — WCAG AAA
+  onSurfaceVariant: '#4A3F38',  // warm dark brown for readability
+  onSurfaceMuted: '#6B5E54',    // warm muted brown — WCAG AA
 
   // Primary (darker for light theme)
   primary: colorPalette.primary[40],
@@ -273,9 +273,9 @@ export const colorsLight = {
   onError: colorPalette.neutral[100], // white text
   onErrorContainer: colorPalette.error[10],
 
-  // Outline (visible but not harsh)
-  outline: '#8B95A3',          // stronger than before for visibility
-  outlineVariant: '#D1D5DB',   // visible border, not washed out
+  // Outline (warm, visible but not harsh)
+  outline: '#9B9088',          // warm gray-brown for visibility
+  outlineVariant: '#D5CFC8',   // warm border, not washed out
 
   // Scrim (overlay — lighter than dark theme's 0.5)
   scrim: 'rgba(0, 0, 0, 0.2)' as const,
