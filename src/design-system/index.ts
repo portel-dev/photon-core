@@ -9,8 +9,7 @@
  * - Apple HIG: https://developer.apple.com/design/human-interface-guidelines/layout
  */
 
-export * from './tokens.js';
-export * from './oklch.js';
+export * from './tokens.js'; // includes oklch.js re-exports
 export * from './transaction-ui.js';
 
 import { generateTokensCSS } from './tokens.js';

@@ -8,6 +8,9 @@
  * This is the foundation for all Photon UI - both BEAM interface and auto-generated UIs.
  */
 
+// Re-export OKLCH engine (browser-safe, no Node.js deps)
+export * from './oklch.js';
+
 // =============================================================================
 // SPACING - 8pt Grid System (Apple HIG)
 // =============================================================================
