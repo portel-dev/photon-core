@@ -222,7 +222,7 @@ export class PhotonMCP {
    */
   static getMCPName(): string {
     return this.name
-      .replace(/MCP$/, '') // Remove "MCP" suffix if present
+      .replace(/MCP$/, '')
       .replace(/([A-Z])/g, '-$1')
       .toLowerCase()
       .replace(/^-/, ''); // Remove leading dash

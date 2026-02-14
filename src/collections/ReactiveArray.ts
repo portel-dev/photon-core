@@ -28,8 +28,8 @@
 export type Emitter = (event: string, data: unknown) => void;
 
 export class ReactiveArray<T> extends Array<T> {
-  private _propertyName: string = '';
-  private _emitter: Emitter = () => {};
+  protected _propertyName: string = '';
+  protected _emitter: Emitter = () => {};
 
   /**
    * Create a new ReactiveArray bound to a property name and emitter function.

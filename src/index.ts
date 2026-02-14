@@ -249,20 +249,6 @@ export {
   type OutputHandler,
   type GeneratorExecutorConfig,
   type ExtractedAsk,
-
-  // Legacy compatibility
-  isInputYield,
-  isProgressYield,
-  isStreamYield,
-  isLogYield,
-  extractYields,
-  type PromptYield,
-  type ConfirmYield,
-  type SelectYield,
-  type ProgressYield,
-  type StreamYield,
-  type LogYield,
-  type ExtractedYield,
 } from './generator.js';
 
 // Stateful Workflow Execution

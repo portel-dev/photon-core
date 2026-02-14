@@ -130,11 +130,9 @@ export function isCheckpointYield(y: StatefulYield): y is CheckpointYield {
  * State log writer for a single workflow run
  */
 export class StateLog {
-  private runId: string;
   private logPath: string;
 
   constructor(runId: string, runsDir?: string) {
-    this.runId = runId;
     this.logPath = path.join(runsDir || RUNS_DIR, `${runId}.jsonl`);
   }
 
@@ -156,8 +154,8 @@ export class StateLog {
   /**
    * Write start entry
    */
-  async writeStart(tool: string, params: Record<string, any>): Promise<void> {
-    await this.append({ t: 'start', tool, params } as StateLogStart);
+  async writeStart(tool: string, params: Record<string, any>, photon?: string): Promise<void> {
+    await this.append({ t: 'start', tool, params, ...(photon ? { photon } : {}) } as StateLogStart);
   }
 
   /**
@@ -225,7 +223,26 @@ export class StateLog {
    * Stream entries from the log (memory efficient for large logs)
    */
   async *stream(): AsyncGenerator<StateLogEntry> {
-    const fileStream = createReadStream(this.logPath);
+    let fileStream;
+    try {
+      fileStream = createReadStream(this.logPath);
+    } catch (error: any) {
+      if (error.code === 'ENOENT') return;
+      throw error;
+    }
+
+    // Handle ENOENT that surfaces as a stream error
+    const streamReady = new Promise<void>((resolve, reject) => {
+      fileStream.once('ready', resolve);
+      fileStream.once('error', (err: any) => {
+        if (err.code === 'ENOENT') resolve();
+        else reject(err);
+      });
+    });
+    await streamReady;
+
+    if (fileStream.destroyed) return;
+
     const rl = createInterface({ input: fileStream });
 
     for await (const line of rl) {
@@ -418,7 +435,7 @@ export async function executeStatefulGenerator<T>(
 
   // Write start entry (only if not resuming)
   if (!resumed) {
-    await log.writeStart(config.tool, config.params);
+    await log.writeStart(config.tool, config.params, config.photon);
   }
 
   try {
@@ -512,7 +529,7 @@ export async function executeStatefulGenerator<T>(
         result = await generator.next(input);
       } else if (isEmitYield(yielded as PhotonYield)) {
         const emitYield = yielded as EmitYield;
-        await log.writeEmit(emitYield.emit, (emitYield as any).message, emitYield);
+        await log.writeEmit(emitYield.emit, 'message' in emitYield ? (emitYield as { message?: string }).message : undefined, emitYield);
 
         if (config.outputHandler) {
           await config.outputHandler(emitYield);
@@ -520,8 +537,7 @@ export async function executeStatefulGenerator<T>(
 
         result = await generator.next();
       } else {
-        // Unknown yield, skip
-        result = await generator.next();
+        throw new Error(`Unknown yield type: ${JSON.stringify(yielded)}`);
       }
     }
 
@@ -603,7 +619,7 @@ export async function getRunInfo(runId: string, runsDir?: string): Promise<Workf
 
   return {
     runId,
-    photon: '', // Would need to be stored in start entry
+    photon: (firstEntry as StateLogStart).photon || state.tool.split('.')[0] || 'unknown',
     tool: state.tool,
     params: state.params,
     status,
@@ -834,7 +850,7 @@ export async function maybeStatefulExecute<T>(
     await log.init();
 
     // Write start entry
-    await log.writeStart(config.tool, config.params);
+    await log.writeStart(config.tool, config.params, config.photon);
 
     // Replay buffered events to log
     for (const event of bufferedEvents) {
@@ -906,8 +922,7 @@ export async function maybeStatefulExecute<T>(
 
         result = await generator.next();
       } else {
-        // Unknown yield, skip
-        result = await generator.next();
+        throw new Error(`Unknown yield type: ${JSON.stringify(yielded)}`);
       }
     }
 

@@ -39,7 +39,7 @@ export interface McpAppsInitialize {
       width?: number;
       height?: number;
     };
-    // Legacy flat theme tokens (kept for backward compat with Photon apps)
+    // Flat theme tokens for Photon Bridge apps
     theme: Record<string, string>;
     safeAreaInsets?: { top: number; bottom: number; left: number; right: number };
   };
@@ -154,7 +154,6 @@ export function createMcpAppsInitialize(
         width: dimensions.width,
         height: dimensions.height,
       },
-      // Legacy flat theme tokens for backward compat
       theme: themeTokens,
       ...(context.safeAreaInsets ? { safeAreaInsets: context.safeAreaInsets } : {}),
     },
@@ -178,7 +177,7 @@ export function createThemeChangeMessages(theme: 'light' | 'dark'): unknown[] {
         styles: { variables: themeTokens },
       },
     },
-    // MCP Apps Extension (legacy name for backward compat)
+    // MCP Apps Extension (older spec draft name, still used by some clients)
     {
       jsonrpc: '2.0',
       method: 'ui/notifications/context',

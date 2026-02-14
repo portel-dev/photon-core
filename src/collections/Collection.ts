@@ -64,8 +64,8 @@ export class Collection<T> extends ReactiveArray<T> {
     initialItems?: T[]
   ): Collection<T> {
     const col = new Collection<T>(initialItems);
-    (col as any)._propertyName = propertyName;
-    (col as any)._emitter = emitter;
+    col._propertyName = propertyName;
+    col._emitter = emitter;
     return col;
   }
 
@@ -80,7 +80,7 @@ export class Collection<T> extends ReactiveArray<T> {
 
   private _result<U>(items: U[]): Collection<U> {
     const col = new Collection<U>(items);
-    (col as any)._emitter = NOOP_EMITTER;
+    col._emitter = NOOP_EMITTER;
     return col;
   }
 
@@ -116,7 +116,7 @@ export class Collection<T> extends ReactiveArray<T> {
           case '<': return (fieldVal as number) < (compareVal as number);
           case '>=': return (fieldVal as number) >= (compareVal as number);
           case '<=': return (fieldVal as number) <= (compareVal as number);
-          default: return false;
+          default: throw new Error(`Unknown comparison operator: ${op}`);
         }
       }) as T[]
     );

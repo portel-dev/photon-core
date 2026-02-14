@@ -15,9 +15,9 @@ export type LayoutType =
   | 'tree'      // Nested object as collapsible tree
   | 'kv'        // Flat object as key-value table
   | 'chips'     // Array of strings as chips/tags
-  | 'table'     // Legacy: grid table (backward compat)
-  | 'markdown'  // Legacy: markdown rendering
-  | 'mermaid'   // Legacy: mermaid diagrams
+  | 'table'     // Grid table display
+  | 'markdown'  // Markdown rendering
+  | 'mermaid'   // Mermaid diagrams
   | 'code'      // Code block with syntax highlighting
   | 'json'      // Raw JSON display
   | 'html';     // Raw HTML (for custom UIs)
@@ -230,7 +230,7 @@ export function parseLayoutHints(hintsString: string): LayoutHints {
     // Match @key value or @key value:renderer
     const match = part.match(/@(\w+)\s+([^:]+)(?::(\w+))?/);
     if (match) {
-      const [, key, value, renderer] = match;
+      const [, key, value] = match;
       const cleanValue = value.trim();
 
       switch (key) {
@@ -368,7 +368,7 @@ function parseLayoutHints(hintsString) {
   for (const part of parts) {
     const match = part.match(/@(\\w+)\\s+([^:]+)(?::(\\w+))?/);
     if (match) {
-      const [, key, value, renderer] = match;
+      const [, key, value] = match;
       const cleanValue = value.trim();
       switch (key) {
         case 'title': hints.title = cleanValue; break;

@@ -69,8 +69,8 @@ export function detectBroker(): ChannelBroker {
   if (process.env.PHOTON_REDIS_URL || process.env.REDIS_URL) {
     try {
       return createBrokerFromEnv('redis');
-    } catch {
-      // Redis broker not available, continue
+    } catch (error) {
+      console.warn(`[photon] Redis broker configured but failed to initialize: ${error instanceof Error ? error.message : error}`);
     }
   }
 
@@ -78,8 +78,8 @@ export function detectBroker(): ChannelBroker {
   if (process.env.PHOTON_CHANNEL_HTTP_URL) {
     try {
       return createBrokerFromEnv('http');
-    } catch {
-      // HTTP broker not available, continue
+    } catch (error) {
+      console.warn(`[photon] HTTP broker configured but failed to initialize: ${error instanceof Error ? error.message : error}`);
     }
   }
 
@@ -87,8 +87,8 @@ export function detectBroker(): ChannelBroker {
   if (process.env.PHOTON_CLOUDFLARE_ACCOUNT_ID || process.env.CF_ACCOUNT_ID) {
     try {
       return createBrokerFromEnv('cloudflare');
-    } catch {
-      // Cloudflare broker not available, continue
+    } catch (error) {
+      console.warn(`[photon] Cloudflare broker configured but failed to initialize: ${error instanceof Error ? error.message : error}`);
     }
   }
 
@@ -97,7 +97,7 @@ export function detectBroker(): ChannelBroker {
     try {
       return createBrokerFromEnv('daemon');
     } catch {
-      // Daemon broker not available, continue
+      // Daemon is optional for local dev, silent fallthrough
     }
   }
 

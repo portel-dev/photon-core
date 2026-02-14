@@ -70,7 +70,7 @@ export async function withLock<T>(
   const lockManager = getLockManager();
 
   if (!lockManager) {
-    // No lock manager, run without lock
+    console.warn(`[photon] withLock('${lockName}'): no lock manager configured, running without lock`);
     return fn();
   }
 

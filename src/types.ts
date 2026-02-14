@@ -413,6 +413,8 @@ export interface StateLogStart extends StateLogBase {
   tool: string;
   /** Input parameters */
   params: Record<string, any>;
+  /** Photon name that started this run */
+  photon?: string;
 }
 
 /**

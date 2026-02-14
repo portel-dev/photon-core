@@ -24,7 +24,7 @@
  * ```
  */
 
-import * as fs from 'fs';
+import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 
@@ -75,6 +75,18 @@ function keyPath(dir: string, key: string): string {
 }
 
 /**
+ * Check if a path exists (async)
+ */
+async function pathExists(p: string): Promise<boolean> {
+  try {
+    await fs.access(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Scoped Memory Provider
  *
  * Provides key-value storage with automatic JSON serialization.
@@ -112,11 +124,11 @@ export class MemoryProvider {
     const filePath = keyPath(dir, key);
 
     try {
-      if (!fs.existsSync(filePath)) return null;
-      const content = fs.readFileSync(filePath, 'utf-8');
+      const content = await fs.readFile(filePath, 'utf-8');
       return JSON.parse(content) as T;
-    } catch {
-      return null;
+    } catch (error: any) {
+      if (error.code === 'ENOENT') return null;
+      throw error;
     }
   }
 
@@ -130,12 +142,12 @@ export class MemoryProvider {
   async set<T = any>(key: string, value: T, scope: MemoryScope = 'photon'): Promise<void> {
     const dir = resolveDir(this._photonId, scope, this._sessionId);
 
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
+    if (!await pathExists(dir)) {
+      await fs.mkdir(dir, { recursive: true });
     }
 
     const filePath = keyPath(dir, key);
-    fs.writeFileSync(filePath, JSON.stringify(value, null, 2));
+    await fs.writeFile(filePath, JSON.stringify(value, null, 2));
   }
 
   /**
@@ -149,11 +161,13 @@ export class MemoryProvider {
     const dir = resolveDir(this._photonId, scope, this._sessionId);
     const filePath = keyPath(dir, key);
 
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
+    try {
+      await fs.unlink(filePath);
       return true;
+    } catch (error: any) {
+      if (error.code === 'ENOENT') return false;
+      throw error;
     }
-    return false;
   }
 
   /**
@@ -164,7 +178,7 @@ export class MemoryProvider {
    */
   async has(key: string, scope: MemoryScope = 'photon'): Promise<boolean> {
     const dir = resolveDir(this._photonId, scope, this._sessionId);
-    return fs.existsSync(keyPath(dir, key));
+    return pathExists(keyPath(dir, key));
   }
 
   /**
@@ -175,14 +189,14 @@ export class MemoryProvider {
   async keys(scope: MemoryScope = 'photon'): Promise<string[]> {
     const dir = resolveDir(this._photonId, scope, this._sessionId);
 
-    if (!fs.existsSync(dir)) return [];
-
     try {
-      return fs.readdirSync(dir)
+      const files = await fs.readdir(dir);
+      return files
         .filter(f => f.endsWith('.json'))
-        .map(f => f.slice(0, -5)); // Remove .json extension
-    } catch {
-      return [];
+        .map(f => f.slice(0, -5));
+    } catch (error: any) {
+      if (error.code === 'ENOENT') return [];
+      throw error;
     }
   }
 
@@ -194,11 +208,13 @@ export class MemoryProvider {
   async clear(scope: MemoryScope = 'photon'): Promise<void> {
     const dir = resolveDir(this._photonId, scope, this._sessionId);
 
-    if (fs.existsSync(dir)) {
-      const files = fs.readdirSync(dir).filter(f => f.endsWith('.json'));
-      for (const file of files) {
-        fs.unlinkSync(path.join(dir, file));
-      }
+    try {
+      const files = await fs.readdir(dir);
+      const jsonFiles = files.filter(f => f.endsWith('.json'));
+      await Promise.all(jsonFiles.map(file => fs.unlink(path.join(dir, file))));
+    } catch (error: any) {
+      if (error.code === 'ENOENT') return;
+      throw error;
     }
   }
 
@@ -222,7 +238,10 @@ export class MemoryProvider {
   }
 
   /**
-   * Update a value atomically (read-modify-write)
+   * Update a value with read-modify-write
+   *
+   * Note: Not truly atomic under concurrent access. For concurrent
+   * writes, use distributed locking via `withLock()`.
    *
    * @param key The key to update
    * @param updater Function that receives current value and returns new value
