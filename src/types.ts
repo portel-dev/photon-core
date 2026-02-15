@@ -26,6 +26,8 @@ export interface PhotonTool {
     required?: string[];
   };
   outputFormat?: OutputFormat;
+  /** When true, method uses individual params instead of a single params object */
+  simpleParams?: boolean;
 }
 
 /**
@@ -101,6 +103,8 @@ export interface PhotonMCPClass {
   description?: string;
   tools: PhotonTool[];
   instance: any;
+  /** Class constructor for static method access */
+  classConstructor?: Record<string, Function>;
 }
 
 export interface ConstructorParam {
@@ -245,6 +249,8 @@ export interface UIAsset {
   mimeType?: string;
   /** Tool this UI is linked to (from method @ui annotation) */
   linkedTool?: string;
+  /** MCP resource URI (set by loader, e.g., 'ui://photon-name/main-ui') */
+  uri?: string;
 }
 
 /**
