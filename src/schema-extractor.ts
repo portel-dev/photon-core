@@ -716,24 +716,44 @@ export class SchemaExtractor {
    * Extract main description from JSDoc comment
    */
   private extractDescription(jsdocContent: string): string {
-    // Split by @param to get only the description part (also stop at other @tags)
-    const beforeTags = jsdocContent.split(/@(?:param|example|returns?|throws?|see|since|deprecated|version|author|license|ui|icon|format|stateful|autorun|async|webhook|cron|scheduled|locked|Template|Static|mcp|photon|cli|tags|dependencies|csp|visibility)\b/)[0];
+    // Split by @tags that appear at start of a JSDoc line (after optional * prefix)
+    // This avoids matching @tag references inline in description text
+    const beforeTags = jsdocContent.split(/(?:^|\n)\s*\*?\s*@(?:param|example|returns?|throws?|see|since|deprecated|version|author|license|ui|icon|format|stateful|autorun|async|webhook|cron|scheduled|locked|Template|Static|mcp|photon|cli|tags|dependencies|csp|visibility)\b/)[0];
 
     // Remove leading * from each line and trim
     const lines = beforeTags
       .split('\n')
-      .map((line) => line.trim().replace(/^\*\s?/, ''))
-      .filter((line) => line !== ''); // Keep non-empty lines
+      .map((line) => line.trim().replace(/^\*\s?/, ''));
 
-    // Take lines up to the first markdown heading (## sections are extended docs)
-    const descLines: string[] = [];
+    // Build description with paragraph-aware joining:
+    // - Blank lines = paragraph boundaries (insert period separator)
+    // - Non-blank consecutive lines = continuation (join with space)
+    let prevWasBlank = false;
+    const parts: string[] = [];
     for (const line of lines) {
+      if (line.length === 0) {
+        prevWasBlank = true;
+        continue;
+      }
+      // Stop at markdown headings (## sections are extended docs)
       if (line.startsWith('#')) break;
-      descLines.push(line);
+
+      if (parts.length === 0) {
+        parts.push(line);
+      } else if (prevWasBlank) {
+        // Paragraph break — add period if previous part doesn't end with punctuation
+        const prev = parts[parts.length - 1];
+        const needsPeriod = !/[.!?:,;]$/.test(prev);
+        parts[parts.length - 1] = prev + (needsPeriod ? '. ' : ' ');
+        parts.push(line);
+      } else {
+        // Continuation line — join with space
+        parts[parts.length - 1] += ' ' + line;
+      }
+      prevWasBlank = false;
     }
 
-    // Join all description lines into a single string
-    const description = descLines.join(' ');
+    const description = parts.join('');
 
     // Clean up multiple spaces
     return description.replace(/\s+/g, ' ').trim() || 'No description';
