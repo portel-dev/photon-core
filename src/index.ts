@@ -446,6 +446,14 @@ export {
   autoDiscoverAssets,
 } from './asset-discovery.js';
 
+// ===== FILE WATCHING =====
+// Reusable photon file watcher with symlink resolution, debouncing, rename handling
+export { PhotonWatcher, type PhotonWatcherOptions } from './watcher.js';
+
+// ===== INSTANCE STORE =====
+// Named instance state persistence for daemon, NCP, Lumina
+export { InstanceStore, type InstanceStoreOptions } from './instance-store.js';
+
 // ===== MANAGED COLLECTIONS =====
 // Auto-emit events on mutations for seamless real-time sync
 export {
