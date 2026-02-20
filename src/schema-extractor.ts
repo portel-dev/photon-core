@@ -185,6 +185,7 @@ export class SchemaExtractor {
           const locked = this.extractLocked(jsdoc, methodName);
 
           // Functional tags — individual fields kept for backward compat
+          const fallback = this.extractFallback(jsdoc);
           const cached = this.extractCached(jsdoc);
           const timeout = this.extractTimeout(jsdoc);
           const retryable = this.extractRetryable(jsdoc);
@@ -220,6 +221,7 @@ export class SchemaExtractor {
             ...(scheduled ? { scheduled } : {}),
             ...(locked !== undefined ? { locked } : {}),
             // Functional tags (individual fields for backward compat)
+            ...(fallback ? { fallback } : {}),
             ...(cached ? { cached } : {}),
             ...(timeout ? { timeout } : {}),
             ...(retryable ? { retryable } : {}),
@@ -785,6 +787,13 @@ export class SchemaExtractor {
 
     // 1. Extract sugar tags → convert to declarations
 
+    // @fallback
+    const fallback = this.extractFallback(jsdocContent);
+    if (fallback) {
+      const def = builtinRegistry.get('fallback');
+      declarations.push({ name: 'fallback', config: fallback, phase: def?.phase ?? 3 });
+    }
+
     // @cached
     const cached = this.extractCached(jsdocContent);
     if (cached) {
@@ -869,7 +878,7 @@ export class SchemaExtractor {
   private extractDescription(jsdocContent: string): string {
     // Split by @tags that appear at start of a JSDoc line (after optional * prefix)
     // This avoids matching @tag references inline in description text
-    const beforeTags = jsdocContent.split(/(?:^|\n)\s*\*?\s*@(?:param|example|returns?|throws?|see|since|deprecated|version|author|license|ui|icon|format|stateful|autorun|async|webhook|cron|scheduled|locked|cached|timeout|retryable|throttled|debounced|queued|validate|use|Template|Static|mcp|photon|cli|tags|dependencies|csp|visibility)\b/)[0];
+    const beforeTags = jsdocContent.split(/(?:^|\n)\s*\*?\s*@(?:param|example|returns?|throws?|see|since|deprecated|version|author|license|ui|icon|format|stateful|autorun|async|webhook|cron|scheduled|locked|fallback|cached|timeout|retryable|throttled|debounced|queued|validate|use|Template|Static|mcp|photon|cli|tags|dependencies|csp|visibility)\b/)[0];
 
     // Remove leading * from each line and trim
     const lines = beforeTags
@@ -1391,6 +1400,19 @@ export class SchemaExtractor {
   // ═══════════════════════════════════════════════════════════════════════════════
   // FUNCTIONAL TAG EXTRACTION
   // ═══════════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Extract fallback value from @fallback tag
+   * - @fallback [] → empty array on error
+   * - @fallback {} → empty object on error
+   * - @fallback null → null on error
+   * - @fallback 0 → zero on error
+   */
+  private extractFallback(jsdocContent: string): { value: string } | undefined {
+    const match = jsdocContent.match(/@fallback\s+(.+?)(?:\s*$|\s*\n|\s*\*)/m);
+    if (!match) return undefined;
+    return { value: match[1].trim() };
+  }
 
   /**
    * Extract cache configuration from @cached tag

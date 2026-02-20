@@ -178,6 +178,52 @@ interface QueueState {
   }>;
 }
 
+// --- fallback (phase 3) ---
+
+const fallbackMiddleware = defineMiddleware<{ value: any; warn: boolean }>({
+  name: 'fallback',
+  phase: 3,
+  parseShorthand(value: string) {
+    return { value: parseFallbackValue(value), warn: false };
+  },
+  parseConfig(raw) {
+    return {
+      value: raw.value !== undefined ? parseFallbackValue(raw.value) : null,
+      warn: raw.warn === 'true' || raw.warn === 'yes',
+    };
+  },
+  create(config, _state) {
+    return async (ctx, next) => {
+      try {
+        return await next();
+      } catch (error) {
+        if (config.warn) {
+          console.error(
+            `[fallback] ${ctx.photon}.${ctx.tool} failed: ${error instanceof Error ? error.message : String(error)} — returning default`
+          );
+        }
+        return config.value;
+      }
+    };
+  },
+});
+
+/** Parse a fallback value string into a JS value */
+function parseFallbackValue(raw: string): any {
+  const trimmed = raw.trim();
+  if (trimmed === 'null') return null;
+  if (trimmed === 'undefined') return undefined;
+  if (trimmed === 'true') return true;
+  if (trimmed === 'false') return false;
+  // Try JSON parse (handles [], {}, numbers, quoted strings)
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    // Fall back to raw string
+    return trimmed;
+  }
+}
+
 // --- throttled (phase 10) ---
 
 const throttledMiddleware = defineMiddleware<{ count: number; windowMs: number }>({
@@ -483,6 +529,7 @@ const retryableMiddleware = defineMiddleware<{ count: number; delay: number }>({
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export const builtinRegistry = new MiddlewareRegistry();
+builtinRegistry.register(fallbackMiddleware);
 builtinRegistry.register(throttledMiddleware);
 builtinRegistry.register(debouncedMiddleware);
 builtinRegistry.register(cachedMiddleware);

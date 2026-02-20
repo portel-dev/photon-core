@@ -100,6 +100,13 @@ export interface ExtractedSchema {
   // ═══ FUNCTIONAL TAGS ═══
 
   /**
+   * Fallback value on error (from @fallback tag)
+   * Returns this value instead of throwing when the method fails
+   * @example @fallback []
+   */
+  fallback?: { value: string };
+
+  /**
    * Cache configuration (from @cached tag)
    * Memoize return value for the specified TTL
    * @example @cached 5m

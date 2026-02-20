@@ -229,7 +229,8 @@ test('@use does not strip from description', () => {
 
 console.log('\n🧪 MiddlewareRegistry\n');
 
-test('builtinRegistry has all 8 built-ins', () => {
+test('builtinRegistry has all 9 built-ins', () => {
+  assert.ok(builtinRegistry.has('fallback'));
   assert.ok(builtinRegistry.has('cached'));
   assert.ok(builtinRegistry.has('timeout'));
   assert.ok(builtinRegistry.has('retryable'));
@@ -399,6 +400,168 @@ await asyncTest('state persists across calls', async () => {
   const chain2 = buildMiddlewareChain(async () => ({ value: 'b' }), declarations, reg, states, ctx);
   const r2 = await chain2();
   assert.equal(r2.callCount, 2);
+});
+
+// ─── @fallback ───
+
+console.log('\n🧪 @fallback tag\n');
+
+test('@fallback [] extracts as middleware declaration', () => {
+  const tools = extractTools(`
+    export default class Test {
+      /** @fallback [] */
+      async loadData() { return []; }
+    }
+  `);
+  assert.ok(tools[0].middleware);
+  const fb = tools[0].middleware!.find((m: any) => m.name === 'fallback');
+  assert.ok(fb);
+  assert.equal(fb!.phase, 3);
+  assert.equal(fb!.config.value, '[]');
+});
+
+test('@fallback {} parses object default', () => {
+  const tools = extractTools(`
+    export default class Test {
+      /** @fallback {} */
+      async loadConfig() { return {}; }
+    }
+  `);
+  const fb = tools[0].middleware!.find((m: any) => m.name === 'fallback');
+  assert.equal(fb!.config.value, '{}');
+});
+
+test('@fallback null parses null default', () => {
+  const tools = extractTools(`
+    export default class Test {
+      /** @fallback null */
+      async findUser() { return null; }
+    }
+  `);
+  const fb = tools[0].middleware!.find((m: any) => m.name === 'fallback');
+  assert.equal(fb!.config.value, 'null');
+});
+
+test('@fallback has individual field on schema', () => {
+  const tools = extractTools(`
+    export default class Test {
+      /** @fallback [] */
+      async loadData() { return []; }
+    }
+  `);
+  assert.ok(tools[0].fallback);
+  assert.equal(tools[0].fallback.value, '[]');
+});
+
+test('@fallback does not appear in description', () => {
+  const tools = extractTools(`
+    export default class Test {
+      /**
+       * Load user data
+       * @fallback null
+       */
+      async loadUser() {}
+    }
+  `);
+  assert.equal(tools[0].description, 'Load user data');
+});
+
+test('@fallback is outermost (phase 3) in pipeline ordering', () => {
+  const tools = extractTools(`
+    export default class Test {
+      /**
+       * With everything
+       * @fallback []
+       * @throttled 5/min
+       * @cached 5m
+       * @timeout 10s
+       */
+      async everything() {}
+    }
+  `);
+  const mw = tools[0].middleware!;
+  const sorted = [...mw].sort((a, b) => a.phase - b.phase);
+  assert.equal(sorted[0].name, 'fallback');   // 3 — outermost
+  assert.equal(sorted[1].name, 'throttled');  // 10
+  assert.equal(sorted[2].name, 'cached');     // 30
+  assert.equal(sorted[3].name, 'timeout');    // 70
+});
+
+await asyncTest('@fallback catches errors and returns default value', async () => {
+  const reg = new MiddlewareRegistry();
+  reg.register(defineMiddleware({
+    name: 'fallback',
+    phase: 3,
+    create(config: any) {
+      return async (_ctx, next) => {
+        try {
+          return await next();
+        } catch {
+          // Parse value same as middleware.ts does
+          const v = config.value;
+          if (v === 'null') return null;
+          try { return JSON.parse(v); } catch { return v; }
+        }
+      };
+    },
+  }));
+
+  const declarations: MiddlewareDeclaration[] = [
+    { name: 'fallback', config: { value: '[]' }, phase: 3 },
+  ];
+  const ctx: MiddlewareContext = { photon: 'test', tool: 'failing', instance: 'default', params: {} };
+  const states = new Map();
+
+  const chain = buildMiddlewareChain(
+    async () => { throw new Error('boom'); },
+    declarations, reg, states, ctx,
+  );
+  const result = await chain();
+  assert.deepEqual(result, []);
+});
+
+await asyncTest('@fallback lets successful calls through', async () => {
+  const reg = new MiddlewareRegistry();
+  reg.register(defineMiddleware({
+    name: 'fallback',
+    phase: 3,
+    create(config: any) {
+      return async (_ctx, next) => {
+        try { return await next(); } catch {
+          try { return JSON.parse(config.value); } catch { return config.value; }
+        }
+      };
+    },
+  }));
+
+  const declarations: MiddlewareDeclaration[] = [
+    { name: 'fallback', config: { value: '[]' }, phase: 3 },
+  ];
+  const ctx: MiddlewareContext = { photon: 'test', tool: 'ok', instance: 'default', params: {} };
+  const states = new Map();
+
+  const chain = buildMiddlewareChain(
+    async () => ({ data: 'real' }),
+    declarations, reg, states, ctx,
+  );
+  const result = await chain();
+  assert.deepEqual(result, { data: 'real' });
+});
+
+// ─── Registry update ───
+
+console.log('\n🧪 Registry (updated)\n');
+
+test('builtinRegistry has all 9 built-ins (including fallback)', () => {
+  assert.ok(builtinRegistry.has('fallback'));
+  assert.ok(builtinRegistry.has('cached'));
+  assert.ok(builtinRegistry.has('timeout'));
+  assert.ok(builtinRegistry.has('retryable'));
+  assert.ok(builtinRegistry.has('throttled'));
+  assert.ok(builtinRegistry.has('debounced'));
+  assert.ok(builtinRegistry.has('queued'));
+  assert.ok(builtinRegistry.has('locked'));
+  assert.ok(builtinRegistry.has('validate'));
 });
 
 // ─── Summary ───
