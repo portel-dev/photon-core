@@ -21,9 +21,9 @@ import * as crypto from 'crypto';
  * @returns Absolute path to the compiled .mjs file
  */
 /**
- * Transform arrays to reactive collections for PhotonMCP classes
+ * Transform arrays to reactive collections for Photon classes
  *
- * ZERO-EFFORT REACTIVITY: If a class extends PhotonMCP and has array properties,
+ * ZERO-EFFORT REACTIVITY: If a class extends Photon (or PhotonMCP) and has array properties,
  * this transform automatically:
  * 1. Injects `import { Array as ReactiveArray } from '@portel/photon-core'`
  * 2. Transforms `= []` to `= new ReactiveArray()` for class properties
@@ -32,23 +32,23 @@ import * as crypto from 'crypto';
  *
  * ```typescript
  * // Developer writes this (normal TypeScript):
- * export default class TodoList extends PhotonMCP {
+ * export default class TodoList extends Photon {
  *   items: Task[] = [];
  *   async add(text: string) { this.items.push({...}); }
  * }
  *
  * // Compiler transforms to:
  * import { Array as ReactiveArray } from '@portel/photon-core';
- * export default class TodoList extends PhotonMCP {
+ * export default class TodoList extends Photon {
  *   items = new ReactiveArray();
  *   async add(text: string) { this.items.push({...}); }  // Auto-emits!
  * }
  * ```
  */
 function transformReactiveCollections(source: string): string {
-  // Check if this is a PhotonMCP class (extends PhotonMCP)
-  const isPhotonMCP = /class\s+\w+\s+extends\s+PhotonMCP\b/.test(source);
-  if (!isPhotonMCP) return source;
+  // Check if this is a Photon class (extends Photon or extends PhotonMCP)
+  const isPhotonClass = /class\s+\w+\s+extends\s+(?:Photon|PhotonMCP)\b/.test(source);
+  if (!isPhotonClass) return source;
 
   // Check if there are array properties with = [] that need transformation
   // Look for patterns like: `items: Type[] = []` or `items = []` (class properties)

@@ -98,7 +98,7 @@ export interface ExtractedSchema {
   locked?: boolean | string;
 }
 
-export interface PhotonMCPClass {
+export interface PhotonClass {
   name: string;
   description?: string;
   tools: PhotonTool[];
@@ -106,6 +106,9 @@ export interface PhotonMCPClass {
   /** Class constructor for static method access */
   classConstructor?: Record<string, Function>;
 }
+
+/** @deprecated Use PhotonClass instead */
+export type PhotonMCPClass = PhotonClass;
 
 export interface ConstructorParam {
   name: string;
@@ -154,7 +157,7 @@ export interface ResolvedInjection {
  *  * @mcp github anthropics/mcp-server-github
  *  * @mcp fs npm:@modelcontextprotocol/server-filesystem
  *  *\/
- * export default class MyPhoton extends PhotonMCP {
+ * export default class MyPhoton extends Photon {
  *   async doSomething() {
  *     const issues = await this.github.list_issues({ repo: 'owner/repo' });
  *   }
@@ -380,9 +383,9 @@ export interface StaticInfo {
 }
 
 /**
- * Extended PhotonMCPClass with templates and statics
+ * Extended PhotonClass with templates and statics
  */
-export interface PhotonMCPClassExtended extends PhotonMCPClass {
+export interface PhotonClassExtended extends PhotonClass {
   templates: TemplateInfo[];
   statics: StaticInfo[];
   /** Assets from the Photon's asset folder (UI, prompts, resources) */
@@ -390,6 +393,9 @@ export interface PhotonMCPClassExtended extends PhotonMCPClass {
   /** Names of injected @photon dependencies (for client-side event routing) */
   injectedPhotons?: string[];
 }
+
+/** @deprecated Use PhotonClassExtended instead */
+export type PhotonMCPClassExtended = PhotonClassExtended;
 
 // ══════════════════════════════════════════════════════════════════════════════
 // STATEFUL WORKFLOW TYPES
@@ -575,7 +581,7 @@ export interface ConfigParam {
  *
  * Example:
  * ```typescript
- * export default class MyPhoton extends PhotonMCP {
+ * export default class MyPhoton extends Photon {
  *   async configure(params: {
  *     apiEndpoint: string;
  *     maxRetries?: number;

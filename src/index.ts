@@ -11,7 +11,7 @@
  *
  * @example
  * ```typescript
- * import { PhotonMCP, DependencyManager, SchemaExtractor } from '@portel/photon-core';
+ * import { Photon, DependencyManager, SchemaExtractor } from '@portel/photon-core';
  *
  * // Load and parse a Photon class
  * const photonClass = await import('./my-tool.photon.ts');
@@ -152,13 +152,13 @@ export {
 // ===== PHOTON-SPECIFIC EXPORTS =====
 
 // Core base class with lifecycle hooks
-export { PhotonMCP } from './base.js';
+export { Photon, Photon as PhotonMCP } from './base.js';
 
 // Dependency management
 export { DependencyManager } from './dependency-manager.js';
 
 // Schema extraction
-export { SchemaExtractor } from './schema-extractor.js';
+export { SchemaExtractor, detectCapabilities, type PhotonCapability } from './schema-extractor.js';
 
 // Path resolution (Photon-specific paths)
 export {
@@ -433,7 +433,7 @@ export {
 } from './audit.js';
 
 // ===== SCOPED MEMORY =====
-// Framework-level key-value storage (this.memory on PhotonMCP)
+// Framework-level key-value storage (this.memory on Photon base class)
 export {
   MemoryProvider,
   type MemoryScope,

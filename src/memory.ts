@@ -2,7 +2,7 @@
  * Scoped Memory System
  *
  * Framework-level key-value storage for photons that eliminates
- * boilerplate file I/O. Available as `this.memory` on PhotonMCP.
+ * boilerplate file I/O. Available as `this.memory` on Photon.
  *
  * Three scopes:
  * | Scope    | Meaning                          | Storage                           |
@@ -13,7 +13,7 @@
  *
  * @example
  * ```typescript
- * export default class TodoList extends PhotonMCP {
+ * export default class TodoList extends Photon {
  *   async add({ text }: { text: string }) {
  *     const items = await this.memory.get<Task[]>('items') ?? [];
  *     items.push({ id: crypto.randomUUID(), text });

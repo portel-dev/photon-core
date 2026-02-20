@@ -1,12 +1,12 @@
 /**
- * PhotonMCP Base Class
+ * Photon Base Class
  *
- * Optional base class for creating Photon MCPs.
+ * Optional base class for creating Photons.
  * You don't need to extend this - any class with async methods works!
  *
  * Usage:
  * ```typescript
- * export default class Calculator extends PhotonMCP {
+ * export default class Calculator extends Photon {
  *   /**
  *    * Add two numbers together
  *    * @param a First number
@@ -29,7 +29,7 @@
  *
  * With MCP access (requires runtime support):
  * ```typescript
- * export default class SlackReporter extends PhotonMCP {
+ * export default class SlackReporter extends Photon {
  *   async report() {
  *     const github = this.mcp('github');
  *     const issues = await github.call('list_issues', { repo: 'foo/bar' });
@@ -46,13 +46,13 @@ import { withLock as withLockHelper } from './decorators.js';
 import { MemoryProvider } from './memory.js';
 
 /**
- * Simple base class for creating Photon MCPs
+ * Simple base class for creating Photons
  *
- * - Class name = MCP name
+ * - Class name = Photon name
  * - Public async methods = Tools
  * - Return value = Tool result
  */
-export class PhotonMCP {
+export class Photon {
   /**
    * Photon name (MCP name) - set by runtime loader
    * Used to identify the source of emitted events for injected photon routing
@@ -247,7 +247,7 @@ export class PhotonMCP {
 
     // Get all property names from prototype chain
     let current = prototype;
-    while (current && current !== PhotonMCP.prototype) {
+    while (current && current !== Photon.prototype) {
       Object.getOwnPropertyNames(current).forEach((name) => {
         // Skip private methods (starting with _) and convention methods
         if (

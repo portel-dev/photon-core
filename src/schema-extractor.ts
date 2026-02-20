@@ -1663,7 +1663,7 @@ export class SchemaExtractor {
    *  * @prompt system ./prompts/system.md
    *  * @resource config ./resources/config.json
    *  *\/
-   * export default class MyPhoton extends PhotonMCP { ... }
+   * export default class MyPhoton extends Photon { ... }
    * ```
    */
   extractAssets(source: string, assetFolder?: string): PhotonAssets {
@@ -1827,4 +1827,30 @@ export class SchemaExtractor {
     };
     return mimeTypes[ext] || 'application/octet-stream';
   }
+}
+
+/**
+ * Capability types that can be auto-detected from source code
+ */
+export type PhotonCapability = 'emit' | 'memory' | 'call' | 'mcp' | 'lock' | 'instanceMeta' | 'allInstances';
+
+/**
+ * Detect capabilities used by a Photon from its source code.
+ *
+ * Scans for `this.emit(`, `this.memory`, `this.call(`, etc. patterns
+ * and returns the set of capabilities that the runtime should inject.
+ *
+ * This enables plain classes (no extends Photon) to use all framework
+ * features — the loader detects usage and injects automatically.
+ */
+export function detectCapabilities(source: string): Set<PhotonCapability> {
+  const caps = new Set<PhotonCapability>();
+  if (/this\.emit\s*\(/.test(source)) caps.add('emit');
+  if (/this\.memory\b/.test(source)) caps.add('memory');
+  if (/this\.call\s*\(/.test(source)) caps.add('call');
+  if (/this\.mcp\s*\(/.test(source)) caps.add('mcp');
+  if (/this\.withLock\s*\(/.test(source)) caps.add('lock');
+  if (/this\.instanceMeta\b/.test(source)) caps.add('instanceMeta');
+  if (/this\.allInstances\s*\(/.test(source)) caps.add('allInstances');
+  return caps;
 }

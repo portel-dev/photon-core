@@ -7,9 +7,9 @@
  *
  * @example
  * ```typescript
- * import { PhotonMCP, Collection } from '@portel/photon-core';
+ * import { Photon, Collection } from '@portel/photon-core';
  *
- * export default class ProductCatalog extends PhotonMCP {
+ * export default class ProductCatalog extends Photon {
  *   products = new Collection<Product>();
  *
  *   async catalog() {

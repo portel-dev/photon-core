@@ -8,7 +8,7 @@
  * ```typescript
  * import { loadPhotonConfig, savePhotonConfig, getPhotonConfigPath } from '@portel/photon-core';
  *
- * export default class MyPhoton extends PhotonMCP {
+ * export default class MyPhoton extends Photon {
  *   async configure(params: { apiKey: string }) {
  *     savePhotonConfig('my-photon', params);
  *     return { success: true, config: params };
