@@ -690,6 +690,8 @@ export interface MaybeStatefulResult<T> {
   result?: T;
   /** Error message (if failed) */
   error?: string;
+  /** Original error object (preserves .name for typed errors like PhotonTimeoutError) */
+  originalError?: Error;
   /** Run ID (only if stateful - checkpoint was yielded) */
   runId?: string;
   /** Was this a stateful workflow? */
@@ -821,6 +823,7 @@ export async function maybeStatefulExecute<T>(
     } catch (error: any) {
       return {
         error: error.message,
+        originalError: error instanceof Error ? error : undefined,
         isStateful: false,
         resumed: false,
         checkpointsCompleted: 0,
@@ -947,6 +950,7 @@ export async function maybeStatefulExecute<T>(
 
     return {
       error: error.message,
+      originalError: error instanceof Error ? error : undefined,
       runId,
       isStateful,
       resumed: false,
