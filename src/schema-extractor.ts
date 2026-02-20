@@ -187,6 +187,7 @@ export class SchemaExtractor {
           // Functional tags — individual fields kept for backward compat
           const fallback = this.extractFallback(jsdoc);
           const logged = this.extractLogged(jsdoc);
+          const circuitBreaker = this.extractCircuitBreaker(jsdoc);
           const cached = this.extractCached(jsdoc);
           const timeout = this.extractTimeout(jsdoc);
           const retryable = this.extractRetryable(jsdoc);
@@ -224,6 +225,7 @@ export class SchemaExtractor {
             // Functional tags (individual fields for backward compat)
             ...(fallback ? { fallback } : {}),
             ...(logged ? { logged } : {}),
+            ...(circuitBreaker ? { circuitBreaker } : {}),
             ...(cached ? { cached } : {}),
             ...(timeout ? { timeout } : {}),
             ...(retryable ? { retryable } : {}),
@@ -803,6 +805,13 @@ export class SchemaExtractor {
       declarations.push({ name: 'logged', config: logged, phase: def?.phase ?? 5 });
     }
 
+    // @circuitBreaker
+    const circuitBreaker = this.extractCircuitBreaker(jsdocContent);
+    if (circuitBreaker) {
+      const def = builtinRegistry.get('circuitBreaker');
+      declarations.push({ name: 'circuitBreaker', config: circuitBreaker, phase: def?.phase ?? 8 });
+    }
+
     // @cached
     const cached = this.extractCached(jsdocContent);
     if (cached) {
@@ -887,7 +896,7 @@ export class SchemaExtractor {
   private extractDescription(jsdocContent: string): string {
     // Split by @tags that appear at start of a JSDoc line (after optional * prefix)
     // This avoids matching @tag references inline in description text
-    const beforeTags = jsdocContent.split(/(?:^|\n)\s*\*?\s*@(?:param|example|returns?|throws?|see|since|deprecated|version|author|license|ui|icon|format|stateful|autorun|async|webhook|cron|scheduled|locked|fallback|logged|cached|timeout|retryable|throttled|debounced|queued|validate|use|Template|Static|mcp|photon|cli|tags|dependencies|csp|visibility)\b/)[0];
+    const beforeTags = jsdocContent.split(/(?:^|\n)\s*\*?\s*@(?:param|example|returns?|throws?|see|since|deprecated|version|author|license|ui|icon|format|stateful|autorun|async|webhook|cron|scheduled|locked|fallback|logged|circuitBreaker|cached|timeout|retryable|throttled|debounced|queued|validate|use|Template|Static|mcp|photon|cli|tags|dependencies|csp|visibility)\b/)[0];
 
     // Remove leading * from each line and trim
     const lines = beforeTags
@@ -1432,6 +1441,17 @@ export class SchemaExtractor {
     const match = jsdocContent.match(/@fallback\s+(.+?)(?:\s*$|\s*\n|\s*\*)/m);
     if (!match) return undefined;
     return { value: match[1].trim() };
+  }
+
+  /**
+   * Extract circuit breaker configuration from @circuitBreaker tag
+   * - @circuitBreaker 5 30s → 5 failures, 30s reset
+   * - @circuitBreaker 3 1m → 3 failures, 1 minute reset
+   */
+  private extractCircuitBreaker(jsdocContent: string): { threshold: number; resetAfter: string } | undefined {
+    const match = jsdocContent.match(/@circuitBreaker\s+(\d+)\s+(\d+(?:ms|s|sec|m|min|h|hr|d|day))/i);
+    if (!match) return undefined;
+    return { threshold: parseInt(match[1], 10), resetAfter: match[2] };
   }
 
   /**

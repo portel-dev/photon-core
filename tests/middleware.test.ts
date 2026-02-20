@@ -229,9 +229,10 @@ test('@use does not strip from description', () => {
 
 console.log('\n🧪 MiddlewareRegistry\n');
 
-test('builtinRegistry has all 10 built-ins', () => {
+test('builtinRegistry has all 11 built-ins', () => {
   assert.ok(builtinRegistry.has('fallback'));
   assert.ok(builtinRegistry.has('logged'));
+  assert.ok(builtinRegistry.has('circuitBreaker'));
   assert.ok(builtinRegistry.has('cached'));
   assert.ok(builtinRegistry.has('timeout'));
   assert.ok(builtinRegistry.has('retryable'));
@@ -692,13 +693,181 @@ await asyncTest('@logged logs failure via console.error', async () => {
   assert.ok(logs.some(l => l.includes('[error] billing.charge FAILED') && l.includes('card declined')));
 });
 
+// ─── @circuitBreaker extraction ───
+
+console.log('\n🧪 @circuitBreaker extraction\n');
+
+test('@circuitBreaker 5 30s extracts correctly', () => {
+  const source = `
+    export default class Svc {
+      /** @circuitBreaker 5 30s */
+      async call(params: { url: string }) { return null; }
+    }
+  `;
+  const tools = extractTools(source);
+  assert.ok(tools[0].circuitBreaker);
+  assert.equal(tools[0].circuitBreaker!.threshold, 5);
+  assert.equal(tools[0].circuitBreaker!.resetAfter, '30s');
+});
+
+test('@circuitBreaker 3 1m extracts correctly', () => {
+  const source = `
+    export default class Svc {
+      /** @circuitBreaker 3 1m */
+      async call(params: { url: string }) { return null; }
+    }
+  `;
+  const tools = extractTools(source);
+  assert.ok(tools[0].circuitBreaker);
+  assert.equal(tools[0].circuitBreaker!.threshold, 3);
+  assert.equal(tools[0].circuitBreaker!.resetAfter, '1m');
+});
+
+test('@circuitBreaker appears as middleware declaration at phase 8', () => {
+  const source = `
+    export default class Svc {
+      /** @circuitBreaker 5 30s */
+      async call(params: { url: string }) { return null; }
+    }
+  `;
+  const tools = extractTools(source);
+  const mw = tools[0].middleware!;
+  const cb = mw.find(m => m.name === 'circuitBreaker');
+  assert.ok(cb, 'circuitBreaker declaration exists');
+  assert.equal(cb!.phase, 8);
+  assert.equal(cb!.config.threshold, 5);
+  assert.equal(cb!.config.resetAfter, '30s');
+});
+
+test('@circuitBreaker stripped from description', () => {
+  const source = `
+    export default class Svc {
+      /**
+       * Call external API
+       * @circuitBreaker 5 30s
+       */
+      async call(params: { url: string }) { return null; }
+    }
+  `;
+  const tools = extractTools(source);
+  assert.equal(tools[0].description, 'Call external API');
+});
+
+// ─── @circuitBreaker runtime ───
+
+console.log('\n🧪 @circuitBreaker runtime\n');
+
+test('@circuitBreaker opens after threshold failures', async () => {
+  let callCount = 0;
+  const execute = async () => {
+    callCount++;
+    throw new Error('service down');
+  };
+
+  const declarations: MiddlewareDeclaration[] = [
+    { name: 'circuitBreaker', config: { threshold: 3, resetAfterMs: 60_000 }, phase: 8 },
+  ];
+  const stateStores = new Map();
+  const ctx: MiddlewareContext = { photon: 'test', tool: 'call', instance: 'default', params: {} };
+
+  const chain = buildMiddlewareChain(execute, declarations, builtinRegistry, stateStores, ctx);
+
+  // Fail 3 times
+  for (let i = 0; i < 3; i++) {
+    try { await chain(); } catch {}
+  }
+  assert.equal(callCount, 3);
+
+  // 4th call should be fast-rejected (circuit open)
+  try {
+    await chain();
+    assert.fail('should have thrown');
+  } catch (e: any) {
+    assert.equal(e.name, 'PhotonCircuitOpenError');
+    assert.ok(e.message.includes('Circuit open'));
+  }
+  assert.equal(callCount, 3, 'execute not called when circuit is open');
+});
+
+test('@circuitBreaker resets on success', async () => {
+  let shouldFail = true;
+  const execute = async () => {
+    if (shouldFail) throw new Error('fail');
+    return 'ok';
+  };
+
+  const declarations: MiddlewareDeclaration[] = [
+    { name: 'circuitBreaker', config: { threshold: 2, resetAfterMs: 50 }, phase: 8 },
+  ];
+  const stateStores = new Map();
+  const ctx: MiddlewareContext = { photon: 'test', tool: 'call', instance: 'default', params: {} };
+
+  const chain = buildMiddlewareChain(execute, declarations, builtinRegistry, stateStores, ctx);
+
+  // Fail 2 times → circuit opens
+  for (let i = 0; i < 2; i++) {
+    try { await chain(); } catch {}
+  }
+
+  // Wait for reset period
+  await new Promise(r => setTimeout(r, 60));
+
+  // Circuit should be half-open now, allow probe
+  shouldFail = false;
+  const result = await chain();
+  assert.equal(result, 'ok');
+
+  // Circuit should be closed again — another call works
+  const result2 = await chain();
+  assert.equal(result2, 'ok');
+});
+
+test('@circuitBreaker half-open probe failure re-opens', async () => {
+  let callCount = 0;
+  const execute = async () => {
+    callCount++;
+    throw new Error('still down');
+  };
+
+  const declarations: MiddlewareDeclaration[] = [
+    { name: 'circuitBreaker', config: { threshold: 2, resetAfterMs: 50 }, phase: 8 },
+  ];
+  const stateStores = new Map();
+  const ctx: MiddlewareContext = { photon: 'test', tool: 'call', instance: 'default', params: {} };
+
+  const chain = buildMiddlewareChain(execute, declarations, builtinRegistry, stateStores, ctx);
+
+  // Fail 2 times → circuit opens
+  for (let i = 0; i < 2; i++) {
+    try { await chain(); } catch {}
+  }
+  assert.equal(callCount, 2);
+
+  // Wait for reset period
+  await new Promise(r => setTimeout(r, 60));
+
+  // Probe also fails → circuit re-opens
+  try { await chain(); } catch {}
+  assert.equal(callCount, 3);
+
+  // Next call should be fast-rejected again (circuit re-opened)
+  try {
+    await chain();
+    assert.fail('should have thrown');
+  } catch (e: any) {
+    assert.equal(e.name, 'PhotonCircuitOpenError');
+  }
+  assert.equal(callCount, 3);
+});
+
 // ─── Registry update ───
 
 console.log('\n🧪 Registry (updated)\n');
 
-test('builtinRegistry has all 10 built-ins', () => {
+test('builtinRegistry has all 11 built-ins', () => {
   assert.ok(builtinRegistry.has('fallback'));
   assert.ok(builtinRegistry.has('logged'));
+  assert.ok(builtinRegistry.has('circuitBreaker'));
   assert.ok(builtinRegistry.has('cached'));
   assert.ok(builtinRegistry.has('timeout'));
   assert.ok(builtinRegistry.has('retryable'));

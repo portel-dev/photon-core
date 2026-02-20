@@ -114,6 +114,13 @@ export interface ExtractedSchema {
   fallback?: { value: string };
 
   /**
+   * Circuit breaker configuration (from @circuitBreaker tag)
+   * Fast-rejects after N consecutive failures, probes after reset period
+   * @example @circuitBreaker 5 30s
+   */
+  circuitBreaker?: { threshold: number; resetAfter: string };
+
+  /**
    * Cache configuration (from @cached tag)
    * Memoize return value for the specified TTL
    * @example @cached 5m

@@ -263,6 +263,69 @@ const loggedMiddleware = defineMiddleware<{ level: string; tags: string[] }>({
   },
 });
 
+// --- circuitBreaker (phase 8) ---
+
+interface CircuitState {
+  failures: number;
+  state: 'closed' | 'open' | 'half-open';
+  openedAt: number;
+}
+
+const circuitBreakerMiddleware = defineMiddleware<{ threshold: number; resetAfterMs: number }>({
+  name: 'circuitBreaker',
+  phase: 8,
+  parseShorthand(value: string) {
+    const parts = value.trim().split(/\s+/);
+    const threshold = parseInt(parts[0], 10) || 5;
+    const resetAfterMs = parts[1] ? parseDuration(parts[1]) : 30_000;
+    return { threshold, resetAfterMs };
+  },
+  parseConfig(raw) {
+    return {
+      threshold: parseInt(raw.threshold || '5', 10),
+      resetAfterMs: raw.resetAfter ? parseDuration(raw.resetAfter) : 30_000,
+    };
+  },
+  create(config, state) {
+    return async (ctx, next) => {
+      const key = `${ctx.photon}:${ctx.instance}:${ctx.tool}`;
+      let circuit = state.get<CircuitState>(key);
+      if (!circuit) {
+        circuit = { failures: 0, state: 'closed', openedAt: 0 };
+        state.set(key, circuit);
+      }
+
+      // OPEN → check if reset period elapsed
+      if (circuit.state === 'open') {
+        if (Date.now() - circuit.openedAt >= config.resetAfterMs) {
+          circuit.state = 'half-open';
+        } else {
+          const error = new Error(
+            `Circuit open: ${ctx.photon}.${ctx.tool} has failed ${config.threshold} consecutive times. Resets in ${Math.ceil((config.resetAfterMs - (Date.now() - circuit.openedAt)) / 1000)}s`
+          );
+          error.name = 'PhotonCircuitOpenError';
+          throw error;
+        }
+      }
+
+      try {
+        const result = await next();
+        // Success → reset circuit
+        circuit.failures = 0;
+        circuit.state = 'closed';
+        return result;
+      } catch (error) {
+        circuit.failures++;
+        if (circuit.failures >= config.threshold) {
+          circuit.state = 'open';
+          circuit.openedAt = Date.now();
+        }
+        throw error;
+      }
+    };
+  },
+});
+
 // --- throttled (phase 10) ---
 
 const throttledMiddleware = defineMiddleware<{ count: number; windowMs: number }>({
@@ -570,6 +633,7 @@ const retryableMiddleware = defineMiddleware<{ count: number; delay: number }>({
 export const builtinRegistry = new MiddlewareRegistry();
 builtinRegistry.register(fallbackMiddleware);
 builtinRegistry.register(loggedMiddleware);
+builtinRegistry.register(circuitBreakerMiddleware);
 builtinRegistry.register(throttledMiddleware);
 builtinRegistry.register(debouncedMiddleware);
 builtinRegistry.register(cachedMiddleware);
