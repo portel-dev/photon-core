@@ -12,6 +12,7 @@ import * as fs from 'fs/promises';
 import * as ts from 'typescript';
 import { ExtractedSchema, ConstructorParam, TemplateInfo, StaticInfo, OutputFormat, YieldInfo, MCPDependency, PhotonDependency, CLIDependency, ResolvedInjection, PhotonAssets, UIAsset, PromptAsset, ResourceAsset, ConfigSchema, ConfigParam } from './types.js';
 import { parseDuration, parseRate } from './utils/duration.js';
+import { builtinRegistry, type MiddlewareDeclaration } from './middleware.js';
 
 export interface ExtractedMetadata {
   tools: ExtractedSchema[];
@@ -183,7 +184,7 @@ export class SchemaExtractor {
           const scheduled = this.extractScheduled(jsdoc, methodName);
           const locked = this.extractLocked(jsdoc, methodName);
 
-          // Functional tags
+          // Functional tags — individual fields kept for backward compat
           const cached = this.extractCached(jsdoc);
           const timeout = this.extractTimeout(jsdoc);
           const retryable = this.extractRetryable(jsdoc);
@@ -192,6 +193,9 @@ export class SchemaExtractor {
           const queued = this.extractQueued(jsdoc);
           const validations = this.extractValidations(jsdoc);
           const deprecated = this.extractDeprecated(jsdoc);
+
+          // Build unified middleware declarations (single source of truth for runtime)
+          const middleware = this.buildMiddlewareDeclarations(jsdoc);
 
           // Check for static keyword on the method
           const isStaticMethod = member.modifiers?.some(m => m.kind === ts.SyntaxKind.StaticKeyword) || false;
@@ -215,7 +219,7 @@ export class SchemaExtractor {
             ...(webhook !== undefined ? { webhook } : {}),
             ...(scheduled ? { scheduled } : {}),
             ...(locked !== undefined ? { locked } : {}),
-            // Functional tags
+            // Functional tags (individual fields for backward compat)
             ...(cached ? { cached } : {}),
             ...(timeout ? { timeout } : {}),
             ...(retryable ? { retryable } : {}),
@@ -224,6 +228,8 @@ export class SchemaExtractor {
             ...(queued ? { queued } : {}),
             ...(validations && validations.length > 0 ? { validations } : {}),
             ...(deprecated !== undefined ? { deprecated } : {}),
+            // Unified middleware declarations (new — runtime uses this)
+            ...(middleware.length > 0 ? { middleware } : {}),
           });
         }
       };
@@ -732,13 +738,138 @@ export class SchemaExtractor {
     return initializer.getText(sourceFile);
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // INLINE CONFIG + @use PARSING
+  // ═══════════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Parse inline {@prop value} config from a string
+   * @example parseInlineConfig('{@ttl 5m} {@key params.userId}')
+   *   → { ttl: '5m', key: 'params.userId' }
+   */
+  parseInlineConfig(text: string): Record<string, string> {
+    const config: Record<string, string> = {};
+    const regex = /\{@(\w+)\s+([^}]+)\}/g;
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+      config[match[1]] = match[2].trim();
+    }
+    return config;
+  }
+
+  /**
+   * Extract @use declarations from JSDoc
+   * @example extractUseDeclarations('* @use audit {@level info} {@tags api}')
+   *   → [{ name: 'audit', rawConfig: { level: 'info', tags: 'api' } }]
+   */
+  extractUseDeclarations(jsdocContent: string): Array<{ name: string; rawConfig: Record<string, string> }> {
+    const declarations: Array<{ name: string; rawConfig: Record<string, string> }> = [];
+    const regex = /@use\s+([\w][\w-]*)((?:\s+\{@\w+\s+[^}]+\})*)/g;
+    let match;
+    while ((match = regex.exec(jsdocContent)) !== null) {
+      const name = match[1];
+      const configStr = match[2] || '';
+      const rawConfig = this.parseInlineConfig(configStr);
+      declarations.push({ name, rawConfig });
+    }
+    return declarations;
+  }
+
+  /**
+   * Build middleware declarations from all tags on a method's JSDoc.
+   * Converts both sugar tags (@cached 5m) and @use tags into a unified
+   * MiddlewareDeclaration[] array.
+   */
+  buildMiddlewareDeclarations(jsdocContent: string): MiddlewareDeclaration[] {
+    const declarations: MiddlewareDeclaration[] = [];
+
+    // 1. Extract sugar tags → convert to declarations
+
+    // @cached
+    const cached = this.extractCached(jsdocContent);
+    if (cached) {
+      const def = builtinRegistry.get('cached');
+      declarations.push({ name: 'cached', config: cached, phase: def?.phase ?? 30 });
+    }
+
+    // @timeout
+    const timeout = this.extractTimeout(jsdocContent);
+    if (timeout) {
+      const def = builtinRegistry.get('timeout');
+      declarations.push({ name: 'timeout', config: timeout, phase: def?.phase ?? 70 });
+    }
+
+    // @retryable
+    const retryable = this.extractRetryable(jsdocContent);
+    if (retryable) {
+      const def = builtinRegistry.get('retryable');
+      declarations.push({ name: 'retryable', config: retryable, phase: def?.phase ?? 80 });
+    }
+
+    // @throttled
+    const throttled = this.extractThrottled(jsdocContent);
+    if (throttled) {
+      const def = builtinRegistry.get('throttled');
+      declarations.push({ name: 'throttled', config: throttled, phase: def?.phase ?? 10 });
+    }
+
+    // @debounced
+    const debounced = this.extractDebounced(jsdocContent);
+    if (debounced) {
+      const def = builtinRegistry.get('debounced');
+      declarations.push({ name: 'debounced', config: debounced, phase: def?.phase ?? 20 });
+    }
+
+    // @queued
+    const queued = this.extractQueued(jsdocContent);
+    if (queued) {
+      const def = builtinRegistry.get('queued');
+      declarations.push({ name: 'queued', config: queued, phase: def?.phase ?? 50 });
+    }
+
+    // @validate
+    const validations = this.extractValidations(jsdocContent);
+    if (validations && validations.length > 0) {
+      const def = builtinRegistry.get('validate');
+      declarations.push({ name: 'validate', config: { validations }, phase: def?.phase ?? 40 });
+    }
+
+    // @locked (handled as middleware when it appears as a functional tag)
+    const lockedMatch = jsdocContent.match(/@locked(?:\s+(\w[\w\-:]*))?/i);
+    if (lockedMatch) {
+      const lockName = lockedMatch[1]?.trim() || '';
+      const def = builtinRegistry.get('locked');
+      declarations.push({ name: 'locked', config: { name: lockName }, phase: def?.phase ?? 60 });
+    }
+
+    // 2. Extract @use declarations
+    const useDecls = this.extractUseDeclarations(jsdocContent);
+    for (const { name, rawConfig } of useDecls) {
+      // Check if this is a built-in (allow @use cached {@ttl 5m} syntax)
+      const def = builtinRegistry.get(name);
+      if (def) {
+        // Use parseConfig if available, otherwise pass raw
+        const config = def.parseConfig ? def.parseConfig(rawConfig) : rawConfig;
+        // Don't duplicate if sugar tag already added this middleware
+        if (!declarations.some(d => d.name === name)) {
+          declarations.push({ name, config, phase: def.phase ?? 45 });
+        }
+      } else {
+        // Custom middleware — phase defaults to 45
+        declarations.push({ name, config: rawConfig, phase: 45 });
+      }
+    }
+
+    return declarations;
+  }
+
   /**
    * Extract main description from JSDoc comment
    */
   private extractDescription(jsdocContent: string): string {
     // Split by @tags that appear at start of a JSDoc line (after optional * prefix)
     // This avoids matching @tag references inline in description text
-    const beforeTags = jsdocContent.split(/(?:^|\n)\s*\*?\s*@(?:param|example|returns?|throws?|see|since|deprecated|version|author|license|ui|icon|format|stateful|autorun|async|webhook|cron|scheduled|locked|cached|timeout|retryable|throttled|debounced|queued|validate|Template|Static|mcp|photon|cli|tags|dependencies|csp|visibility)\b/)[0];
+    const beforeTags = jsdocContent.split(/(?:^|\n)\s*\*?\s*@(?:param|example|returns?|throws?|see|since|deprecated|version|author|license|ui|icon|format|stateful|autorun|async|webhook|cron|scheduled|locked|cached|timeout|retryable|throttled|debounced|queued|validate|use|Template|Static|mcp|photon|cli|tags|dependencies|csp|visibility)\b/)[0];
 
     // Remove leading * from each line and trim
     const lines = beforeTags

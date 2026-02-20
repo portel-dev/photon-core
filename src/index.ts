@@ -450,6 +450,24 @@ export {
 // Duration and rate string parsing for functional tags
 export { parseDuration, parseRate } from './utils/duration.js';
 
+// ===== EXTENSIBLE MIDDLEWARE =====
+// Registry-based middleware system for functional tags and custom middleware
+export {
+  defineMiddleware,
+  builtinRegistry,
+  MiddlewareRegistry,
+  createStateStore,
+  buildMiddlewareChain,
+  hashParams,
+  BUILT_IN_VALIDATORS,
+  type MiddlewareDefinition,
+  type MiddlewareContext,
+  type MiddlewareHandler,
+  type MiddlewareState,
+  type MiddlewareDeclaration,
+  type NextFn,
+} from './middleware.js';
+
 // ===== FILE WATCHING =====
 // Reusable photon file watcher with symlink resolution, debouncing, rename handling
 export { PhotonWatcher, type PhotonWatcherOptions } from './watcher.js';

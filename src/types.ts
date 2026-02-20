@@ -155,6 +155,19 @@ export interface ExtractedSchema {
    */
   deprecated?: string | true;
 
+  // ═══ MIDDLEWARE PIPELINE ═══
+
+  /**
+   * Unified middleware declarations (from @use tags and sugar tags)
+   * Single source of truth for the runtime middleware pipeline.
+   * Replaces individual functional tag fields for execution purposes.
+   */
+  middleware?: Array<{
+    name: string;
+    config: Record<string, any>;
+    phase: number;
+  }>;
+
   /** When true, method uses individual params instead of a single params object */
   simpleParams?: boolean;
 }
