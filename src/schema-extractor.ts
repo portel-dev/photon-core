@@ -108,6 +108,11 @@ export class SchemaExtractor {
 
         const jsdoc = this.getJSDocComment(member, sourceFile);
 
+        // Skip @internal methods — hidden from LLM and sidebar
+        if (/@internal\b/.test(jsdoc)) {
+          return;
+        }
+
         // Check if this is an async generator method (has asterisk token)
         const isGenerator = member.asteriskToken !== undefined;
 
