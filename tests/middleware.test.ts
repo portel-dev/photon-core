@@ -229,8 +229,9 @@ test('@use does not strip from description', () => {
 
 console.log('\n🧪 MiddlewareRegistry\n');
 
-test('builtinRegistry has all 9 built-ins', () => {
+test('builtinRegistry has all 10 built-ins', () => {
   assert.ok(builtinRegistry.has('fallback'));
+  assert.ok(builtinRegistry.has('logged'));
   assert.ok(builtinRegistry.has('cached'));
   assert.ok(builtinRegistry.has('timeout'));
   assert.ok(builtinRegistry.has('retryable'));
@@ -548,12 +549,156 @@ await asyncTest('@fallback lets successful calls through', async () => {
   assert.deepEqual(result, { data: 'real' });
 });
 
+// ─── @logged ───
+
+console.log('\n🧪 @logged tag\n');
+
+test('@logged extracts as middleware declaration', () => {
+  const tools = extractTools(`
+    export default class Test {
+      /** @logged */
+      async fetchData() { return 42; }
+    }
+  `);
+  assert.ok(tools[0].middleware);
+  const lg = tools[0].middleware!.find((m: any) => m.name === 'logged');
+  assert.ok(lg);
+  assert.equal(lg!.phase, 5);
+  assert.equal(lg!.config.level, 'info');
+});
+
+test('@logged debug parses custom level', () => {
+  const tools = extractTools(`
+    export default class Test {
+      /** @logged debug */
+      async debugMethod() {}
+    }
+  `);
+  const lg = tools[0].middleware!.find((m: any) => m.name === 'logged');
+  assert.equal(lg!.config.level, 'debug');
+});
+
+test('@logged has individual field on schema', () => {
+  const tools = extractTools(`
+    export default class Test {
+      /** @logged warn */
+      async warnMethod() {}
+    }
+  `);
+  assert.ok(tools[0].logged);
+  assert.equal(tools[0].logged.level, 'warn');
+});
+
+test('@logged does not appear in description', () => {
+  const tools = extractTools(`
+    export default class Test {
+      /**
+       * Fetch user data
+       * @logged
+       */
+      async fetchUser() {}
+    }
+  `);
+  assert.equal(tools[0].description, 'Fetch user data');
+});
+
+test('@logged at phase 5 sits between fallback(3) and throttled(10)', () => {
+  const tools = extractTools(`
+    export default class Test {
+      /**
+       * Full stack
+       * @fallback null
+       * @logged
+       * @throttled 5/min
+       */
+      async fullStack() {}
+    }
+  `);
+  const mw = tools[0].middleware!;
+  const sorted = [...mw].sort((a, b) => a.phase - b.phase);
+  assert.equal(sorted[0].name, 'fallback');  // 3
+  assert.equal(sorted[1].name, 'logged');    // 5
+  assert.equal(sorted[2].name, 'throttled'); // 10
+});
+
+await asyncTest('@logged logs success via console.error', async () => {
+  const logs: string[] = [];
+  const origError = console.error;
+  console.error = (...args: any[]) => logs.push(args.join(' '));
+
+  const reg = new MiddlewareRegistry();
+  reg.register(defineMiddleware({
+    name: 'logged',
+    phase: 5,
+    create(config: any) {
+      return async (ctx, next) => {
+        const start = Date.now();
+        try {
+          const result = await next();
+          console.error(`[${config.level}] ${ctx.photon}.${ctx.tool} ${Date.now() - start}ms`);
+          return result;
+        } catch (error: any) {
+          console.error(`[${config.level}] ${ctx.photon}.${ctx.tool} FAILED — ${error.message}`);
+          throw error;
+        }
+      };
+    },
+  }));
+
+  const declarations: MiddlewareDeclaration[] = [
+    { name: 'logged', config: { level: 'info' }, phase: 5 },
+  ];
+  const ctx: MiddlewareContext = { photon: 'billing', tool: 'charge', instance: 'default', params: {} };
+  const states = new Map();
+
+  const chain = buildMiddlewareChain(async () => 'ok', declarations, reg, states, ctx);
+  await chain();
+
+  console.error = origError;
+  assert.ok(logs.some(l => l.includes('[info] billing.charge') && l.includes('ms')));
+});
+
+await asyncTest('@logged logs failure via console.error', async () => {
+  const logs: string[] = [];
+  const origError = console.error;
+  console.error = (...args: any[]) => logs.push(args.join(' '));
+
+  const reg = new MiddlewareRegistry();
+  reg.register(defineMiddleware({
+    name: 'logged',
+    phase: 5,
+    create(config: any) {
+      return async (ctx, next) => {
+        try {
+          return await next();
+        } catch (error: any) {
+          console.error(`[${config.level}] ${ctx.photon}.${ctx.tool} FAILED — ${error.message}`);
+          throw error;
+        }
+      };
+    },
+  }));
+
+  const declarations: MiddlewareDeclaration[] = [
+    { name: 'logged', config: { level: 'error' }, phase: 5 },
+  ];
+  const ctx: MiddlewareContext = { photon: 'billing', tool: 'charge', instance: 'default', params: {} };
+  const states = new Map();
+
+  const chain = buildMiddlewareChain(async () => { throw new Error('card declined'); }, declarations, reg, states, ctx);
+  try { await chain(); } catch {}
+
+  console.error = origError;
+  assert.ok(logs.some(l => l.includes('[error] billing.charge FAILED') && l.includes('card declined')));
+});
+
 // ─── Registry update ───
 
 console.log('\n🧪 Registry (updated)\n');
 
-test('builtinRegistry has all 9 built-ins (including fallback)', () => {
+test('builtinRegistry has all 10 built-ins', () => {
   assert.ok(builtinRegistry.has('fallback'));
+  assert.ok(builtinRegistry.has('logged'));
   assert.ok(builtinRegistry.has('cached'));
   assert.ok(builtinRegistry.has('timeout'));
   assert.ok(builtinRegistry.has('retryable'));

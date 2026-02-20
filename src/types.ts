@@ -100,6 +100,13 @@ export interface ExtractedSchema {
   // ═══ FUNCTIONAL TAGS ═══
 
   /**
+   * Logging configuration (from @logged tag)
+   * Auto-logs method execution with timing and error details
+   * @example @logged or @logged debug
+   */
+  logged?: { level: string };
+
+  /**
    * Fallback value on error (from @fallback tag)
    * Returns this value instead of throwing when the method fails
    * @example @fallback []

@@ -224,6 +224,45 @@ function parseFallbackValue(raw: string): any {
   }
 }
 
+// --- logged (phase 5) ---
+
+const loggedMiddleware = defineMiddleware<{ level: string; tags: string[] }>({
+  name: 'logged',
+  phase: 5,
+  parseShorthand(value: string) {
+    const level = value.trim() || 'info';
+    return { level, tags: [] };
+  },
+  parseConfig(raw) {
+    return {
+      level: raw.level || 'info',
+      tags: raw.tags ? raw.tags.split(',').map((t: string) => t.trim()) : [],
+    };
+  },
+  create(config, _state) {
+    return async (ctx, next) => {
+      const start = Date.now();
+      try {
+        const result = await next();
+        const duration = Date.now() - start;
+        const tagStr = config.tags.length > 0 ? ` [${config.tags.join(',')}]` : '';
+        console.error(
+          `[${config.level}] ${ctx.photon}.${ctx.tool}${tagStr} ${duration}ms`
+        );
+        return result;
+      } catch (error) {
+        const duration = Date.now() - start;
+        const tagStr = config.tags.length > 0 ? ` [${config.tags.join(',')}]` : '';
+        const msg = error instanceof Error ? error.message : String(error);
+        console.error(
+          `[${config.level}] ${ctx.photon}.${ctx.tool}${tagStr} FAILED ${duration}ms — ${msg}`
+        );
+        throw error;
+      }
+    };
+  },
+});
+
 // --- throttled (phase 10) ---
 
 const throttledMiddleware = defineMiddleware<{ count: number; windowMs: number }>({
@@ -530,6 +569,7 @@ const retryableMiddleware = defineMiddleware<{ count: number; delay: number }>({
 
 export const builtinRegistry = new MiddlewareRegistry();
 builtinRegistry.register(fallbackMiddleware);
+builtinRegistry.register(loggedMiddleware);
 builtinRegistry.register(throttledMiddleware);
 builtinRegistry.register(debouncedMiddleware);
 builtinRegistry.register(cachedMiddleware);
