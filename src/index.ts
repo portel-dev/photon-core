@@ -446,6 +446,10 @@ export {
   autoDiscoverAssets,
 } from './asset-discovery.js';
 
+// ===== DURATION PARSING =====
+// Duration and rate string parsing for functional tags
+export { parseDuration, parseRate } from './utils/duration.js';
+
 // ===== FILE WATCHING =====
 // Reusable photon file watcher with symlink resolution, debouncing, rename handling
 export { PhotonWatcher, type PhotonWatcherOptions } from './watcher.js';

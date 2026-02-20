@@ -11,6 +11,7 @@
 import * as fs from 'fs/promises';
 import * as ts from 'typescript';
 import { ExtractedSchema, ConstructorParam, TemplateInfo, StaticInfo, OutputFormat, YieldInfo, MCPDependency, PhotonDependency, CLIDependency, ResolvedInjection, PhotonAssets, UIAsset, PromptAsset, ResourceAsset, ConfigSchema, ConfigParam } from './types.js';
+import { parseDuration, parseRate } from './utils/duration.js';
 
 export interface ExtractedMetadata {
   tools: ExtractedSchema[];
@@ -182,6 +183,16 @@ export class SchemaExtractor {
           const scheduled = this.extractScheduled(jsdoc, methodName);
           const locked = this.extractLocked(jsdoc, methodName);
 
+          // Functional tags
+          const cached = this.extractCached(jsdoc);
+          const timeout = this.extractTimeout(jsdoc);
+          const retryable = this.extractRetryable(jsdoc);
+          const throttled = this.extractThrottled(jsdoc);
+          const debounced = this.extractDebounced(jsdoc);
+          const queued = this.extractQueued(jsdoc);
+          const validations = this.extractValidations(jsdoc);
+          const deprecated = this.extractDeprecated(jsdoc);
+
           // Check for static keyword on the method
           const isStaticMethod = member.modifiers?.some(m => m.kind === ts.SyntaxKind.StaticKeyword) || false;
 
@@ -204,6 +215,15 @@ export class SchemaExtractor {
             ...(webhook !== undefined ? { webhook } : {}),
             ...(scheduled ? { scheduled } : {}),
             ...(locked !== undefined ? { locked } : {}),
+            // Functional tags
+            ...(cached ? { cached } : {}),
+            ...(timeout ? { timeout } : {}),
+            ...(retryable ? { retryable } : {}),
+            ...(throttled ? { throttled } : {}),
+            ...(debounced ? { debounced } : {}),
+            ...(queued ? { queued } : {}),
+            ...(validations && validations.length > 0 ? { validations } : {}),
+            ...(deprecated !== undefined ? { deprecated } : {}),
           });
         }
       };
@@ -718,7 +738,7 @@ export class SchemaExtractor {
   private extractDescription(jsdocContent: string): string {
     // Split by @tags that appear at start of a JSDoc line (after optional * prefix)
     // This avoids matching @tag references inline in description text
-    const beforeTags = jsdocContent.split(/(?:^|\n)\s*\*?\s*@(?:param|example|returns?|throws?|see|since|deprecated|version|author|license|ui|icon|format|stateful|autorun|async|webhook|cron|scheduled|locked|Template|Static|mcp|photon|cli|tags|dependencies|csp|visibility)\b/)[0];
+    const beforeTags = jsdocContent.split(/(?:^|\n)\s*\*?\s*@(?:param|example|returns?|throws?|see|since|deprecated|version|author|license|ui|icon|format|stateful|autorun|async|webhook|cron|scheduled|locked|cached|timeout|retryable|throttled|debounced|queued|validate|Template|Static|mcp|photon|cli|tags|dependencies|csp|visibility)\b/)[0];
 
     // Remove leading * from each line and trim
     const lines = beforeTags
@@ -1235,6 +1255,118 @@ export class SchemaExtractor {
     }
 
     return undefined;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // FUNCTIONAL TAG EXTRACTION
+  // ═══════════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Extract cache configuration from @cached tag
+   * - @cached → default 5m TTL
+   * - @cached 30s → 30 second TTL
+   * - @cached 1h → 1 hour TTL
+   */
+  private extractCached(jsdocContent: string): { ttl: number } | undefined {
+    const match = jsdocContent.match(/@cached(?:\s+(\d+(?:ms|s|sec|m|min|h|hr|d|day)))?/i);
+    if (!match) return undefined;
+    const ttl = match[1] ? parseDuration(match[1]) : 300_000; // default 5m
+    return { ttl };
+  }
+
+  /**
+   * Extract timeout configuration from @timeout tag
+   * - @timeout 30s → 30 second timeout
+   * - @timeout 5m → 5 minute timeout
+   */
+  private extractTimeout(jsdocContent: string): { ms: number } | undefined {
+    const match = jsdocContent.match(/@timeout\s+(\d+(?:ms|s|sec|m|min|h|hr|d|day))/i);
+    if (!match) return undefined;
+    return { ms: parseDuration(match[1]) };
+  }
+
+  /**
+   * Extract retry configuration from @retryable tag
+   * - @retryable → default 3 retries, 1s delay
+   * - @retryable 5 → 5 retries, 1s delay
+   * - @retryable 3 2s → 3 retries, 2s delay
+   */
+  private extractRetryable(jsdocContent: string): { count: number; delay: number } | undefined {
+    const match = jsdocContent.match(/@retryable(?:\s+(\d+))?(?:\s+(\d+(?:ms|s|sec|m|min|h|hr|d|day)))?/i);
+    if (!match) return undefined;
+    const count = match[1] ? parseInt(match[1], 10) : 3;
+    const delay = match[2] ? parseDuration(match[2]) : 1_000;
+    return { count, delay };
+  }
+
+  /**
+   * Extract throttle configuration from @throttled tag
+   * - @throttled 10/min → 10 calls per minute
+   * - @throttled 100/h → 100 calls per hour
+   */
+  private extractThrottled(jsdocContent: string): { count: number; windowMs: number } | undefined {
+    const match = jsdocContent.match(/@throttled\s+(\d+\/(?:s|sec|m|min|h|hr|d|day))/i);
+    if (!match) return undefined;
+    return parseRate(match[1]);
+  }
+
+  /**
+   * Extract debounce configuration from @debounced tag
+   * - @debounced → default 500ms
+   * - @debounced 200ms → 200ms delay
+   * - @debounced 1s → 1 second delay
+   */
+  private extractDebounced(jsdocContent: string): { delay: number } | undefined {
+    const match = jsdocContent.match(/@debounced(?:\s+(\d+(?:ms|s|sec|m|min|h|hr|d|day)))?/i);
+    if (!match) return undefined;
+    const delay = match[1] ? parseDuration(match[1]) : 500;
+    return { delay };
+  }
+
+  /**
+   * Extract queue configuration from @queued tag
+   * - @queued → default concurrency 1
+   * - @queued 3 → concurrency 3
+   */
+  private extractQueued(jsdocContent: string): { concurrency: number } | undefined {
+    const match = jsdocContent.match(/@queued(?:\s+(\d+))?/i);
+    if (!match) return undefined;
+    const concurrency = match[1] ? parseInt(match[1], 10) : 1;
+    return { concurrency };
+  }
+
+  /**
+   * Extract validation rules from @validate tags
+   * - @validate params.email must be a valid email
+   * - @validate params.amount must be positive
+   */
+  private extractValidations(jsdocContent: string): Array<{ field: string; rule: string }> | undefined {
+    const validations: Array<{ field: string; rule: string }> = [];
+    const regex = /@validate\s+([\w.]+)\s+(.+)/g;
+    let match;
+    while ((match = regex.exec(jsdocContent)) !== null) {
+      validations.push({
+        field: match[1].replace(/^params\./, ''), // strip params. prefix
+        rule: match[2].trim().replace(/\*\/$/, '').trim(), // strip JSDoc closing
+      });
+    }
+    return validations.length > 0 ? validations : undefined;
+  }
+
+  /**
+   * Extract deprecation notice from @deprecated tag (class-level, not param-level)
+   * - @deprecated → true
+   * - @deprecated Use addV2 instead → "Use addV2 instead"
+   *
+   * Note: Only matches @deprecated at the start of a JSDoc line (after * prefix),
+   * NOT inside {@deprecated} inline tags (those are param-level).
+   */
+  private extractDeprecated(jsdocContent: string): string | true | undefined {
+    // Match @deprecated at start of line (with optional * prefix), not inside {}
+    const match = jsdocContent.match(/(?:^|\n)\s*\*?\s*@deprecated(?:\s+([^\n*]+))?/i);
+    if (!match) return undefined;
+    const message = match[1]?.trim();
+    return message || true;
   }
 
   /**

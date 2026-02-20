@@ -96,6 +96,67 @@ export interface ExtractedSchema {
    * - string: custom lock name (e.g., @locked board:write)
    */
   locked?: boolean | string;
+
+  // ═══ FUNCTIONAL TAGS ═══
+
+  /**
+   * Cache configuration (from @cached tag)
+   * Memoize return value for the specified TTL
+   * @example @cached 5m
+   */
+  cached?: { ttl: number };
+
+  /**
+   * Execution timeout in ms (from @timeout tag)
+   * Rejects with TimeoutError if method doesn't resolve in time
+   * @example @timeout 30s
+   */
+  timeout?: { ms: number };
+
+  /**
+   * Auto-retry configuration (from @retryable tag)
+   * Retries on failure with delay between attempts
+   * @example @retryable 3 1s
+   */
+  retryable?: { count: number; delay: number };
+
+  /**
+   * Rate limiting configuration (from @throttled tag)
+   * At most N calls per time window
+   * @example @throttled 10/min
+   */
+  throttled?: { count: number; windowMs: number };
+
+  /**
+   * Debounce configuration (from @debounced tag)
+   * Collapses rapid repeated calls — only the last one executes
+   * @example @debounced 500ms
+   */
+  debounced?: { delay: number };
+
+  /**
+   * Queue configuration (from @queued tag)
+   * At most N concurrent executions, excess calls are queued
+   * @example @queued 1
+   */
+  queued?: { concurrency: number };
+
+  /**
+   * Custom validation rules (from @validate tag)
+   * Runtime validation beyond JSON Schema
+   * @example @validate params.email must be a valid email
+   */
+  validations?: Array<{ field: string; rule: string }>;
+
+  /**
+   * Deprecation notice (from @deprecated tag)
+   * Tool still works but shows warnings everywhere
+   * @example @deprecated Use addV2 instead
+   */
+  deprecated?: string | true;
+
+  /** When true, method uses individual params instead of a single params object */
+  simpleParams?: boolean;
 }
 
 export interface PhotonClass {
