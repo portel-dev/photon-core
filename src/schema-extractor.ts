@@ -109,7 +109,11 @@ export class SchemaExtractor {
         const jsdoc = this.getJSDocComment(member, sourceFile);
 
         // Skip @internal methods — hidden from LLM and sidebar
-        if (/@internal\b/.test(jsdoc)) {
+        // Exception: daemon-feature methods (@scheduled, @webhook) must still
+        // be registered in tools so the runtime can wire up cron jobs/webhooks.
+        const isInternal = /@internal\b/.test(jsdoc);
+        const hasDaemonFeature = /@scheduled\b/.test(jsdoc) || /@webhook\b/.test(jsdoc) || /@cron\b/.test(jsdoc) || /^scheduled/.test(methodName);
+        if (isInternal && !hasDaemonFeature) {
           return;
         }
 
@@ -212,6 +216,7 @@ export class SchemaExtractor {
             name: methodName,
             description,
             inputSchema,
+            ...(isInternal ? { internal: true } : {}),
             ...(outputFormat ? { outputFormat } : {}),
             ...(layoutHints ? { layoutHints } : {}),
             ...(buttonLabel ? { buttonLabel } : {}),
