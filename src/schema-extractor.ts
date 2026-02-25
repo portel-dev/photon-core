@@ -1230,9 +1230,6 @@ export class SchemaExtractor {
         if (constraints.pattern !== undefined) {
           s.pattern = constraints.pattern;
         }
-        if (constraints.format !== undefined) {
-          s.format = constraints.format;
-        }
       } else if (s.type === 'array') {
         if (constraints.min !== undefined) {
           s.minItems = constraints.min;
@@ -1246,6 +1243,9 @@ export class SchemaExtractor {
       }
 
       // Apply type-agnostic constraints
+      if (constraints.format !== undefined) {
+        s.format = constraints.format;
+      }
       if (constraints.default !== undefined) {
         s.default = constraints.default;
       }
