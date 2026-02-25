@@ -120,6 +120,10 @@ export class DependencyManager {
     console.error(`📦 Installing dependencies for ${mcpName}...`);
     await this.runNpmInstall(mcpDir);
 
+    // Fix broken @portel/photon-core symlinks caused by npm link in dev environments.
+    // npm install may create a relative symlink that doesn't resolve from the cache dir.
+    await this.fixBrokenPhotonCoreLink(nodeModules);
+
     console.error(`✅ Dependencies installed for ${mcpName}`);
     return nodeModules;
   }
@@ -182,6 +186,59 @@ export class DependencyManager {
 
       child.on('error', reject);
     });
+  }
+
+  /**
+   * Fix broken @portel/photon-core symlinks in node_modules.
+   * When photon-core is npm-linked in dev, npm install in the cache dir
+   * may create a relative symlink that doesn't resolve. Replace it with
+   * an absolute symlink to the actual photon-core package.
+   */
+  private async fixBrokenPhotonCoreLink(nodeModules: string): Promise<void> {
+    const corePath = path.join(nodeModules, '@portel', 'photon-core');
+    try {
+      const stat = await fs.lstat(corePath);
+      if (!stat.isSymbolicLink()) return;
+
+      // Check if the symlink target actually exists
+      try {
+        await fs.access(corePath);
+        return; // Symlink is valid
+      } catch {
+        // Broken symlink — resolve the real photon-core location
+      }
+
+      // Find photon-core by resolving from the main process
+      let realCorePath: string | undefined;
+      try {
+        const resolved = require.resolve('@portel/photon-core/package.json');
+        realCorePath = path.dirname(resolved);
+      } catch {
+        // Try import.meta-based resolution
+        try {
+          const resolved = require.resolve('@portel/photon-core');
+          realCorePath = path.dirname(resolved);
+          // Walk up to find the package root (contains package.json)
+          while (realCorePath !== path.dirname(realCorePath)) {
+            try {
+              await fs.access(path.join(realCorePath, 'package.json'));
+              break;
+            } catch {
+              realCorePath = path.dirname(realCorePath);
+            }
+          }
+        } catch {
+          return; // Can't find photon-core at all
+        }
+      }
+
+      if (realCorePath) {
+        await fs.rm(corePath, { force: true });
+        await fs.symlink(realCorePath, corePath);
+      }
+    } catch {
+      // Best effort — don't fail the install
+    }
   }
 
   /**
