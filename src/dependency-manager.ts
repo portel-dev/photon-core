@@ -190,39 +190,55 @@ export class DependencyManager {
   }
 
   /**
-   * Fix broken @portel/photon-core symlinks in node_modules.
-   * When photon-core is npm-linked in dev, npm install in the cache dir
-   * may create a relative symlink that doesn't resolve. Replace it with
-   * an absolute symlink to the actual photon-core package.
+   * Ensure @portel/photon-core is accessible in node_modules.
+   * Handles three cases:
+   * 1. Missing entirely — npm couldn't install it (e.g. file: path resolves
+   *    to a non-existent dir in the cache), so create an absolute symlink.
+   * 2. Broken symlink — target doesn't exist, replace with absolute symlink.
+   * 3. Working symlink or real install — leave it alone.
+   *
+   * This file IS inside photon-core, so we derive the package root from
+   * import.meta.url: dist/dependency-manager.js → two levels up.
    */
   private async fixBrokenPhotonCoreLink(nodeModules: string): Promise<void> {
     const corePath = path.join(nodeModules, '@portel', 'photon-core');
     try {
-      const stat = await fs.lstat(corePath);
-      if (!stat.isSymbolicLink()) return;
-
-      // Check if the symlink target actually exists
+      // Check whether photon-core is already accessible (exists + resolvable).
+      let needsFix = false;
       try {
-        await fs.access(corePath);
-        return; // Symlink is valid
+        await fs.access(path.join(corePath, 'package.json'));
+        // Accessible — nothing to do.
+        return;
       } catch {
-        // Broken symlink — resolve the real photon-core location
+        // Either the directory doesn't exist or the symlink target is broken.
+        needsFix = true;
       }
 
-      // This file IS inside photon-core, so derive the package root from import.meta.url.
-      // dist/dependency-manager.js → two levels up = package root.
+      if (!needsFix) return;
+
+      // Derive the real photon-core location from this file.
       const thisFile = fileURLToPath(import.meta.url);
       const realCorePath = path.dirname(path.dirname(thisFile));
       try {
         await fs.access(path.join(realCorePath, 'package.json'));
       } catch {
-        return; // Unexpected layout — bail out
+        return; // Can't locate photon-core — bail out gracefully.
       }
 
-      await fs.rm(corePath, { force: true });
+      // Create the @portel scope directory if needed.
+      await fs.mkdir(path.join(nodeModules, '@portel'), { recursive: true });
+
+      // Remove broken symlink or stale entry if present.
+      try {
+        await fs.rm(corePath, { force: true });
+      } catch {
+        // Ignore — rm with force should never throw, but be safe.
+      }
+
+      // Create an absolute symlink so it works from any working directory.
       await fs.symlink(realCorePath, corePath);
     } catch {
-      // Best effort — don't fail the install
+      // Best effort — don't fail the install.
     }
   }
 
