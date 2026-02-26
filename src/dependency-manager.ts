@@ -9,6 +9,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { spawn } from 'child_process';
+import { createRequire } from 'module';
 
 interface DependencySpec {
   name: string;
@@ -208,28 +209,15 @@ export class DependencyManager {
         // Broken symlink — resolve the real photon-core location
       }
 
-      // Find photon-core by resolving from the main process
+      // Find photon-core by resolving from the main process.
+      // Must use createRequire since this is an ESM module — require is not defined.
       let realCorePath: string | undefined;
       try {
-        const resolved = require.resolve('@portel/photon-core/package.json');
+        const _require = createRequire(import.meta.url);
+        const resolved = _require.resolve('@portel/photon-core/package.json');
         realCorePath = path.dirname(resolved);
       } catch {
-        // Try import.meta-based resolution
-        try {
-          const resolved = require.resolve('@portel/photon-core');
-          realCorePath = path.dirname(resolved);
-          // Walk up to find the package root (contains package.json)
-          while (realCorePath !== path.dirname(realCorePath)) {
-            try {
-              await fs.access(path.join(realCorePath, 'package.json'));
-              break;
-            } catch {
-              realCorePath = path.dirname(realCorePath);
-            }
-          }
-        } catch {
-          return; // Can't find photon-core at all
-        }
+        return; // Can't find photon-core at all
       }
 
       if (realCorePath) {
