@@ -10,7 +10,7 @@
 
 import * as fs from 'fs/promises';
 import * as ts from 'typescript';
-import { ExtractedSchema, ConstructorParam, TemplateInfo, StaticInfo, OutputFormat, YieldInfo, MCPDependency, PhotonDependency, CLIDependency, ResolvedInjection, PhotonAssets, UIAsset, PromptAsset, ResourceAsset, ConfigSchema, ConfigParam } from './types.js';
+import { ExtractedSchema, ConstructorParam, TemplateInfo, StaticInfo, OutputFormat, YieldInfo, MCPDependency, PhotonDependency, CLIDependency, ResolvedInjection, PhotonAssets, UIAsset, PromptAsset, ResourceAsset, ConfigSchema, ConfigParam, SettingsSchema, SettingsProperty } from './types.js';
 import { parseDuration, parseRate } from './utils/duration.js';
 import { builtinRegistry, type MiddlewareDeclaration } from './middleware.js';
 
@@ -18,7 +18,9 @@ export interface ExtractedMetadata {
   tools: ExtractedSchema[];
   templates: TemplateInfo[];
   statics: StaticInfo[];
-  /** Configuration schema from configure() method */
+  /** Settings schema from `protected settings = { ... }` property */
+  settingsSchema?: SettingsSchema;
+  /** @deprecated Configuration schema from configure() method */
   configSchema?: ConfigSchema;
 }
 
@@ -47,7 +49,10 @@ export class SchemaExtractor {
     const templates: TemplateInfo[] = [];
     const statics: StaticInfo[] = [];
 
-    // Configuration schema tracking
+    // Settings schema tracking (new property-based approach)
+    let settingsSchema: SettingsSchema | undefined;
+
+    // Configuration schema tracking (deprecated method-based approach)
     let configSchema: ConfigSchema = {
       hasConfigureMethod: false,
       hasGetConfigMethod: false,
@@ -78,32 +83,32 @@ export class SchemaExtractor {
           return;
         }
 
-        // Handle configuration convention methods specially
+        // Track configure/getConfig for backward compat metadata (deprecated)
+        // These are no longer hidden — they become normal visible tools
         if (methodName === 'configure') {
           configSchema.hasConfigureMethod = true;
-          const jsdoc = this.getJSDocComment(member, sourceFile);
-          configSchema.description = this.extractDescription(jsdoc);
+          const jsdocConfig = this.getJSDocComment(member, sourceFile);
+          configSchema.description = this.extractDescription(jsdocConfig);
 
-          // Extract configure() parameters as config schema
           const paramsType = this.getFirstParameterType(member, sourceFile);
           if (paramsType) {
-            const { properties, required } = this.buildSchemaFromType(paramsType, sourceFile);
-            const paramDocs = this.extractParamDocs(jsdoc);
+            const { properties: configProps, required: configRequired } = this.buildSchemaFromType(paramsType, sourceFile);
+            const paramDocs = this.extractParamDocs(jsdocConfig);
 
-            configSchema.params = Object.keys(properties).map(name => ({
+            configSchema.params = Object.keys(configProps).map(name => ({
               name,
-              type: properties[name].type || 'string',
-              description: paramDocs.get(name) || properties[name].description,
-              required: required.includes(name),
-              defaultValue: properties[name].default,
+              type: configProps[name].type || 'string',
+              description: paramDocs.get(name) || configProps[name].description,
+              required: configRequired.includes(name),
+              defaultValue: configProps[name].default,
             }));
           }
-          return; // Don't add configure() as a tool
+          // Fall through — configure() is now a normal tool (not hidden)
         }
 
         if (methodName === 'getConfig') {
           configSchema.hasGetConfigMethod = true;
-          return; // Don't add getConfig() as a tool
+          // Fall through — getConfig() is now a normal tool (not hidden)
         }
 
         const jsdoc = this.getJSDocComment(member, sourceFile);
@@ -250,11 +255,110 @@ export class SchemaExtractor {
         }
       };
 
+      // Helper to extract settings from a `protected settings = { ... }` property
+      const processSettingsProperty = (member: ts.PropertyDeclaration, classNode: ts.ClassDeclaration) => {
+        const name = member.name.getText(sourceFile);
+        if (name !== 'settings') return;
+
+        // Must be protected
+        const isProtected = member.modifiers?.some(
+          m => m.kind === ts.SyntaxKind.ProtectedKeyword
+        );
+        if (!isProtected) return;
+
+        // Must have an object literal initializer
+        if (!member.initializer || !ts.isObjectLiteralExpression(member.initializer)) return;
+
+        // Get class-level JSDoc for @property descriptions
+        const classJsdoc = this.getJSDocComment(classNode as any, sourceFile);
+        const propertyDocs = new Map<string, string>();
+        const propertyRegex = /@property\s+(\w+)\s+(.*?)(?=\n\s*\*\s*@|\n\s*\*\/|\n\s*\*\s*$)/gs;
+        let propMatch: RegExpExecArray | null;
+        while ((propMatch = propertyRegex.exec(classJsdoc)) !== null) {
+          propertyDocs.set(propMatch[1], propMatch[2].trim());
+        }
+
+        const properties: SettingsProperty[] = [];
+
+        for (const prop of member.initializer.properties) {
+          if (!ts.isPropertyAssignment(prop)) continue;
+          const propName = prop.name.getText(sourceFile);
+
+          // Determine type and default from the initializer
+          let type = 'string';
+          let defaultValue: any = undefined;
+          let required = false;
+
+          const init = prop.initializer;
+
+          if (ts.isNumericLiteral(init)) {
+            type = 'number';
+            defaultValue = Number(init.text);
+          } else if (ts.isStringLiteral(init)) {
+            type = 'string';
+            defaultValue = init.text;
+          } else if (init.kind === ts.SyntaxKind.TrueKeyword) {
+            type = 'boolean';
+            defaultValue = true;
+          } else if (init.kind === ts.SyntaxKind.FalseKeyword) {
+            type = 'boolean';
+            defaultValue = false;
+          } else if (init.kind === ts.SyntaxKind.UndefinedKeyword) {
+            // `key: undefined` — required, type inferred from as-expression or defaults to string
+            required = true;
+          } else if (ts.isAsExpression(init)) {
+            // `key: undefined as string | undefined` or `key: 5 as number`
+            const innerInit = init.expression;
+            const isUndefined = innerInit.kind === ts.SyntaxKind.UndefinedKeyword ||
+              (ts.isIdentifier(innerInit) && innerInit.text === 'undefined');
+            if (isUndefined) {
+              required = true;
+            } else if (ts.isNumericLiteral(innerInit)) {
+              type = 'number';
+              defaultValue = Number(innerInit.text);
+            } else if (ts.isStringLiteral(innerInit)) {
+              type = 'string';
+              defaultValue = innerInit.text;
+            } else if (innerInit.kind === ts.SyntaxKind.TrueKeyword || innerInit.kind === ts.SyntaxKind.FalseKeyword) {
+              type = 'boolean';
+              defaultValue = innerInit.kind === ts.SyntaxKind.TrueKeyword;
+            }
+            // Try to get type from the as-expression type annotation
+            const typeText = init.type.getText(sourceFile).replace(/\s*\|\s*undefined/g, '').trim();
+            if (typeText === 'number') type = 'number';
+            else if (typeText === 'boolean') type = 'boolean';
+            else if (typeText === 'string') type = 'string';
+          } else if (ts.isArrayLiteralExpression(init)) {
+            type = 'array';
+            defaultValue = [];
+          }
+
+          properties.push({
+            name: propName,
+            type,
+            description: propertyDocs.get(propName),
+            default: defaultValue,
+            required,
+          });
+        }
+
+        settingsSchema = {
+          hasSettings: true,
+          properties,
+          description: propertyDocs.size > 0 ? 'Photon settings' : undefined,
+        };
+      };
+
       // Visit all nodes in the AST
       const visit = (node: ts.Node) => {
         // Look for class declarations
         if (ts.isClassDeclaration(node)) {
           node.members.forEach((member) => {
+            // Detect `protected settings = { ... }` property
+            if (ts.isPropertyDeclaration(member)) {
+              processSettingsProperty(member, node);
+            }
+
             // Process all public methods (sync or async)
             // Skip private/protected — only public methods become tools
             if (ts.isMethodDeclaration(member)) {
@@ -276,11 +380,18 @@ export class SchemaExtractor {
       console.error('Failed to parse TypeScript source:', error.message);
     }
 
-    // Only include configSchema if there's a configure() method
     const result: ExtractedMetadata = { tools, templates, statics };
+
+    // Include settingsSchema if detected
+    if (settingsSchema) {
+      result.settingsSchema = settingsSchema;
+    }
+
+    // Include configSchema if there's a configure() method (deprecated)
     if (configSchema.hasConfigureMethod) {
       result.configSchema = configSchema;
     }
+
     return result;
   }
 
@@ -1815,23 +1926,29 @@ export class SchemaExtractor {
   extractPhotonDependencies(source: string): PhotonDependency[] {
     const dependencies: PhotonDependency[] = [];
 
-    // Match @photon <name> <source> pattern
+    // Match @photon <name> <source> pattern, where source may include :instanceName suffix
+    // e.g., @photon homeTodos todo:home → source='todo', instanceName='home'
     // Source ends at: newline, end of comment (*), or @ (next tag)
-    const photonRegex = /@photon\s+(\w+)\s+([^\s*@\n]+)/g;
+    const photonRegex = /@photon\s+(\w+)\s+([^\s*@\n:]+)(?::(\w[\w-]*))?/g;
 
     let match;
     while ((match = photonRegex.exec(source)) !== null) {
-      const [, name, rawSource] = match;
+      const [, name, rawSource, instanceName] = match;
       const photonSource = rawSource.trim();
 
       // Determine source type
       const sourceType = this.classifyPhotonSource(photonSource);
 
-      dependencies.push({
+      const dep: PhotonDependency = {
         name,
         source: photonSource,
         sourceType,
-      });
+      };
+      if (instanceName) {
+        dep.instanceName = instanceName;
+      }
+
+      dependencies.push(dep);
     }
 
     return dependencies;

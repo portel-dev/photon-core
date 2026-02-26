@@ -302,6 +302,8 @@ export interface PhotonDependency {
   source: string;
   /** Resolved source type */
   sourceType: 'marketplace' | 'github' | 'npm' | 'local';
+  /** Named instance to load (e.g., 'home' from `@photon homeTodos todo:home`) */
+  instanceName?: string;
 }
 
 /**
@@ -487,6 +489,8 @@ export interface PhotonClassExtended extends PhotonClass {
   assets?: PhotonAssets;
   /** Names of injected @photon dependencies (for client-side event routing) */
   injectedPhotons?: string[];
+  /** Settings schema if the photon has `protected settings = { ... }` */
+  settingsSchema?: SettingsSchema;
 }
 
 /** @deprecated Use PhotonClassExtended instead */
@@ -642,10 +646,56 @@ export interface WorkflowRun {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// CONFIGURATION CONVENTION
+// SETTINGS (first-class property-driven configuration)
 // ══════════════════════════════════════════════════════════════════════════════
 
 /**
+ * A single property in a photon's settings declaration
+ */
+export interface SettingsProperty {
+  /** Property name */
+  name: string;
+  /** JSON Schema type (string, number, boolean, etc.) */
+  type: string;
+  /** Description from @property JSDoc tag */
+  description?: string;
+  /** Default value from the object literal (undefined means elicitation required) */
+  default?: any;
+  /** True if default is undefined — runtime must elicit this value */
+  required: boolean;
+}
+
+/**
+ * Settings schema extracted from a photon's `protected settings = { ... }` property
+ *
+ * Example:
+ * ```typescript
+ * /**
+ *  * @property wipLimit WIP limit for in-progress tasks (1-20)
+ *  * @property staleTaskDays Days before a task is considered stale
+ *  *\/
+ * protected settings = {
+ *   wipLimit: 5,
+ *   staleTaskDays: 7,
+ *   projectsRoot: undefined as string | undefined,
+ * };
+ * ```
+ */
+export interface SettingsSchema {
+  /** Whether a settings property was detected */
+  hasSettings: boolean;
+  /** Individual settings properties */
+  properties: SettingsProperty[];
+  /** Description from class-level JSDoc */
+  description?: string;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CONFIGURATION CONVENTION (deprecated — use settings property instead)
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * @deprecated Use SettingsProperty instead
  * Configuration parameter extracted from configure() method
  */
 export interface ConfigParam {
@@ -662,35 +712,8 @@ export interface ConfigParam {
 }
 
 /**
+ * @deprecated Use SettingsSchema instead
  * Configuration schema extracted from a Photon's configure() method
- *
- * The configure() method is a by-convention method for photon configuration.
- * Similar to how main() makes a photon a UI application, configure() makes
- * it a configurable photon.
- *
- * When present, the framework will:
- * 1. Extract parameter schema from the method signature
- * 2. Present a configuration UI during install/setup
- * 3. Store config at ~/.photon/{photonName}/config.json
- * 4. Make config available via getConfig()
- *
- * Example:
- * ```typescript
- * export default class MyPhoton extends Photon {
- *   async configure(params: {
- *     apiEndpoint: string;
- *     maxRetries?: number;
- *   }) {
- *     // Save config - framework handles storage
- *     return { success: true };
- *   }
- *
- *   async getConfig() {
- *     // Read config - framework handles loading
- *     return loadPhotonConfig('my-photon');
- *   }
- * }
- * ```
  */
 export interface ConfigSchema {
   /** Whether configure() method exists */
