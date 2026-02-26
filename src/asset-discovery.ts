@@ -40,8 +40,23 @@ export async function discoverAssets(
   source: string,
 ): Promise<PhotonAssets | undefined> {
   const extractor = new SchemaExtractor();
-  const dir = path.dirname(photonPath);
   const basename = path.basename(photonPath, '.photon.ts');
+
+  // If the .photon.ts file is a symlink, resolve it so asset folders are
+  // discovered from the source repository (e.g. ~/Projects/photons/boards/ui/)
+  // rather than the symlink location (e.g. ~/.photon/boards/ui/).
+  // Data/state files are keyed on photonPath itself, so those remain local.
+  let assetBase = path.dirname(photonPath);
+  try {
+    const lstat = await fs.lstat(photonPath);
+    if (lstat.isSymbolicLink()) {
+      const realPath = await fs.realpath(photonPath);
+      assetBase = path.dirname(realPath);
+    }
+  } catch {
+    // Not a symlink or unreadable — fall back to dirname of photonPath
+  }
+  const dir = assetBase;
 
   // Convention: asset folder has same name as photon (without .photon.ts)
   const assetFolder = path.join(dir, basename);
