@@ -161,7 +161,7 @@ export class Photon {
    * Cross-photon call handler - injected by runtime
    * @internal
    */
-  _callHandler?: (photon: string, method: string, params: Record<string, any>) => Promise<any>;
+  _callHandler?: (photon: string, method: string, params: Record<string, any>, targetInstance?: string) => Promise<any>;
 
   /**
    * Call another photon's method through the daemon
@@ -184,7 +184,7 @@ export class Photon {
    *
    * @throws Error if call handler is not set or target format is invalid
    */
-  protected async call(target: string, params: Record<string, any> = {}): Promise<any> {
+  protected async call(target: string, params: Record<string, any> = {}, options?: { instance?: string }): Promise<any> {
     const dotIndex = target.indexOf('.');
     if (dotIndex === -1) {
       throw new Error(
@@ -201,7 +201,7 @@ export class Photon {
       );
     }
 
-    return this._callHandler(photonName, methodName, params);
+    return this._callHandler(photonName, methodName, params, options?.instance);
   }
 
   /**
