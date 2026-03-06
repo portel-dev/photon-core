@@ -11,6 +11,27 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import { fileURLToPath } from 'url';
+
+// Get photon-core version for cache invalidation
+let _photonCoreVersion = '';
+
+async function getPhotonCoreVersion(): Promise<string> {
+  if (_photonCoreVersion) return _photonCoreVersion;
+
+  try {
+    const __dirname = path.dirname(fileURLToPath(import.meta.url));
+    const pkgPath = path.join(__dirname, '..', 'package.json');
+    const pkgContent = await fs.readFile(pkgPath, 'utf-8');
+    const pkg = JSON.parse(pkgContent);
+    _photonCoreVersion = pkg.version || '0.0.0';
+  } catch {
+    // Fallback to a default if package.json can't be read
+    _photonCoreVersion = '0.0.0';
+  }
+
+  return _photonCoreVersion;
+}
 
 /**
  * Compile a .photon.ts file to JavaScript and cache the result
@@ -123,7 +144,10 @@ export async function compilePhotonTS(
   // Transform reactive collection literals before compilation
   source = transformReactiveCollections(source);
 
-  const hash = crypto.createHash('sha256').update(source).digest('hex').slice(0, 16);
+  // Include photon-core version in cache key to invalidate on upgrades
+  const photonCoreVersion = await getPhotonCoreVersion();
+  const cacheInput = `${source}:::${photonCoreVersion}`;
+  const hash = crypto.createHash('sha256').update(cacheInput).digest('hex').slice(0, 16);
 
   const fileName = path.basename(tsFilePath, '.ts');
   const cachedJsPath = path.join(options.cacheDir, `${fileName}.${hash}.mjs`);
