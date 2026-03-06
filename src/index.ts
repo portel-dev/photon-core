@@ -374,18 +374,6 @@ export {
 // esbuild-based .photon.ts compilation with caching
 export { compilePhotonTS } from './compiler.js';
 
-// Pagination types and utilities for stateful photons
-export {
-  type PaginationMetadata,
-  type PaginatedResponse,
-  type ViewportRange,
-  validatePaginationMetadata,
-  isPaginatedResponse,
-  calculateBufferedRange,
-  rangesOverlap,
-  getPageSizeForDeviceType,
-} from './pagination.js';
-
 // ===== MIME TYPES =====
 // Extension-to-MIME mapping for assets
 export { getMimeType } from './mime-types.js';
