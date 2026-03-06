@@ -263,7 +263,7 @@ export class SchemaExtractor {
           const throttled = this.extractThrottled(jsdoc);
           const debounced = this.extractDebounced(jsdoc);
           const queued = this.extractQueued(jsdoc);
-          const validations = this.extractValidations(jsdoc);
+          const validations = this.extractValidations(jsdoc, Object.keys(properties));
           const deprecated = this.extractDeprecated(jsdoc);
 
           // Build unified middleware declarations (single source of truth for runtime)
@@ -1394,6 +1394,17 @@ export class SchemaExtractor {
    * Works with both simple types and anyOf schemas
    */
   private applyConstraints(schema: any, constraints: any) {
+    // Validate constraint values before applying (fail-safe)
+    if (constraints.min !== undefined && constraints.max !== undefined) {
+      if (constraints.min > constraints.max) {
+        console.warn(
+          `Invalid constraint: @min (${constraints.min}) > @max (${constraints.max}). ` +
+          `Using only @min. Remove @max or use a larger value.`
+        );
+        delete constraints.max;
+      }
+    }
+
     // Helper to apply constraints to a single schema based on type
     const applyToSchema = (s: any) => {
       if (s.enum) {
@@ -1416,7 +1427,15 @@ export class SchemaExtractor {
           s.maximum = constraints.max;
         }
         if (constraints.multipleOf !== undefined) {
-          s.multipleOf = constraints.multipleOf;
+          // Validate multipleOf is positive (JSON schema requires > 0)
+          if (constraints.multipleOf <= 0) {
+            console.warn(
+              `Invalid @multipleOf value: ${constraints.multipleOf}. ` +
+              `Must be positive and non-zero. Constraint not applied.`
+            );
+          } else {
+            s.multipleOf = constraints.multipleOf;
+          }
         }
       } else if (s.type === 'string') {
         if (constraints.min !== undefined) {
@@ -1426,7 +1445,16 @@ export class SchemaExtractor {
           s.maxLength = constraints.max;
         }
         if (constraints.pattern !== undefined) {
-          s.pattern = constraints.pattern;
+          // Validate pattern is valid regex before applying (fail-safe)
+          try {
+            new RegExp(constraints.pattern);
+            s.pattern = constraints.pattern;
+          } catch (e) {
+            console.warn(
+              `Invalid regex in @pattern constraint: "${constraints.pattern}". ` +
+              `${e instanceof Error ? e.message : String(e)}. Pattern not applied.`
+            );
+          }
         }
       } else if (s.type === 'array') {
         if (constraints.min !== undefined) {
@@ -1765,13 +1793,24 @@ export class SchemaExtractor {
    * - @validate params.email must be a valid email
    * - @validate params.amount must be positive
    */
-  private extractValidations(jsdocContent: string): Array<{ field: string; rule: string }> | undefined {
+  private extractValidations(jsdocContent: string, validParamNames?: string[]): Array<{ field: string; rule: string }> | undefined {
     const validations: Array<{ field: string; rule: string }> = [];
     const regex = /@validate\s+([\w.]+)\s+(.+)/g;
     let match;
     while ((match = regex.exec(jsdocContent)) !== null) {
+      const fieldName = match[1].replace(/^params\./, ''); // strip params. prefix
+
+      // Fail-safe: Validate that referenced field exists (if validParamNames provided)
+      if (validParamNames && !validParamNames.includes(fieldName)) {
+        console.warn(
+          `@validate references non-existent parameter "${fieldName}". ` +
+          `Available parameters: ${validParamNames.join(', ')}. Validation rule ignored.`
+        );
+        continue;
+      }
+
       validations.push({
-        field: match[1].replace(/^params\./, ''), // strip params. prefix
+        field: fieldName,
         rule: match[2].trim().replace(/\*\/$/, '').trim(), // strip JSDoc closing
       });
     }
