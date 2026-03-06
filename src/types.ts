@@ -191,6 +191,26 @@ export interface ExtractedSchema {
 
   /** When true, method uses individual params instead of a single params object */
   simpleParams?: boolean;
+
+  // ═══ EVENT EMISSION ═══
+
+  /**
+   * True if this method automatically emits an event on execution
+   * (for @stateful classes, all public methods emit automatically)
+   */
+  emitsEvent?: boolean;
+
+  /**
+   * Event name that will be emitted when this method is called
+   * For @stateful classes, defaults to the method name (e.g., 'add', 'done')
+   */
+  eventName?: string;
+
+  /**
+   * Event payload structure — what data will be sent with the event
+   * Typically mirrors the return type of the method
+   */
+  eventPayload?: Record<string, string>;
 }
 
 export interface PhotonClass {
@@ -724,4 +744,32 @@ export interface ConfigSchema {
   params: ConfigParam[];
   /** Description from configure() JSDoc */
   description?: string;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// NOTIFICATION SUBSCRIPTIONS (@notify-on tag)
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Notification subscription declaration extracted from @notify-on tag
+ * Specifies which event types this photon cares about for notifications
+ */
+export interface NotificationSubscription {
+  /** Event types this photon wants to be notified about */
+  watchFor: string[];
+}
+
+/**
+ * Notification metadata attached to method return values via __notification property
+ * Specifies priority and type of notification when an event occurs
+ */
+export interface NotificationMetadata {
+  /** Type of notification (mentions, deadline, error, etc.) */
+  type: string;
+  /** Priority level for display and handling */
+  priority: 'critical' | 'warning' | 'info';
+  /** Optional message to display */
+  message?: string;
+  /** Optional tags for additional filtering */
+  tags?: string[];
 }

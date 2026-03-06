@@ -10,7 +10,7 @@
 
 import * as fs from 'fs/promises';
 import * as ts from 'typescript';
-import { ExtractedSchema, ConstructorParam, TemplateInfo, StaticInfo, OutputFormat, YieldInfo, MCPDependency, PhotonDependency, CLIDependency, ResolvedInjection, PhotonAssets, UIAsset, PromptAsset, ResourceAsset, ConfigSchema, ConfigParam, SettingsSchema, SettingsProperty } from './types.js';
+import { ExtractedSchema, ConstructorParam, TemplateInfo, StaticInfo, OutputFormat, YieldInfo, MCPDependency, PhotonDependency, CLIDependency, ResolvedInjection, PhotonAssets, UIAsset, PromptAsset, ResourceAsset, ConfigSchema, ConfigParam, SettingsSchema, SettingsProperty, NotificationSubscription } from './types.js';
 import { parseDuration, parseRate } from './utils/duration.js';
 import { builtinRegistry, type MiddlewareDeclaration } from './middleware.js';
 
@@ -22,6 +22,8 @@ export interface ExtractedMetadata {
   settingsSchema?: SettingsSchema;
   /** @deprecated Configuration schema from configure() method */
   configSchema?: ConfigSchema;
+  /** Notification subscription from @notify-on tag */
+  notificationSubscriptions?: NotificationSubscription;
 }
 
 /**
@@ -59,6 +61,9 @@ export class SchemaExtractor {
       params: [],
     };
 
+    // Notification subscriptions tracking (from @notify-on tag)
+    let notificationSubscriptions: NotificationSubscription | undefined;
+
     try {
       // If source doesn't contain a class declaration, wrap it in one
       let sourceToParse = source;
@@ -75,7 +80,7 @@ export class SchemaExtractor {
       );
 
       // Helper to process a method declaration
-      const processMethod = (member: ts.MethodDeclaration) => {
+      const processMethod = (member: ts.MethodDeclaration, isStatefulClass: boolean = false) => {
         const methodName = member.name.getText(sourceFile);
 
         // Skip private methods (prefixed with _)
@@ -217,6 +222,19 @@ export class SchemaExtractor {
           // Check for static keyword on the method
           const isStaticMethod = member.modifiers?.some(m => m.kind === ts.SyntaxKind.StaticKeyword) || false;
 
+          // Event emission for @stateful classes: all public methods emit events automatically
+          const emitsEventData = isStatefulClass ? {
+            emitsEvent: true,
+            eventName: methodName,
+            eventPayload: {
+              method: 'string',
+              params: 'object',
+              result: 'any',
+              timestamp: 'string',
+              instance: 'string',
+            },
+          } : {};
+
           tools.push({
             name: methodName,
             description,
@@ -251,6 +269,8 @@ export class SchemaExtractor {
             ...(deprecated !== undefined ? { deprecated } : {}),
             // Unified middleware declarations (new — runtime uses this)
             ...(middleware.length > 0 ? { middleware } : {}),
+            // Event emission (for @stateful classes)
+            ...emitsEventData,
           });
         }
       };
@@ -353,6 +373,13 @@ export class SchemaExtractor {
       const visit = (node: ts.Node) => {
         // Look for class declarations
         if (ts.isClassDeclaration(node)) {
+          // Check if this class has @stateful decorator
+          const classJsdoc = this.getJSDocComment(node as any, sourceFile);
+          const isStatefulClass = /@stateful\b/i.test(classJsdoc);
+
+          // Extract notification subscriptions from @notify-on tag
+          notificationSubscriptions = this.extractNotifyOn(classJsdoc);
+
           node.members.forEach((member) => {
             // Detect `protected settings = { ... }` property
             if (ts.isPropertyDeclaration(member)) {
@@ -366,7 +393,7 @@ export class SchemaExtractor {
                 m => m.kind === ts.SyntaxKind.PrivateKeyword || m.kind === ts.SyntaxKind.ProtectedKeyword
               );
               if (!isPrivate) {
-                processMethod(member);
+                processMethod(member, isStatefulClass);
               }
             }
           });
@@ -390,6 +417,11 @@ export class SchemaExtractor {
     // Include configSchema if there's a configure() method (deprecated)
     if (configSchema.hasConfigureMethod) {
       result.configSchema = configSchema;
+    }
+
+    // Include notification subscriptions if detected
+    if (notificationSubscriptions) {
+      result.notificationSubscriptions = notificationSubscriptions;
     }
 
     return result;
@@ -1461,6 +1493,30 @@ export class SchemaExtractor {
    */
   private hasAsyncTag(jsdocContent: string): boolean {
     return /@async\b/i.test(jsdocContent);
+  }
+
+  /**
+   * Extract notification subscriptions from @notify-on tag
+   * Specifies which event types this photon is interested in
+   * Format: @notify-on mentions, deadlines, errors
+   */
+  private extractNotifyOn(jsdocContent: string): NotificationSubscription | undefined {
+    const notifyMatch = jsdocContent.match(/@notify-on\s+([^\n]+)/i);
+    if (!notifyMatch) {
+      return undefined;
+    }
+
+    // Parse comma-separated event types
+    const watchFor = notifyMatch[1]
+      .split(',')
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    if (watchFor.length === 0) {
+      return undefined;
+    }
+
+    return { watchFor };
   }
 
   // ═══════════════════════════════════════════════════════════════════════════════
