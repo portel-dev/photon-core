@@ -33,8 +33,9 @@
     "build": "tsc",
     "clean": "rm -rf dist",
     "prepublishOnly": "npm run clean && npm run build",
-    "test": "npm run build && npx tsx tests/channels.test.ts && npx tsx tests/shared-utils.test.ts && npx tsx tests/collections.test.ts && npx tsx tests/audit.test.ts && npx tsx tests/memory.test.ts && npx tsx tests/instance-store.test.ts && npx tsx tests/watcher.test.ts",
-    "test:channels": "npx tsx tests/channels.test.ts"
+    "test": "npm run build && npx tsx tests/mixin.test.ts && npx tsx tests/channels.test.ts && npx tsx tests/shared-utils.test.ts && npx tsx tests/collections.test.ts && npx tsx tests/audit.test.ts && npx tsx tests/memory.test.ts && npx tsx tests/instance-store.test.ts && npx tsx tests/watcher.test.ts",
+    "test:channels": "npx tsx tests/channels.test.ts",
+    "test:mixin": "npm run build && npx tsx tests/mixin.test.ts"
   },
   "keywords": [
     "photon",
