@@ -520,6 +520,11 @@ export class SchemaExtractor {
       } else {
         properties[paramName] = { type: 'string' };
       }
+
+      // Extract default value if initializer exists
+      if (param.initializer) {
+        properties[paramName].default = this.extractDefaultValue(param.initializer, sourceFile);
+      }
     }
 
     return { properties, required, simpleParams: true };
