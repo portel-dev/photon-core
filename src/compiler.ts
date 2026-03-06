@@ -45,6 +45,7 @@ import * as crypto from 'crypto';
  * }
  * ```
  */
+
 function transformReactiveCollections(source: string): string {
   // Check if this is a Photon class (extends Photon or extends PhotonMCP)
   const isPhotonClass = /class\s+\w+\s+extends\s+(?:Photon|PhotonMCP)\b/.test(source);

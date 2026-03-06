@@ -154,6 +154,9 @@ export {
 // Core base class with lifecycle hooks
 export { Photon, Photon as PhotonMCP } from './base.js';
 
+// Mixin for capability injection without requiring inheritance
+export { withPhotonCapabilities } from './mixins.js';
+
 // Dependency management
 export { DependencyManager } from './dependency-manager.js';
 
