@@ -136,7 +136,9 @@ export async function compilePhotonTS(
   }
 
   // Dynamic import — consumer must have esbuild installed
-  const esbuild = await import('esbuild');
+  const esbuildModule = await import('esbuild');
+  // Handle both direct exports and default exports
+  const esbuild = esbuildModule.default || esbuildModule;
   const result = await esbuild.transform(source, {
     loader: 'ts',
     format: 'esm',
