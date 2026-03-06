@@ -140,10 +140,15 @@ export class SchemaExtractor {
         const paramDocs = this.extractParamDocs(jsdoc);
         const paramConstraints = this.extractParamConstraints(jsdoc);
 
+        // Track which paramDocs/constraints were matched for fail-safe handling
+        const matchedDocs = new Set<string>();
+        const matchedConstraints = new Set<string>();
+
         // Merge descriptions and constraints into properties
         Object.keys(properties).forEach(key => {
           if (paramDocs.has(key)) {
             properties[key].description = paramDocs.get(key);
+            matchedDocs.add(key);
           }
 
           // Apply TypeScript-extracted metadata (before JSDoc, so JSDoc can override)
@@ -156,8 +161,53 @@ export class SchemaExtractor {
           if (paramConstraints.has(key)) {
             const constraints = paramConstraints.get(key)!;
             this.applyConstraints(properties[key], constraints);
+            matchedConstraints.add(key);
           }
         });
+
+        // Fail-safe: Handle mismatched parameter names from JSDoc
+        // If a @param name doesn't match any actual parameter, try fuzzy matching
+        const unmatchedDocs = Array.from(paramDocs.entries()).filter(([name]) => !matchedDocs.has(name));
+        if (unmatchedDocs.length > 0) {
+          const propKeys = Object.keys(properties);
+
+          // If there's only one parameter and one unmatched doc, assume it belongs to that parameter
+          if (propKeys.length === 1 && unmatchedDocs.length === 1) {
+            const paramKey = propKeys[0];
+            const [docName, docValue] = unmatchedDocs[0];
+            if (!properties[paramKey].description) {
+              properties[paramKey].description = `${docName}: ${docValue}`;
+              console.warn(
+                `Parameter name mismatch in JSDoc: @param ${docName} doesn't match ` +
+                `function parameter "${paramKey}". Using description from @param ${docName}.`
+              );
+            }
+          } else if (unmatchedDocs.length > 0) {
+            // Log warning for other mismatches (multiple parameters or multiple unmatched docs)
+            unmatchedDocs.forEach(([docName]) => {
+              console.warn(
+                `Parameter name mismatch in JSDoc: @param ${docName} doesn't match any function parameter. ` +
+                `Available parameters: ${propKeys.join(', ')}. Consider updating @param tag.`
+              );
+            });
+          }
+        }
+
+        // Similar fail-safe for constraints
+        const unmatchedConstraints = Array.from(paramConstraints.entries()).filter(([name]) => !matchedConstraints.has(name));
+        if (unmatchedConstraints.length > 0) {
+          const propKeys = Object.keys(properties);
+
+          if (propKeys.length === 1 && unmatchedConstraints.length === 1) {
+            const paramKey = propKeys[0];
+            const [constraintName, constraintValue] = unmatchedConstraints[0];
+            this.applyConstraints(properties[paramKey], constraintValue);
+            console.warn(
+              `Parameter name mismatch in JSDoc: constraint tag for ${constraintName} doesn't match ` +
+              `function parameter "${paramKey}". Applying constraint to "${paramKey}".`
+            );
+          }
+        }
 
         const description = this.extractDescription(jsdoc);
         const inputSchema = {
