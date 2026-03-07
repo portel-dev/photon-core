@@ -1909,7 +1909,7 @@ export class SchemaExtractor {
    * - @retryable 3 2s → 3 retries, 2s delay
    */
   private extractRetryable(jsdocContent: string): { count: number; delay: number } | undefined {
-    const match = jsdocContent.match(/@retryable(?:\s+(\d+))?(?:\s+(\d+(?:ms|s|sec|m|min|h|hr|d|day)))?/i);
+    const match = jsdocContent.match(/@retryable(?:\s+([-\d]+))?(?:\s+([-\d]+(?:ms|s|sec|m|min|h|hr|d|day)))?/i);
     if (!match) return undefined;
     let count = match[1] ? parseInt(match[1], 10) : 3;
     let delay = match[2] ? parseDuration(match[2]) : 1_000;
@@ -1939,8 +1939,23 @@ export class SchemaExtractor {
    * - @throttled 100/h → 100 calls per hour
    */
   private extractThrottled(jsdocContent: string): { count: number; windowMs: number } | undefined {
+    // First check if @throttled is present at all
+    const hasThrottled = /@throttled\b/i.test(jsdocContent);
     const match = jsdocContent.match(/@throttled\s+(\d+\/(?:s|sec|m|min|h|hr|d|day))/i);
-    if (!match) return undefined;
+
+    if (!match) {
+      if (hasThrottled) {
+        // @throttled is present but format is invalid
+        const invalidMatch = jsdocContent.match(/@throttled\s+([^\s]+)/i);
+        if (invalidMatch) {
+          console.warn(
+            `Invalid @throttled rate format: "${invalidMatch[1]}". ` +
+            `Expected format: count/unit (e.g., 10/min, 100/h). Rate not applied.`
+          );
+        }
+      }
+      return undefined;
+    }
 
     const rateStr = match[1];
     const rate = parseRate(rateStr);
