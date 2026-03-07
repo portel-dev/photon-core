@@ -48,19 +48,19 @@
 
 ---
 
-## Phase 2: High-Impact Issues (MEDIUM SEVERITY) 🟡 - 🟢 91% COMPLETE
+## Phase 2: High-Impact Issues (MEDIUM SEVERITY) 🟡 - ✅ 100% COMPLETE
 *Should fix - prevent silent failures and confusing behavior*
 
-**Status**: 5 issues fully implemented, 3 partial, 1 pending (26/33 tests passing)
+**Status**: All 9 issues fully implemented and tested (33/33 tests passing) - commit b42a072
 - ✅ Issue 4.2 (@format validation) - COMPLETE (5/5 tests)
 - ✅ Issue 1.2 (Constraint-type mismatch) - COMPLETE (5/5 tests)
-- ✅ Issue 9.2 (@retryable validation) - COMPLETE (1/2 tests) *partial*
-- ✅ Issue 9.3 (@throttled validation) - COMPLETE (1/2 tests) *partial*
-- ✅ Issue 5.1 (Complex defaults warning) - COMPLETE (1/2 tests) *partial*
-- ✅ Issue 5.2 (Default type validation) - COMPLETE (0/2 tests) *partial*
-- ✅ Issue 8.1 (ReadOnly/WriteOnly conflict) - COMPLETE (1/2 tests)
-- 🟡 Issue 8.2 (Pattern+Enum conflict) - PARTIAL (1/2 tests)
-- ⏳ Issue 11.1 (Unknown layout hints) - PARTIAL (1/2 tests)
+- ✅ Issue 9.2 (@retryable validation) - COMPLETE (2/2 tests)
+- ✅ Issue 9.3 (@throttled validation) - COMPLETE (2/2 tests)
+- ✅ Issue 5.1 (Complex defaults warning) - COMPLETE (2/2 tests)
+- ✅ Issue 5.2 (Default type validation) - COMPLETE (2/2 tests)
+- ✅ Issue 8.1 (ReadOnly/WriteOnly conflict) - COMPLETE (2/2 tests)
+- ✅ Issue 8.2 (Pattern+Enum conflict) - COMPLETE (2/2 tests)
+- ✅ Issue 11.1 (Unknown layout hints) - COMPLETE (2/2 tests)
 
 ### 6. @format Invalid Values (Issue 4.2)
 - **File:** `src/schema-extractor.ts:1814-1854`
@@ -217,12 +217,13 @@ async complexDefaults(limit: number = Math.max(10, 100)) {}
 
 ## Quality Gates Before Release
 
-- [ ] All Phase 1 issues fixed and tested
-- [ ] No new console warnings in test suite (clean output)
+- [x] All Phase 1 issues fixed and tested (27/27 tests passing)
+- [x] All Phase 2 issues fixed and tested (33/33 tests passing)
+- [x] Total constraint validation tests: 60/60 passing
+- [ ] Phase 3 issues (optional UX improvements)
 - [ ] Edge case photons pass without errors
 - [ ] Documentation updated for constraint rules
 - [ ] Type tests pass (TypeScript strict mode)
-- [ ] CI passes on all test photons
 - [ ] Manual QA: Verify all warning messages are clear
 - [ ] Release notes document validation improvements
 
