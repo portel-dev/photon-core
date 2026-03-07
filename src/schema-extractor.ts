@@ -1353,10 +1353,18 @@ export class SchemaExtractor {
         paramConstraints.deprecated = deprecatedMatch[1]?.trim() || true;
       }
 
-      // Extract {@readOnly} and {@writeOnly} - track which comes last
-      // They are mutually exclusive, so last one wins
+      // Extract {@readOnly} and {@writeOnly} - detect conflicts
+      // They are mutually exclusive, so warn if both present
       const readOnlyMatch = description.match(/\{@readOnly\s*\}/);
       const writeOnlyMatch = description.match(/\{@writeOnly\s*\}/);
+
+      if (readOnlyMatch && writeOnlyMatch) {
+        // Warn about conflict
+        console.warn(
+          `Conflicting constraints: @readOnly and @writeOnly cannot both be applied. ` +
+          `Keeping @${readOnlyMatch && writeOnlyMatch ? (description.lastIndexOf('@readOnly') > description.lastIndexOf('@writeOnly') ? 'readOnly' : 'writeOnly') : 'readOnly'}.`
+        );
+      }
 
       if (readOnlyMatch || writeOnlyMatch) {
         // Find positions to determine which comes last
@@ -1399,6 +1407,22 @@ export class SchemaExtractor {
       const acceptMatch = description.match(/\{@accept\s+([^}]+)\}/);
       if (acceptMatch) {
         paramConstraints.accept = acceptMatch[1].trim();
+      }
+
+      // Validate no unknown {@...} tags (typos in constraint names)
+      const allKnownTags = ['min', 'max', 'pattern', 'format', 'choice', 'field', 'default', 'unique', 'uniqueItems',
+                             'example', 'multipleOf', 'deprecated', 'readOnly', 'writeOnly', 'label', 'placeholder',
+                             'hint', 'hidden', 'accept', 'minItems', 'maxItems'];
+      const unknownTagRegex = /\{@(\w+)\s*(?:\s+[^}]*)?\}/g;
+      let unknownMatch;
+      while ((unknownMatch = unknownTagRegex.exec(description)) !== null) {
+        const tagName = unknownMatch[1];
+        if (!allKnownTags.includes(tagName)) {
+          console.warn(
+            `Unknown constraint/hint: @${tagName}. ` +
+            `Valid hints: ${allKnownTags.slice(0, 8).join(', ')}, etc. This tag will be ignored.`
+          );
+        }
       }
 
       if (Object.keys(paramConstraints).length > 0) {
