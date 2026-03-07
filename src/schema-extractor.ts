@@ -573,7 +573,20 @@ export class SchemaExtractor {
 
       // Extract default value if initializer exists
       if (param.initializer) {
-        properties[paramName].default = this.extractDefaultValue(param.initializer, sourceFile);
+        const defaultValue = this.extractDefaultValue(param.initializer, sourceFile);
+        if (defaultValue !== undefined) {
+          // Validate default value type matches parameter type
+          const paramType = properties[paramName].type;
+          if (!this.isDefaultValueTypeCompatible(defaultValue, paramType)) {
+            const defaultType = typeof defaultValue;
+            console.warn(
+              `Default value type mismatch: parameter "${paramName}" is type "${paramType}" ` +
+              `but default value is type "${defaultType}" (${JSON.stringify(defaultValue)}). ` +
+              `This may cause runtime errors.`
+            );
+          }
+          properties[paramName].default = defaultValue;
+        }
       }
     }
 
@@ -929,6 +942,34 @@ export class SchemaExtractor {
   /**
    * Extract default value from initializer
    */
+  /**
+   * Check if a default value's type is compatible with the parameter type
+   */
+  private isDefaultValueTypeCompatible(defaultValue: any, paramType: string): boolean {
+    const valueType = typeof defaultValue;
+
+    // String defaults are always compatible (can coerce to other types)
+    if (valueType === 'string') {
+      return true;
+    }
+
+    // Type must match (number → number, boolean → boolean, etc.)
+    switch (paramType) {
+      case 'string':
+        return valueType === 'string';
+      case 'number':
+        return valueType === 'number';
+      case 'boolean':
+        return valueType === 'boolean';
+      case 'array':
+        return Array.isArray(defaultValue);
+      case 'object':
+        return valueType === 'object';
+      default:
+        return true;  // Unknown types are assumed compatible
+    }
+  }
+
   private extractDefaultValue(initializer: ts.Expression, sourceFile: ts.SourceFile): any {
     // String literals
     if (ts.isStringLiteral(initializer)) {
@@ -948,8 +989,25 @@ export class SchemaExtractor {
       return false;
     }
 
-    // For complex expressions (function calls, etc.), return as string
-    return initializer.getText(sourceFile);
+    // Detect complex expressions
+    const expressionText = initializer.getText(sourceFile);
+    const isComplexExpression =
+      ts.isCallExpression(initializer) ||  // Function calls: Math.max(10, 100)
+      ts.isObjectLiteralExpression(initializer) ||  // Objects: { key: 'value' }
+      ts.isArrayLiteralExpression(initializer) ||  // Arrays: [1, 2, 3]
+      ts.isBinaryExpression(initializer) ||  // Binary ops: 10 + 20
+      ts.isConditionalExpression(initializer);  // Ternary: x ? a : b
+
+    if (isComplexExpression) {
+      console.warn(
+        `Complex default value cannot be reliably serialized: "${expressionText}". ` +
+        `Default will not be applied to schema. Consider using a simple literal value instead.`
+      );
+      return undefined;
+    }
+
+    // For other expressions, return as string
+    return expressionText;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════════
@@ -1853,8 +1911,25 @@ export class SchemaExtractor {
   private extractRetryable(jsdocContent: string): { count: number; delay: number } | undefined {
     const match = jsdocContent.match(/@retryable(?:\s+(\d+))?(?:\s+(\d+(?:ms|s|sec|m|min|h|hr|d|day)))?/i);
     if (!match) return undefined;
-    const count = match[1] ? parseInt(match[1], 10) : 3;
-    const delay = match[2] ? parseDuration(match[2]) : 1_000;
+    let count = match[1] ? parseInt(match[1], 10) : 3;
+    let delay = match[2] ? parseDuration(match[2]) : 1_000;
+
+    // Validate retryable configuration
+    if (count <= 0) {
+      console.warn(
+        `Invalid @retryable count: ${count}. ` +
+        `Count must be positive (> 0). Using default count 3.`
+      );
+      count = 3;
+    }
+    if (delay <= 0) {
+      console.warn(
+        `Invalid @retryable delay: ${delay}ms. ` +
+        `Delay must be positive (> 0). Using default delay 1000ms.`
+      );
+      delay = 1_000;
+    }
+
     return { count, delay };
   }
 
@@ -1866,7 +1941,28 @@ export class SchemaExtractor {
   private extractThrottled(jsdocContent: string): { count: number; windowMs: number } | undefined {
     const match = jsdocContent.match(/@throttled\s+(\d+\/(?:s|sec|m|min|h|hr|d|day))/i);
     if (!match) return undefined;
-    return parseRate(match[1]);
+
+    const rateStr = match[1];
+    const rate = parseRate(rateStr);
+
+    // Validate throttled configuration
+    if (!rate) {
+      console.warn(
+        `Invalid @throttled rate format: "${rateStr}". ` +
+        `Expected format: count/unit (e.g., 10/min, 100/h). Rate not applied.`
+      );
+      return undefined;
+    }
+
+    if (rate.count <= 0) {
+      console.warn(
+        `Invalid @throttled count: ${rate.count}. ` +
+        `Count must be positive (> 0). Rate not applied.`
+      );
+      return undefined;
+    }
+
+    return rate;
   }
 
   /**
