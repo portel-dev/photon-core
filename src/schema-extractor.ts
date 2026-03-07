@@ -1268,7 +1268,17 @@ export class SchemaExtractor {
       // Extract {@format formatName} - use lookahead to match until tag-closing }
       const formatMatch = description.match(/\{@format\s+(.+?)\}(?=\s|$|{@)/);
       if (formatMatch) {
-        paramConstraints.format = formatMatch[1].trim();
+        const format = formatMatch[1].trim();
+        // Validate format is in whitelist (JSON Schema + custom formats)
+        const validFormats = ['email', 'date', 'date-time', 'time', 'duration', 'uri', 'uri-reference', 'uuid', 'ipv4', 'ipv6', 'hostname', 'json', 'table'];
+        if (!validFormats.includes(format)) {
+          console.warn(
+            `Invalid @format value: "${format}". ` +
+            `Valid formats: ${validFormats.join(', ')}. Format not applied.`
+          );
+        } else {
+          paramConstraints.format = format;
+        }
       }
 
       // Extract {@choice value1,value2,...} - converts to enum in schema
@@ -1295,6 +1305,18 @@ export class SchemaExtractor {
           // If not valid JSON, use as string
           paramConstraints.default = defaultValue;
         }
+      }
+
+      // Extract {@minItems value} - for arrays
+      const minItemsMatch = description.match(/\{@minItems\s+(-?\d+(?:\.\d+)?)\}/);
+      if (minItemsMatch) {
+        paramConstraints.minItems = parseInt(minItemsMatch[1], 10);
+      }
+
+      // Extract {@maxItems value} - for arrays
+      const maxItemsMatch = description.match(/\{@maxItems\s+(-?\d+(?:\.\d+)?)\}/);
+      if (maxItemsMatch) {
+        paramConstraints.maxItems = parseInt(maxItemsMatch[1], 10);
       }
 
       // Extract {@unique} or {@uniqueItems} - for arrays
@@ -1407,6 +1429,41 @@ export class SchemaExtractor {
 
     // Helper to apply constraints to a single schema based on type
     const applyToSchema = (s: any) => {
+      // Validate constraint-type compatibility
+      if (!s.enum) {
+        // Warn for incompatible constraints
+        if ((constraints.min !== undefined || constraints.max !== undefined) &&
+            s.type !== 'number' && s.type !== 'string' && s.type !== 'array') {
+          const constraintType = constraints.min !== undefined ? '@min' : '@max';
+          console.warn(
+            `Constraint ${constraintType} not applicable to type "${s.type || 'unknown'}". ` +
+            `This constraint applies to number, string, or array types only.`
+          );
+        }
+
+        if (constraints.pattern !== undefined && s.type !== 'string') {
+          console.warn(
+            `Constraint @pattern not applicable to type "${s.type || 'unknown'}". ` +
+            `Pattern only applies to string types.`
+          );
+        }
+
+        if ((constraints.minItems !== undefined || constraints.maxItems !== undefined) && s.type !== 'array') {
+          const constraintType = constraints.minItems !== undefined ? '@minItems' : '@maxItems';
+          console.warn(
+            `Constraint ${constraintType} not applicable to type "${s.type || 'unknown'}". ` +
+            `This constraint applies to array types only.`
+          );
+        }
+
+        if (constraints.multipleOf !== undefined && s.type !== 'number') {
+          console.warn(
+            `Constraint @multipleOf not applicable to type "${s.type || 'unknown'}". ` +
+            `This constraint applies to number types only.`
+          );
+        }
+      }
+
       if (s.enum) {
         // Skip enum types for most constraints (but still apply deprecated, examples, etc.)
         if (constraints.examples !== undefined) {
@@ -1418,7 +1475,7 @@ export class SchemaExtractor {
         return;
       }
 
-      // Apply min/max based on type
+      // Apply min/max based on type (skip if type is incompatible)
       if (s.type === 'number') {
         if (constraints.min !== undefined) {
           s.minimum = constraints.min;
@@ -1463,10 +1520,27 @@ export class SchemaExtractor {
         if (constraints.max !== undefined) {
           s.maxItems = constraints.max;
         }
+        if (constraints.minItems !== undefined) {
+          s.minItems = constraints.minItems;
+        }
+        if (constraints.maxItems !== undefined) {
+          s.maxItems = constraints.maxItems;
+        }
         if (constraints.unique === true) {
           s.uniqueItems = true;
         }
+      } else if (s.type && s.type !== 'boolean' && s.type !== 'object') {
+        // For other compatible types, apply min/max as needed
+        if (['integer', 'number'].includes(s.type)) {
+          if (constraints.min !== undefined) {
+            s.minimum = constraints.min;
+          }
+          if (constraints.max !== undefined) {
+            s.maximum = constraints.max;
+          }
+        }
       }
+      // Note: For boolean and object types, we skip min/max constraints (already warned above)
 
       // Apply type-agnostic constraints
       if (constraints.format !== undefined) {
