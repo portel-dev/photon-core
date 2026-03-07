@@ -948,16 +948,12 @@ export class SchemaExtractor {
   private isDefaultValueTypeCompatible(defaultValue: any, paramType: string): boolean {
     const valueType = typeof defaultValue;
 
-    // String defaults are always compatible (can coerce to other types)
-    if (valueType === 'string') {
-      return true;
-    }
-
     // Type must match (number → number, boolean → boolean, etc.)
     switch (paramType) {
       case 'string':
         return valueType === 'string';
       case 'number':
+        // Number params need number defaults, not strings
         return valueType === 'number';
       case 'boolean':
         return valueType === 'boolean';
