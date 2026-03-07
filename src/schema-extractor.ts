@@ -996,7 +996,7 @@ export class SchemaExtractor {
 
     if (isComplexExpression) {
       console.warn(
-        `Complex default value cannot be reliably serialized: "${expressionText}". ` +
+        `complex default value cannot be reliably serialized: "${expressionText}". ` +
         `Default will not be applied to schema. Consider using a simple literal value instead.`
       );
       return undefined;
@@ -1543,6 +1543,13 @@ export class SchemaExtractor {
       }
 
       if (s.enum) {
+        // Check for pattern+enum conflict before returning
+        if (constraints.pattern !== undefined) {
+          console.warn(
+            `Conflicting constraints: @pattern cannot be used with enum/choices. ` +
+            `Pattern is ignored when specific values are defined via enum or @choice.`
+          );
+        }
         // Skip enum types for most constraints (but still apply deprecated, examples, etc.)
         if (constraints.examples !== undefined) {
           s.examples = constraints.examples;
@@ -1580,23 +1587,15 @@ export class SchemaExtractor {
           s.maxLength = constraints.max;
         }
         if (constraints.pattern !== undefined) {
-          // Check for pattern+enum conflict
-          if (s.enum || constraints.enum) {
+          // Validate pattern is valid regex before applying (fail-safe)
+          try {
+            new RegExp(constraints.pattern);
+            s.pattern = constraints.pattern;
+          } catch (e) {
             console.warn(
-              `Conflicting constraints: @pattern cannot be used with enum/choices. ` +
-              `Pattern is ignored when specific values are defined via enum or @choice.`
+              `Invalid regex in @pattern constraint: "${constraints.pattern}". ` +
+              `${e instanceof Error ? e.message : String(e)}. Pattern not applied.`
             );
-          } else {
-            // Validate pattern is valid regex before applying (fail-safe)
-            try {
-              new RegExp(constraints.pattern);
-              s.pattern = constraints.pattern;
-            } catch (e) {
-              console.warn(
-                `Invalid regex in @pattern constraint: "${constraints.pattern}". ` +
-                `${e instanceof Error ? e.message : String(e)}. Pattern not applied.`
-              );
-            }
           }
         }
       } else if (s.type === 'array') {
@@ -1642,12 +1641,31 @@ export class SchemaExtractor {
         s.deprecated = constraints.deprecated === true ? true : constraints.deprecated;
       }
       // Apply enum from @choice tag (overrides TypeScript-derived enum if present)
-      if (constraints.enum !== undefined && !s.enum) {
-        s.enum = constraints.enum;
+      if (constraints.enum !== undefined) {
+        // Check for pattern+enum conflict when @choice is being applied
+        if (constraints.pattern !== undefined && s.type === 'string') {
+          console.warn(
+            `Conflicting constraints: @pattern cannot be used with enum/choices. ` +
+            `Pattern is ignored when specific values are defined via enum or @choice.`
+          );
+        }
+        if (!s.enum) {
+          s.enum = constraints.enum;
+        }
       }
       // Apply field hint for UI rendering
       if (constraints.field !== undefined) {
         s.field = constraints.field;
+        // Validate @field integer constraint with default values
+        if (constraints.field === 'integer' && s.default !== undefined && typeof s.default === 'number') {
+          if (!Number.isInteger(s.default)) {
+            console.warn(
+              `Default value violates @field integer constraint: ` +
+              `expected integer but got ${s.default}. ` +
+              `Consider using an integer default value.`
+            );
+          }
+        }
       }
       // Apply custom label for form fields
       if (constraints.label !== undefined) {
