@@ -1471,13 +1471,13 @@ export class SchemaExtractor {
       const allKnownTags = ['min', 'max', 'pattern', 'format', 'choice', 'field', 'default', 'unique', 'uniqueItems',
                              'example', 'multipleOf', 'deprecated', 'readOnly', 'writeOnly', 'label', 'placeholder',
                              'hint', 'hidden', 'accept', 'minItems', 'maxItems'];
-      const unknownTagRegex = /\{@(\w+)\s*(?:\s+[^}]*)?\}/g;
+      const unknownTagRegex = /\{@([\w-]+)\s*(?:\s+[^}]*)?\}/g;
       let unknownMatch;
       while ((unknownMatch = unknownTagRegex.exec(description)) !== null) {
         const tagName = unknownMatch[1];
         if (!allKnownTags.includes(tagName)) {
           console.warn(
-            `Unknown constraint/hint: @${tagName}. ` +
+            `unknown constraint/hint: @${tagName}. ` +
             `Valid hints: ${allKnownTags.slice(0, 8).join(', ')}, etc. This tag will be ignored.`
           );
         }
