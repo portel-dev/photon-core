@@ -1526,15 +1526,23 @@ export class SchemaExtractor {
           s.maxLength = constraints.max;
         }
         if (constraints.pattern !== undefined) {
-          // Validate pattern is valid regex before applying (fail-safe)
-          try {
-            new RegExp(constraints.pattern);
-            s.pattern = constraints.pattern;
-          } catch (e) {
+          // Check for pattern+enum conflict
+          if (s.enum || constraints.enum) {
             console.warn(
-              `Invalid regex in @pattern constraint: "${constraints.pattern}". ` +
-              `${e instanceof Error ? e.message : String(e)}. Pattern not applied.`
+              `Conflicting constraints: @pattern cannot be used with enum/choices. ` +
+              `Pattern is ignored when specific values are defined via enum or @choice.`
             );
+          } else {
+            // Validate pattern is valid regex before applying (fail-safe)
+            try {
+              new RegExp(constraints.pattern);
+              s.pattern = constraints.pattern;
+            } catch (e) {
+              console.warn(
+                `Invalid regex in @pattern constraint: "${constraints.pattern}". ` +
+                `${e instanceof Error ? e.message : String(e)}. Pattern not applied.`
+              );
+            }
           }
         }
       } else if (s.type === 'array') {
