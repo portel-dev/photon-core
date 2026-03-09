@@ -1866,7 +1866,7 @@ export class SchemaExtractor {
    * → { type: 'object', properties: { id: { type: 'string', description: 'Task ID' }, ... } }
    */
   private extractOutputSchema(jsdocContent: string): { type: 'object'; properties: Record<string, any>; required?: string[] } | undefined {
-    const fieldRegex = /@returns\.(\w+)\s+\{(\w+)\}\s*(.*?)(?=\n\s*\*\s*@|\n\s*\*\/|\n\s*\*\s*$)/g;
+    const fieldRegex = /@returns\.(\w+)\s+\{(\w+)\}\s*([^\n*]*)/g;
     const properties: Record<string, any> = {};
     let match: RegExpExecArray | null;
     while ((match = fieldRegex.exec(jsdocContent)) !== null) {
