@@ -61,6 +61,12 @@ export interface ExtractedSchema {
   buttonLabel?: string;
   /** Icon from @icon tag (emoji or icon name) */
   icon?: string;
+  /**
+   * Icon image entries from @icon (file path) or @icons tags
+   * Raw paths — resolved to data URIs by the runtime
+   * Maps to MCP Tool.icons[]
+   */
+  iconImages?: Array<{ path: string; sizes?: string; theme?: string }>;
   /** True if this method is an async generator (uses yield for prompts) */
   isGenerator?: boolean;
   /** Yield information for generator methods (used by REST APIs) */

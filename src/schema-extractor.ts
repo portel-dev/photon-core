@@ -243,6 +243,7 @@ export class SchemaExtractor {
           const layoutHints = this.extractLayoutHints(jsdoc);
           const buttonLabel = this.extractButtonLabel(jsdoc);
           const icon = this.extractIcon(jsdoc);
+          const iconImages = this.extractIconImages(jsdoc);
           const yields = isGenerator ? this.extractYieldsFromJSDoc(jsdoc) : undefined;
           const isStateful = this.hasStatefulTag(jsdoc);
           const autorun = this.hasAutorunTag(jsdoc);
@@ -304,6 +305,7 @@ export class SchemaExtractor {
             ...(layoutHints ? { layoutHints } : {}),
             ...(buttonLabel ? { buttonLabel } : {}),
             ...(icon ? { icon } : {}),
+            ...(iconImages ? { iconImages } : {}),
             ...(isGenerator ? { isGenerator: true } : {}),
             ...(yields && yields.length > 0 ? { yields } : {}),
             ...(isStateful ? { isStateful: true } : {}),
@@ -2305,9 +2307,48 @@ export class SchemaExtractor {
     const withoutLayoutHints = jsdocContent.replace(/\{[^}]+\}/g, '');
     const iconMatch = withoutLayoutHints.match(/@icon\s+([^\s@*,]+)/i);
     if (iconMatch) {
-      return iconMatch[1].trim();
+      const value = iconMatch[1].trim();
+      // If it looks like a file path, don't return as emoji icon
+      if (value.startsWith('./') || value.startsWith('../') || /\.(png|jpg|jpeg|gif|svg|webp|ico)$/i.test(value)) {
+        return undefined;
+      }
+      return value;
     }
     return undefined;
+  }
+
+  /**
+   * Extract icon image entries from @icon (file path) and @icons tags
+   * @icon ./icons/calc.png          → [{ path: './icons/calc.png' }]
+   * @icon ./icons/calc.svg          → [{ path: './icons/calc.svg' }]
+   * @icons ./icons/calc-48.png 48x48       → [{ path: '...', sizes: '48x48' }]
+   * @icons ./icons/calc-dark.svg dark      → [{ path: '...', theme: 'dark' }]
+   * @icons ./icons/calc-96.png 96x96 dark  → [{ path: '...', sizes: '96x96', theme: 'dark' }]
+   */
+  private extractIconImages(jsdocContent: string): Array<{ path: string; sizes?: string; theme?: string }> | undefined {
+    const images: Array<{ path: string; sizes?: string; theme?: string }> = [];
+
+    // Check if @icon value is a file path
+    const withoutLayoutHints = jsdocContent.replace(/\{[^}]+\}/g, '');
+    const iconMatch = withoutLayoutHints.match(/@icon\s+([^\s@*,]+)/i);
+    if (iconMatch) {
+      const value = iconMatch[1].trim();
+      if (value.startsWith('./') || value.startsWith('../') || /\.(png|jpg|jpeg|gif|svg|webp|ico)$/i.test(value)) {
+        images.push({ path: value });
+      }
+    }
+
+    // Extract @icons entries (can have multiple)
+    const iconsRegex = /@icons\s+([^\s@*,]+)(?:\s+(\d+x\d+))?(?:\s+(light|dark))?/gi;
+    let match: RegExpExecArray | null;
+    while ((match = iconsRegex.exec(jsdocContent)) !== null) {
+      const entry: { path: string; sizes?: string; theme?: string } = { path: match[1].trim() };
+      if (match[2]) entry.sizes = match[2];
+      if (match[3]) entry.theme = match[3] as 'light' | 'dark';
+      images.push(entry);
+    }
+
+    return images.length > 0 ? images : undefined;
   }
 
   /**
