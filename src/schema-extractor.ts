@@ -248,6 +248,16 @@ export class SchemaExtractor {
           const autorun = this.hasAutorunTag(jsdoc);
           const isAsync = this.hasAsyncTag(jsdoc);
 
+          // MCP standard annotations
+          const title = this.extractTitle(jsdoc);
+          const readOnlyHint = this.hasReadOnlyHint(jsdoc);
+          const destructiveHint = this.hasDestructiveHint(jsdoc);
+          const idempotentHint = this.hasIdempotentHint(jsdoc);
+          const openWorldHint = this.extractOpenWorldHint(jsdoc);
+          const audience = this.extractAudience(jsdoc);
+          const contentPriority = this.extractContentPriority(jsdoc);
+          const outputSchema = this.extractOutputSchema(jsdoc);
+
           // Daemon features
           const webhook = this.extractWebhook(jsdoc, methodName);
           const scheduled = this.extractScheduled(jsdoc, methodName);
@@ -319,6 +329,15 @@ export class SchemaExtractor {
             ...(deprecated !== undefined ? { deprecated } : {}),
             // Unified middleware declarations (new — runtime uses this)
             ...(middleware.length > 0 ? { middleware } : {}),
+            // MCP standard annotations
+            ...(title ? { title } : {}),
+            ...(readOnlyHint ? { readOnlyHint: true } : {}),
+            ...(destructiveHint ? { destructiveHint: true } : {}),
+            ...(idempotentHint ? { idempotentHint: true } : {}),
+            ...(openWorldHint !== undefined ? { openWorldHint } : {}),
+            ...(audience ? { audience } : {}),
+            ...(contentPriority !== undefined ? { contentPriority } : {}),
+            ...(outputSchema ? { outputSchema } : {}),
             // Event emission (for @stateful classes)
             ...emitsEventData,
           });
@@ -1757,6 +1776,115 @@ export class SchemaExtractor {
   }
 
   /**
+   * Extract @title tag value (human-readable display name)
+   * Example: @title Create New Task
+   */
+  private extractTitle(jsdocContent: string): string | undefined {
+    const match = jsdocContent.match(/@title\s+(.+?)(?:\n|\s*\*\/|\s*\*\s*@)/s);
+    if (match) {
+      return match[1].replace(/\s*\*\s*/g, ' ').trim();
+    }
+    return undefined;
+  }
+
+  /**
+   * Check if JSDoc contains method-level @readOnly tag (NOT param-level {@readOnly})
+   * Method-level: indicates tool has no side effects (MCP readOnlyHint)
+   * Param-level: {@readOnly} inside @param — different regex, no conflict
+   */
+  private hasReadOnlyHint(jsdocContent: string): boolean {
+    // Match @readOnly that is NOT inside curly braces (param-level uses {@readOnly})
+    // Look for @readOnly at start of line (after * ) or start of JSDoc
+    return /(?:^|\n)\s*\*?\s*@readOnly\b/m.test(jsdocContent);
+  }
+
+  /**
+   * Check if JSDoc contains @destructive tag
+   * Indicates tool performs destructive operations requiring confirmation
+   */
+  private hasDestructiveHint(jsdocContent: string): boolean {
+    return /@destructive\b/i.test(jsdocContent);
+  }
+
+  /**
+   * Check if JSDoc contains @idempotent tag
+   * Indicates tool is safe to retry — multiple calls produce same effect
+   */
+  private hasIdempotentHint(jsdocContent: string): boolean {
+    return /@idempotent\b/i.test(jsdocContent);
+  }
+
+  /**
+   * Extract open/closed world hint from @openWorld or @closedWorld tags
+   * @openWorld → true (tool interacts with external systems)
+   * @closedWorld → false (tool operates only on local data)
+   * Returns undefined if neither tag present
+   */
+  private extractOpenWorldHint(jsdocContent: string): boolean | undefined {
+    if (/@openWorld\b/i.test(jsdocContent)) return true;
+    if (/@closedWorld\b/i.test(jsdocContent)) return false;
+    return undefined;
+  }
+
+  /**
+   * Extract @audience tag value
+   * @audience user → ['user']
+   * @audience assistant → ['assistant']
+   * @audience user assistant → ['user', 'assistant']
+   */
+  private extractAudience(jsdocContent: string): ('user' | 'assistant')[] | undefined {
+    const match = jsdocContent.match(/@audience\s+([\w\s]+?)(?:\n|\s*\*\/|\s*\*\s*@)/);
+    if (match) {
+      const values = match[1].trim().split(/\s+/) as ('user' | 'assistant')[];
+      const valid = values.filter(v => v === 'user' || v === 'assistant');
+      return valid.length > 0 ? valid : undefined;
+    }
+    return undefined;
+  }
+
+  /**
+   * Extract @priority tag value (content importance 0.0-1.0)
+   */
+  private extractContentPriority(jsdocContent: string): number | undefined {
+    const match = jsdocContent.match(/@priority\s+([\d.]+)/);
+    if (match) {
+      const value = parseFloat(match[1]);
+      if (!isNaN(value) && value >= 0 && value <= 1) {
+        return value;
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * Extract structured output schema from @returns.field {type} tags
+   * @returns.id {string} Task ID
+   * @returns.title {string} Task title
+   * @returns.done {boolean} Completion status
+   * → { type: 'object', properties: { id: { type: 'string', description: 'Task ID' }, ... } }
+   */
+  private extractOutputSchema(jsdocContent: string): { type: 'object'; properties: Record<string, any>; required?: string[] } | undefined {
+    const fieldRegex = /@returns\.(\w+)\s+\{(\w+)\}\s*(.*?)(?=\n\s*\*\s*@|\n\s*\*\/|\n\s*\*\s*$)/g;
+    const properties: Record<string, any> = {};
+    let match: RegExpExecArray | null;
+    while ((match = fieldRegex.exec(jsdocContent)) !== null) {
+      const [, field, type, desc] = match;
+      const jsonType = type.toLowerCase() === 'boolean' ? 'boolean'
+        : type.toLowerCase() === 'number' || type.toLowerCase() === 'integer' ? 'number'
+        : type.toLowerCase() === 'array' ? 'array'
+        : type.toLowerCase() === 'object' ? 'object'
+        : 'string';
+      properties[field] = { type: jsonType };
+      const trimmedDesc = desc.replace(/\s*\*\s*/g, ' ').trim();
+      if (trimmedDesc) {
+        properties[field].description = trimmedDesc;
+      }
+    }
+    if (Object.keys(properties).length === 0) return undefined;
+    return { type: 'object', properties };
+  }
+
+  /**
    * Extract notification subscriptions from @notify-on tag
    * Specifies which event types this photon is interested in
    * Format: @notify-on mentions, deadlines, errors
@@ -2111,7 +2239,7 @@ export class SchemaExtractor {
     }
 
     // Match visualization formats
-    if (['metric', 'gauge', 'timeline', 'dashboard', 'cart'].includes(format)) {
+    if (['metric', 'gauge', 'timeline', 'dashboard', 'cart', 'qr'].includes(format)) {
       return format as OutputFormat;
     }
 

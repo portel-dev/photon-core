@@ -211,6 +211,59 @@ export interface ExtractedSchema {
    * Typically mirrors the return type of the method
    */
   eventPayload?: Record<string, string>;
+
+  // ═══ MCP STANDARD ANNOTATIONS ═══
+
+  /**
+   * Human-readable display name (from @title tag)
+   * Maps to MCP Tool.annotations.title
+   */
+  title?: string;
+
+  /**
+   * Tool has no side effects — safe for auto-approval (from @readOnly method-level tag)
+   * Maps to MCP Tool.annotations.readOnlyHint
+   * Note: Different from param-level {@readOnly} which marks a field as immutable
+   */
+  readOnlyHint?: boolean;
+
+  /**
+   * Tool performs destructive operations — requires confirmation (from @destructive tag)
+   * Maps to MCP Tool.annotations.destructiveHint
+   */
+  destructiveHint?: boolean;
+
+  /**
+   * Tool is safe to retry — calling multiple times has same effect (from @idempotent tag)
+   * Maps to MCP Tool.annotations.idempotentHint
+   */
+  idempotentHint?: boolean;
+
+  /**
+   * Tool interacts with external world beyond local system (from @openWorld tag)
+   * @openWorld → true, @closedWorld → false
+   * Maps to MCP Tool.annotations.openWorldHint
+   */
+  openWorldHint?: boolean;
+
+  /**
+   * Content audience control (from @audience tag)
+   * Determines who sees tool results: 'user' (human only), 'assistant' (AI only), or both
+   * Maps to MCP content block Annotations.audience
+   */
+  audience?: ('user' | 'assistant')[];
+
+  /**
+   * Content importance hint 0.0-1.0 (from @priority tag)
+   * Maps to MCP content block Annotations.priority
+   */
+  contentPriority?: number;
+
+  /**
+   * JSON Schema for structured output (from @returns.field {type} tags)
+   * Maps to MCP Tool.outputSchema
+   */
+  outputSchema?: { type: 'object'; properties: Record<string, any>; required?: string[] };
 }
 
 export interface PhotonClass {
