@@ -257,7 +257,8 @@ export class SchemaExtractor {
           const openWorldHint = this.extractOpenWorldHint(jsdoc);
           const audience = this.extractAudience(jsdoc);
           const contentPriority = this.extractContentPriority(jsdoc);
-          const outputSchema = this.extractOutputSchema(jsdoc);
+          const outputSchema = this.extractOutputSchema(jsdoc)
+            ?? this.inferOutputSchemaFromReturnType(member, sourceFile);
 
           // Daemon features
           const webhook = this.extractWebhook(jsdoc, methodName);
@@ -790,6 +791,15 @@ export class SchemaExtractor {
 
       if (ts.isTypeAliasDeclaration(node) && node.name.text === typeName) {
         resolved = node.type;
+        return;
+      }
+
+      // Also resolve interface declarations → synthesize a TypeLiteral
+      if (ts.isInterfaceDeclaration(node) && node.name.text === typeName) {
+        // Create a synthetic TypeLiteralNode from interface members
+        resolved = ts.factory.createTypeLiteralNode(
+          node.members.filter(ts.isPropertySignature) as ts.PropertySignature[]
+        );
         return;
       }
 
@@ -1859,31 +1869,87 @@ export class SchemaExtractor {
   }
 
   /**
-   * Extract structured output schema from @returns.field {type} tags
-   * @returns.id {string} Task ID
-   * @returns.title {string} Task title
-   * @returns.done {boolean} Completion status
-   * → { type: 'object', properties: { id: { type: 'string', description: 'Task ID' }, ... } }
+   * Extract structured output schema from JSDoc @returns tags.
+   *
+   * Supports two syntaxes:
+   *   Legacy:  @returns.field {type} description
+   *   Inline:  @returns description {@value field type description}
+   *
+   * Both produce: { type: 'object', properties: { field: { type, description } } }
    */
   private extractOutputSchema(jsdocContent: string): { type: 'object'; properties: Record<string, any>; required?: string[] } | undefined {
-    const fieldRegex = /@returns\.(\w+)\s+\{(\w+)\}\s*([^\n*]*)/g;
     const properties: Record<string, any> = {};
+
+    // Legacy syntax: @returns.field {type} description
+    const fieldRegex = /@returns\.(\w+)\s+\{(\w+)\}\s*([^\n*]*)/g;
     let match: RegExpExecArray | null;
     while ((match = fieldRegex.exec(jsdocContent)) !== null) {
       const [, field, type, desc] = match;
-      const jsonType = type.toLowerCase() === 'boolean' ? 'boolean'
-        : type.toLowerCase() === 'number' || type.toLowerCase() === 'integer' ? 'number'
-        : type.toLowerCase() === 'array' ? 'array'
-        : type.toLowerCase() === 'object' ? 'object'
-        : 'string';
-      properties[field] = { type: jsonType };
+      properties[field] = { type: this.normalizeJsonType(type) };
       const trimmedDesc = desc.replace(/\s*\*\s*/g, ' ').trim();
-      if (trimmedDesc) {
-        properties[field].description = trimmedDesc;
+      if (trimmedDesc) properties[field].description = trimmedDesc;
+    }
+
+    // Inline syntax: @returns ... {@value field type description}
+    const returnsMatch = jsdocContent.match(/@returns\s+([^\n]*(?:\n\s*\*\s*(?!@\w)[^\n]*)*)/);
+    if (returnsMatch) {
+      const returnsBlock = returnsMatch[1];
+      const valueRegex = /\{@value\s+(\w+)\s+(\w+)(?:\s+([^}]*))?\}/g;
+      let valueMatch: RegExpExecArray | null;
+      while ((valueMatch = valueRegex.exec(returnsBlock)) !== null) {
+        const [, field, type, desc] = valueMatch;
+        properties[field] = { type: this.normalizeJsonType(type) };
+        const trimmedDesc = desc?.trim();
+        if (trimmedDesc) properties[field].description = trimmedDesc;
       }
     }
+
     if (Object.keys(properties).length === 0) return undefined;
     return { type: 'object', properties };
+  }
+
+  private normalizeJsonType(type: string): string {
+    switch (type.toLowerCase()) {
+      case 'boolean': return 'boolean';
+      case 'number': case 'integer': return 'number';
+      case 'array': return 'array';
+      case 'object': return 'object';
+      default: return 'string';
+    }
+  }
+
+  /**
+   * Auto-infer output schema from TypeScript return type annotation.
+   * Unwraps Promise<T> and converts T to JSON Schema.
+   * Only produces a schema for object return types (not primitives/arrays).
+   */
+  private inferOutputSchemaFromReturnType(method: ts.MethodDeclaration, sourceFile: ts.SourceFile): { type: 'object'; properties: Record<string, any>; required?: string[] } | undefined {
+    const returnType = method.type;
+    if (!returnType) return undefined;
+
+    // Unwrap Promise<T> → T
+    let innerType: ts.TypeNode = returnType;
+    if (ts.isTypeReferenceNode(returnType)) {
+      const typeName = returnType.typeName.getText(sourceFile);
+      if (typeName === 'Promise' && returnType.typeArguments?.length) {
+        innerType = returnType.typeArguments[0];
+      }
+    }
+
+    // Convert to JSON Schema
+    const schema = this.typeNodeToSchema(innerType, sourceFile);
+
+    // Only produce outputSchema for object types with properties
+    if (schema.type === 'object' && schema.properties && Object.keys(schema.properties).length > 0) {
+      const result: { type: 'object'; properties: Record<string, any>; required?: string[] } = {
+        type: 'object',
+        properties: schema.properties,
+      };
+      if (schema.required?.length) result.required = schema.required;
+      return result;
+    }
+
+    return undefined;
   }
 
   /**
