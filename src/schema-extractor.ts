@@ -257,8 +257,7 @@ export class SchemaExtractor {
           const openWorldHint = this.extractOpenWorldHint(jsdoc);
           const audience = this.extractAudience(jsdoc);
           const contentPriority = this.extractContentPriority(jsdoc);
-          const outputSchema = this.extractOutputSchema(jsdoc)
-            ?? this.inferOutputSchemaFromReturnType(member, sourceFile);
+          const outputSchema = this.inferOutputSchemaFromReturnType(member, sourceFile);
 
           // Daemon features
           const webhook = this.extractWebhook(jsdoc, methodName);
@@ -654,6 +653,12 @@ export class SchemaExtractor {
             properties[propName] = { type: 'object' };
           }
 
+          // Extract JSDoc description from property (e.g., /** Task ID */ id: string)
+          const jsDocComment = this.getPropertyJsDoc(member, sourceFile);
+          if (jsDocComment) {
+            properties[propName].description = jsDocComment;
+          }
+
           // Add readonly from TypeScript (JSDoc can override)
           if (isReadonly) {
             properties[propName]._tsReadOnly = true;
@@ -663,6 +668,32 @@ export class SchemaExtractor {
     }
 
     return { properties, required };
+  }
+
+  /**
+   * Extract JSDoc description from a property signature.
+   * Handles both /** comment * / style and // comment style.
+   */
+  private getPropertyJsDoc(member: ts.PropertySignature, sourceFile: ts.SourceFile): string | undefined {
+    // Check for JSDoc comments attached to the node
+    const jsDocNodes = (member as any).jsDoc;
+    if (jsDocNodes && jsDocNodes.length > 0) {
+      const comment = jsDocNodes[0].comment;
+      if (typeof comment === 'string') return comment.trim();
+    }
+
+    // Fallback: look for leading comment in source text
+    const fullText = sourceFile.getFullText();
+    const start = member.getFullStart();
+    const leading = fullText.substring(start, member.getStart(sourceFile)).trim();
+
+    // Match /** ... */ or /* ... */
+    const blockMatch = leading.match(/\/\*\*?\s*([\s\S]*?)\s*\*\//);
+    if (blockMatch) {
+      return blockMatch[1].replace(/\s*\*\s*/g, ' ').trim();
+    }
+
+    return undefined;
   }
 
   /**
@@ -1869,58 +1900,9 @@ export class SchemaExtractor {
   }
 
   /**
-   * Extract structured output schema from JSDoc @returns tags.
-   *
-   * Supports two syntaxes:
-   *   Legacy:  @returns.field {type} description
-   *   Inline:  @returns description {@value field type description}
-   *
-   * Both produce: { type: 'object', properties: { field: { type, description } } }
-   */
-  private extractOutputSchema(jsdocContent: string): { type: 'object'; properties: Record<string, any>; required?: string[] } | undefined {
-    const properties: Record<string, any> = {};
-
-    // Legacy syntax: @returns.field {type} description
-    const fieldRegex = /@returns\.(\w+)\s+\{(\w+)\}\s*([^\n*]*)/g;
-    let match: RegExpExecArray | null;
-    while ((match = fieldRegex.exec(jsdocContent)) !== null) {
-      const [, field, type, desc] = match;
-      properties[field] = { type: this.normalizeJsonType(type) };
-      const trimmedDesc = desc.replace(/\s*\*\s*/g, ' ').trim();
-      if (trimmedDesc) properties[field].description = trimmedDesc;
-    }
-
-    // Inline syntax: @returns ... {@value field type description}
-    const returnsMatch = jsdocContent.match(/@returns\s+([^\n]*(?:\n\s*\*\s*(?!@\w)[^\n]*)*)/);
-    if (returnsMatch) {
-      const returnsBlock = returnsMatch[1];
-      const valueRegex = /\{@value\s+(\w+)\s+(\w+)(?:\s+([^}]*))?\}/g;
-      let valueMatch: RegExpExecArray | null;
-      while ((valueMatch = valueRegex.exec(returnsBlock)) !== null) {
-        const [, field, type, desc] = valueMatch;
-        properties[field] = { type: this.normalizeJsonType(type) };
-        const trimmedDesc = desc?.trim();
-        if (trimmedDesc) properties[field].description = trimmedDesc;
-      }
-    }
-
-    if (Object.keys(properties).length === 0) return undefined;
-    return { type: 'object', properties };
-  }
-
-  private normalizeJsonType(type: string): string {
-    switch (type.toLowerCase()) {
-      case 'boolean': return 'boolean';
-      case 'number': case 'integer': return 'number';
-      case 'array': return 'array';
-      case 'object': return 'object';
-      default: return 'string';
-    }
-  }
-
-  /**
-   * Auto-infer output schema from TypeScript return type annotation.
+   * Infer output schema from TypeScript return type annotation.
    * Unwraps Promise<T> and converts T to JSON Schema.
+   * Property descriptions come from JSDoc on the type/interface properties.
    * Only produces a schema for object return types (not primitives/arrays).
    */
   private inferOutputSchemaFromReturnType(method: ts.MethodDeclaration, sourceFile: ts.SourceFile): { type: 'object'; properties: Record<string, any>; required?: string[] } | undefined {
