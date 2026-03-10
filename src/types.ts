@@ -28,6 +28,12 @@ export interface PhotonTool {
   outputFormat?: OutputFormat;
   /** When true, method uses individual params instead of a single params object */
   simpleParams?: boolean;
+  /**
+   * Icon image entries from @icon (file path) or @icons tags.
+   * Raw paths — resolved to data URIs by the runtime.
+   * Maps to MCP Tool.icons[]
+   */
+  iconImages?: Array<{ path: string; sizes?: string; theme?: string }>;
 }
 
 /**
