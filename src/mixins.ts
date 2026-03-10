@@ -26,6 +26,7 @@ import { MCPClient, MCPClientFactory, createMCPProxy } from '@portel/mcp';
 import { executionContext } from '@portel/cli';
 import { getBroker } from './channels/index.js';
 import { MemoryProvider } from './memory.js';
+import { ScheduleProvider } from './schedule.js';
 
 /**
  * Type for a constructor that may or may not extend Photon base class
@@ -70,6 +71,12 @@ export function withPhotonCapabilities<T extends Constructor>(Base: T): T {
     private _memory?: MemoryProvider;
 
     /**
+     * Scoped schedule provider - lazy-initialized on first access
+     * @internal
+     */
+    private _schedule?: ScheduleProvider;
+
+    /**
      * Cross-photon call handler - injected by runtime
      * @internal
      */
@@ -100,6 +107,21 @@ export function withPhotonCapabilities<T extends Constructor>(Base: T): T {
         this._memory = new MemoryProvider(name, this._sessionId);
       }
       return this._memory;
+    }
+
+    /**
+     * Runtime task scheduling
+     */
+    get schedule(): ScheduleProvider {
+      if (!this._schedule) {
+        const name = this._photonName || this.constructor.name
+          .replace(/MCP$/, '')
+          .replace(/([A-Z])/g, '-$1')
+          .toLowerCase()
+          .replace(/^-/, '');
+        this._schedule = new ScheduleProvider(name);
+      }
+      return this._schedule;
     }
 
     /**

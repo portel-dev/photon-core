@@ -44,6 +44,7 @@ import { executionContext } from '@portel/cli';
 import { getBroker } from './channels/index.js';
 import { withLock as withLockHelper } from './decorators.js';
 import { MemoryProvider } from './memory.js';
+import { ScheduleProvider } from './schedule.js';
 
 /**
  * Simple base class for creating Photons
@@ -65,6 +66,12 @@ export class Photon {
    * @internal
    */
   private _memory?: MemoryProvider;
+
+  /**
+   * Scoped schedule provider - lazy-initialized on first access
+   * @internal
+   */
+  private _schedule?: ScheduleProvider;
 
   /**
    * Session ID for session-scoped memory - set by runtime
@@ -103,6 +110,50 @@ export class Photon {
       this._memory = new MemoryProvider(name, this._sessionId);
     }
     return this._memory;
+  }
+
+  /**
+   * Runtime task scheduling
+   *
+   * Create, pause, resume, and cancel scheduled tasks programmatically.
+   * Complements static `@scheduled`/`@cron` tags with dynamic scheduling.
+   * Tasks persist to disk and are executed by the daemon.
+   *
+   * @example
+   * ```typescript
+   * // Create a cron schedule
+   * await this.schedule.create({
+   *   name: 'nightly-cleanup',
+   *   schedule: '0 0 * * *',
+   *   method: 'purge',
+   *   params: { olderThan: 30 },
+   * });
+   *
+   * // One-shot (runs once then auto-completes)
+   * await this.schedule.create({
+   *   name: 'delayed-notify',
+   *   schedule: '@hourly',
+   *   method: 'notify',
+   *   fireOnce: true,
+   * });
+   *
+   * // Manage schedules
+   * const tasks = await this.schedule.list('active');
+   * await this.schedule.pause(id);
+   * await this.schedule.resume(id);
+   * await this.schedule.cancel(id);
+   * ```
+   */
+  get schedule(): ScheduleProvider {
+    if (!this._schedule) {
+      const name = this._photonName || this.constructor.name
+        .replace(/MCP$/, '')
+        .replace(/([A-Z])/g, '-$1')
+        .toLowerCase()
+        .replace(/^-/, '');
+      this._schedule = new ScheduleProvider(name);
+    }
+    return this._schedule;
   }
 
   /**

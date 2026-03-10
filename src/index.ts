@@ -442,6 +442,16 @@ export {
   type MemoryScope,
 } from './memory.js';
 
+// ===== RUNTIME SCHEDULING =====
+// Programmatic task scheduling (this.schedule on Photon base class)
+export {
+  ScheduleProvider,
+  type ScheduleStatus,
+  type ScheduledTask,
+  type CreateScheduleOptions,
+  type UpdateScheduleOptions,
+} from './schedule.js';
+
 // ===== ASSET DISCOVERY =====
 // Discover UI, prompt, and resource assets from Photon files
 export {
