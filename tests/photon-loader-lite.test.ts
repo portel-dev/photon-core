@@ -189,6 +189,60 @@ async function run() {
     assert.ok(calc.memory !== undefined, 'memory should be available');
   });
 
+  // ─── Integration: Cross-photon composition ─────────────────
+
+  console.log('\n  Cross-Photon Composition (Integration)');
+
+  await test('orchestrator calls counter and logger via this.call()', async () => {
+    clearPhotonCache();
+    const orch = await photon(path.join(FIXTURES, 'orchestrator.photon.ts'));
+
+    const r1 = await orch.track({ key: 'clicks' });
+    assert.equal(r1.key, 'clicks');
+    assert.equal(r1.count, 1);
+    assert.equal(r1.logged, true);
+
+    const r2 = await orch.track({ key: 'clicks' });
+    assert.equal(r2.count, 2);
+  });
+
+  await test('orchestrator status aggregates from multiple photons', async () => {
+    clearPhotonCache();
+    const orch = await photon(path.join(FIXTURES, 'orchestrator.photon.ts'));
+
+    // Track something first
+    await orch.track({ key: 'default' });
+    await orch.track({ key: 'default' });
+
+    const status = await orch.status();
+    assert.equal(status.counterValue, 2);
+    assert.equal(status.logCount, 2);
+  });
+
+  await test('sub-photons maintain state across orchestrator calls', async () => {
+    clearPhotonCache();
+    const orch = await photon(path.join(FIXTURES, 'orchestrator.photon.ts'));
+
+    // Multiple calls accumulate state in sub-photons
+    await orch.track({ key: 'a' });
+    await orch.track({ key: 'b' });
+    await orch.track({ key: 'a' });
+
+    // Counter-service should have a=2, b=1
+    // Logger should have 3 entries
+    // We can verify by loading the sub-photons directly (cached instances)
+    const counter = await photon(path.join(FIXTURES, 'counter-service.photon.ts'));
+    const loggerSvc = await photon(path.join(FIXTURES, 'logger-service.photon.ts'));
+
+    const aCount = await counter.get({ key: 'a' });
+    const bCount = await counter.get({ key: 'b' });
+    const logs = await loggerSvc.entries();
+
+    assert.equal(aCount.count, 2);
+    assert.equal(bCount.count, 1);
+    assert.equal(logs.length, 3);
+  });
+
   // ─── Error Handling ─────────────────────────────────────────
 
   console.log('\n  Error Handling');
