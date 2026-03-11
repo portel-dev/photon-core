@@ -37,7 +37,6 @@
 // CLI formatting, progress, text utils, fuzzy matching, logging
 export {
   // Types
-  type OutputFormat,
   type TextWrapOptions,
   type FuzzyMatch,
   type ExecutionContext,

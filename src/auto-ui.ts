@@ -137,7 +137,7 @@ export function generateUIComponent(
   }
 
   // Auto-detect component from data structure
-  const format = config.format || detectFormat(data);
+  const format = config.format || detectFormat(data) as OutputFormat;
   const component = formatToComponent(format, data);
 
   return {
@@ -377,7 +377,7 @@ export function suggestComponents(data: any): UIComponentType[] {
   const suggestions: UIComponentType[] = [];
 
   // Always suggest the default component
-  const format = detectFormat(data);
+  const format = detectFormat(data) as OutputFormat;
   suggestions.push(formatToComponent(format, data));
 
   // Suggest alternatives based on data
