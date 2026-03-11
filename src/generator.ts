@@ -718,6 +718,18 @@ export interface EmitUI {
 /**
  * Union of all emit (output) yield types
  */
+/**
+ * QR code emit — rendered as a scannable QR code in both CLI and Beam.
+ * The `value` field contains the raw data to encode (e.g. a WhatsApp pairing string).
+ */
+export interface EmitQR {
+  emit: 'qr';
+  /** Instruction text shown above the QR code */
+  message?: string;
+  /** Raw data to encode as QR */
+  value: string;
+}
+
 export type EmitYield =
   | EmitStatus
   | EmitProgress
@@ -726,7 +738,8 @@ export type EmitYield =
   | EmitToast
   | EmitThinking
   | EmitArtifact
-  | EmitUI;
+  | EmitUI
+  | EmitQR;
 
 // ══════════════════════════════════════════════════════════════════════════════
 // COMBINED TYPES

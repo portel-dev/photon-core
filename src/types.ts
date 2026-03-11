@@ -12,7 +12,7 @@
 export type OutputFormat =
   | 'primitive' | 'table' | 'tree' | 'list' | 'none'
   | 'json' | 'markdown' | 'yaml' | 'xml' | 'html' | 'mermaid'
-  | 'card' | 'grid' | 'chips' | 'kv'
+  | 'card' | 'grid' | 'chips' | 'kv' | 'qr'
   | 'chart' | `chart:${string}` | 'metric' | 'gauge' | 'timeline' | 'dashboard' | 'cart'
   | 'panels' | 'tabs' | 'accordion' | 'stack' | 'columns'
   | `code` | `code:${string}`;

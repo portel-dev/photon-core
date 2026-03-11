@@ -239,6 +239,7 @@ export {
   type EmitThinking,
   type EmitArtifact,
   type EmitUI,
+  type EmitQR,
 
   // Checkpoint yield type
   type CheckpointYield,
