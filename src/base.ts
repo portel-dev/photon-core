@@ -348,8 +348,16 @@ export class Photon {
   /**
    * Optional lifecycle hooks
    */
-  async onInitialize?(): Promise<void>;
-  async onShutdown?(): Promise<void>;
+  /**
+   * Called once after the photon is loaded and wired.
+   * During hot-reload, receives context with the old instance for resource transfer.
+   */
+  async onInitialize?(ctx?: { reason?: string; oldInstance?: any }): Promise<void>;
+  /**
+   * Called before the photon is unloaded.
+   * During hot-reload, receives context so you can skip resource cleanup.
+   */
+  async onShutdown?(ctx?: { reason?: string }): Promise<void>;
 
   /**
    * Get an MCP client for calling external MCP servers
