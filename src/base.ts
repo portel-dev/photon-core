@@ -169,12 +169,12 @@ export class Photon {
    * // Simple emit (local only)
    * this.emit({ status: 'processing', progress: 50 });
    *
-   * // Emit with channel (broadcasts to subscribers)
-   * this.emit({
-   *   channel: 'board:my-board',
-   *   event: 'task-moved',
-   *   data: { taskId: '123', newColumn: 'Done' }
-   * });
+   * // Emit with channel (auto-prefixed with photon name)
+   * // In a WhatsApp photon, this publishes to 'whatsapp:messages'
+   * this.emit({ channel: 'messages', type: 'message', data: msg });
+   *
+   * // Explicit namespace (colon present = no auto-prefix)
+   * this.emit({ channel: 'board:updates', event: 'task-moved', data: { taskId: '123' } });
    * ```
    */
   protected emit(data: any): void {
@@ -190,15 +190,23 @@ export class Photon {
       store.outputHandler(emitData);
     }
 
-    // If channel is specified, also publish to broker for cross-process notification
+    // If channel is specified, also publish to broker for cross-process notification.
+    // Auto-prefix channel with photon name if not already namespaced:
+    //   this.emit({ channel: 'messages', ... }) → publishes to 'whatsapp:messages'
+    //   this.emit({ channel: 'board:updates', ... }) → publishes as-is (already has colon)
     if (data && typeof data.channel === 'string') {
+      const rawChannel = data.channel;
+      const channel = this._photonName && !rawChannel.includes(':')
+        ? `${this._photonName}:${rawChannel}`
+        : rawChannel;
+
       const broker = getBroker();
       broker.publish({
-        channel: data.channel,
+        channel,
         event: data.event || 'message',
         data: data.data !== undefined ? data.data : data,
         timestamp: Date.now(),
-        source: this.constructor.name,
+        source: this._photonName || this.constructor.name,
       }).catch((err) => {
         // Silent fail - channel pub is best-effort
         // Log only in debug mode
