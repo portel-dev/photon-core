@@ -337,6 +337,91 @@ async function testChannelMessage() {
 }
 
 // ============================================================================
+// Channel Auto-Prefix Tests
+// ============================================================================
+
+import { Photon } from '../src/base.js';
+
+/** Subclass that exposes the protected emit() for testing */
+class TestPhoton extends Photon {
+  public testEmit(data: any): void {
+    this.emit(data);
+  }
+}
+
+async function testChannelAutoPrefix() {
+  console.log('\nChannel auto-prefix:');
+
+  await test('simple channel name gets auto-prefixed when _photonName is set', async () => {
+    const broker = new InMemoryBroker();
+    setBroker(broker);
+
+    const received: ChannelMessage[] = [];
+    await broker.subscribe('whatsapp:messages', (msg) => {
+      received.push(msg);
+    });
+
+    const photon = new TestPhoton();
+    photon._photonName = 'whatsapp';
+    photon.testEmit({ channel: 'messages', event: 'new-message', data: { text: 'hello' } });
+
+    // Allow the async publish to complete
+    await new Promise((r) => setTimeout(r, 10));
+
+    assert.equal(received.length, 1);
+    assert.equal(received[0].channel, 'whatsapp:messages');
+    assert.equal(received[0].event, 'new-message');
+    assert.deepEqual(received[0].data, { text: 'hello' });
+
+    clearBroker();
+  });
+
+  await test('channel with colon is left as-is', async () => {
+    const broker = new InMemoryBroker();
+    setBroker(broker);
+
+    const received: ChannelMessage[] = [];
+    await broker.subscribe('board:updates', (msg) => {
+      received.push(msg);
+    });
+
+    const photon = new TestPhoton();
+    photon._photonName = 'kanban';
+    photon.testEmit({ channel: 'board:updates', event: 'task-moved', data: { taskId: '1' } });
+
+    await new Promise((r) => setTimeout(r, 10));
+
+    assert.equal(received.length, 1);
+    assert.equal(received[0].channel, 'board:updates');
+    assert.equal(received[0].event, 'task-moved');
+
+    clearBroker();
+  });
+
+  await test('channel without _photonName set is left as-is', async () => {
+    const broker = new InMemoryBroker();
+    setBroker(broker);
+
+    const received: ChannelMessage[] = [];
+    await broker.subscribe('messages', (msg) => {
+      received.push(msg);
+    });
+
+    const photon = new TestPhoton();
+    // Do not set _photonName
+    photon.testEmit({ channel: 'messages', event: 'test', data: { value: 1 } });
+
+    await new Promise((r) => setTimeout(r, 10));
+
+    assert.equal(received.length, 1);
+    assert.equal(received[0].channel, 'messages');
+    assert.equal(received[0].event, 'test');
+
+    clearBroker();
+  });
+}
+
+// ============================================================================
 // Run All Tests
 // ============================================================================
 
@@ -347,6 +432,7 @@ async function testChannelMessage() {
   await testRegistry();
   await testInMemoryBroker();
   await testChannelMessage();
+  await testChannelAutoPrefix();
 
   console.log('\n' + '='.repeat(50));
   console.log(`Results: ${passed} passed, ${failed} failed`);
