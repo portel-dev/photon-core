@@ -139,9 +139,15 @@ export function withPhotonCapabilities<T extends Constructor>(Base: T): T {
       }
 
       if (data && typeof data.channel === 'string') {
+        // Auto-prefix channel with photon name if not already namespaced
+        const channel = data.channel.includes(':')
+          ? data.channel
+          : this._photonName
+            ? `${this._photonName}:${data.channel}`
+            : data.channel;
         const broker = getBroker();
         broker.publish({
-          channel: data.channel,
+          channel,
           event: data.event || 'message',
           data: data.data !== undefined ? data.data : data,
           timestamp: Date.now(),
