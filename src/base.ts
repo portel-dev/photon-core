@@ -45,6 +45,8 @@ import { getBroker } from './channels/index.js';
 import { withLock as withLockHelper } from './decorators.js';
 import { MemoryProvider } from './memory.js';
 import { ScheduleProvider } from './schedule.js';
+import * as path from 'path';
+import * as fs from 'fs';
 
 /**
  * Simple base class for creating Photons
@@ -60,6 +62,20 @@ export class Photon {
    * @internal
    */
   _photonName?: string;
+
+  /**
+   * Absolute path to the .photon.ts/.photon.js source file - set by runtime loader
+   * Used for storage() and assets() path resolution
+   * @internal
+   */
+  _photonFilePath?: string;
+
+  /**
+   * Dynamic photon resolver - injected by runtime loader
+   * Used by this.photon.use() for runtime photon access
+   * @internal
+   */
+  _photonResolver?: (name: string, instance?: string) => Promise<any>;
 
   /**
    * Scoped memory provider - lazy-initialized on first access
@@ -154,6 +170,103 @@ export class Photon {
       this._schedule = new ScheduleProvider(name);
     }
     return this._schedule;
+  }
+
+  /**
+   * Get an absolute path to a storage directory for this photon's data.
+   *
+   * Uses the symlink/installed path (not resolved) so data stays at the
+   * installed location. Directories are auto-created.
+   *
+   * @param subpath Sub-directory within the photon's data folder (e.g., 'auth', 'media')
+   * @returns Absolute path to the directory
+   *
+   * @example
+   * ```typescript
+   * const authDir = this.storage('auth');
+   * // ~/.photon/portel-dev/whatsapp/auth/
+   *
+   * const mediaDir = this.storage('media/images');
+   * // ~/.photon/portel-dev/whatsapp/media/images/
+   * ```
+   */
+  protected storage(subpath: string): string {
+    if (!this._photonFilePath) {
+      throw new Error(
+        'storage() requires _photonFilePath to be set by the runtime loader. ' +
+        'Ensure this photon is loaded through the standard runtime.'
+      );
+    }
+    const dir = path.dirname(this._photonFilePath);
+    const name = path.basename(this._photonFilePath).replace(/\.photon\.(ts|js)$/, '');
+    const target = path.join(dir, name, subpath);
+    fs.mkdirSync(target, { recursive: true });
+    return target;
+  }
+
+  /**
+   * Get an absolute path to an assets directory for this photon.
+   *
+   * Uses realpathSync to follow symlinks — assets travel with source code,
+   * not the installed location. Useful for marketplace-distributed resources
+   * like HTML templates, images, etc.
+   *
+   * @param subpath Sub-path within the assets folder (e.g., 'templates', 'icons/logo.png')
+   * @returns Absolute path to the asset file or directory
+   *
+   * @example
+   * ```typescript
+   * const templateDir = this.assets('templates');
+   * // /real/path/to/portel-dev/whatsapp/assets/templates/
+   *
+   * const logo = this.assets('icons/logo.png');
+   * // /real/path/to/portel-dev/whatsapp/assets/icons/logo.png
+   * ```
+   */
+  protected assets(subpath: string): string {
+    if (!this._photonFilePath) {
+      throw new Error(
+        'assets() requires _photonFilePath to be set by the runtime loader. ' +
+        'Ensure this photon is loaded through the standard runtime.'
+      );
+    }
+    const realPath = fs.realpathSync(this._photonFilePath);
+    const dir = path.dirname(realPath);
+    const name = path.basename(realPath).replace(/\.photon\.(ts|js)$/, '');
+    return path.join(dir, name, 'assets', subpath);
+  }
+
+  /**
+   * Dynamic photon access
+   *
+   * Provides runtime access to other photons by name, with optional instance selection.
+   * Supports both short names and namespace-qualified names.
+   *
+   * @example
+   * ```typescript
+   * // Get default instance
+   * const wa = await this.photon.use('whatsapp');
+   *
+   * // Get named instance
+   * const personal = await this.photon.use('whatsapp', 'personal');
+   *
+   * // Cross-namespace access
+   * const wa2 = await this.photon.use('portel-dev:whatsapp', 'work');
+   * ```
+   */
+  get photon(): { use: (name: string, instance?: string) => Promise<any> } {
+    const resolver = this._photonResolver;
+    return {
+      use: async (name: string, instance?: string) => {
+        if (!resolver) {
+          throw new Error(
+            'this.photon.use() requires a runtime with photon resolution. ' +
+            'Ensure this photon is loaded through the standard runtime.'
+          );
+        }
+        return resolver(name, instance);
+      },
+    };
   }
 
   /**

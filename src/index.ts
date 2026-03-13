@@ -166,12 +166,15 @@ export { SchemaExtractor, detectCapabilities, type PhotonCapability } from './sc
 export {
   resolvePath,
   listFiles,
+  listFilesWithNamespace,
   ensureDir,
   resolvePhotonPath,
   listPhotonFiles,
+  listPhotonFilesWithNamespace,
   ensurePhotonDir,
   DEFAULT_PHOTON_DIR,
   type ResolverOptions,
+  type ListedPhoton,
 } from './path-resolver.js';
 
 // Types

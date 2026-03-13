@@ -2652,13 +2652,32 @@ export class SchemaExtractor {
         };
       }
 
-      // Check if matches an @photon declaration
+      // Check if matches an @photon declaration (exact match)
       if (photonMap.has(param.name)) {
         return {
           param,
           injectionType: 'photon' as const,
           photonDependency: photonMap.get(param.name),
         };
+      }
+
+      // Instance-aware DI: if paramName ends with a photon dep name (case-insensitive),
+      // the prefix becomes the instance name.
+      // e.g., personalWhatsapp + @photon whatsapp → instance "personal" of whatsapp
+      //       workWhatsapp + @photon whatsapp → instance "work" of whatsapp
+      for (const [depName, dep] of photonMap) {
+        const lowerParam = param.name.toLowerCase();
+        const lowerDep = depName.toLowerCase();
+        if (lowerParam.endsWith(lowerDep) && lowerParam.length > lowerDep.length) {
+          const prefix = param.name.slice(0, param.name.length - depName.length);
+          // Ensure the prefix is a valid instance name (lowercase the first char)
+          const instanceName = prefix.charAt(0).toLowerCase() + prefix.slice(1);
+          return {
+            param,
+            injectionType: 'photon' as const,
+            photonDependency: { ...dep, instanceName: instanceName || undefined },
+          };
+        }
       }
 
       // Non-primitive with default on @stateful class → persisted state

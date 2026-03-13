@@ -3,6 +3,14 @@
  *
  * Generic path resolution utilities used by photon, lumina, ncp.
  * Configurable file extensions and default directories.
+ *
+ * Supports namespace-based directory structure:
+ *   ~/.photon/
+ *     portel-dev/          ← namespace (marketplace author)
+ *       whatsapp.photon.ts
+ *     local/               ← implicit namespace for user-created photons
+ *       todo.photon.ts
+ *     legacy.photon.ts     ← flat files (pre-migration, still supported)
  */
 
 import * as fs from 'fs/promises';
@@ -37,9 +45,17 @@ const defaultOptions: Required<ResolverOptions> = {
   defaultDir: DEFAULT_PHOTON_DIR,
 };
 
+/** Directories to skip when scanning for namespace subdirectories */
+const SKIP_DIRS = new Set([
+  'state', 'context', 'env', '.cache', '.config',
+  'node_modules', 'marketplace', 'photons', 'templates',
+]);
+
 /**
- * Resolve a file path from name
- * Looks in the specified working directory, or uses absolute path if provided
+ * Resolve a file path from name.
+ *
+ * Supports namespace-qualified names: 'namespace:photonName'
+ * For unqualified names, searches flat files first, then namespace subdirectories.
  */
 export async function resolvePath(
   name: string,
@@ -59,66 +75,172 @@ export async function resolvePath(
     }
   }
 
+  // Parse namespace:name format
+  const colonIndex = name.indexOf(':');
+  let namespace: string | undefined;
+  let photonName: string;
+  if (colonIndex !== -1) {
+    namespace = name.slice(0, colonIndex);
+    photonName = name.slice(colonIndex + 1);
+  } else {
+    photonName = name;
+  }
+
   // Remove extension if provided (match any configured extension)
-  let basename = name;
+  let basename = photonName;
   for (const ext of opts.extensions) {
-    if (name.endsWith(ext)) {
-      basename = name.slice(0, -ext.length);
+    if (photonName.endsWith(ext)) {
+      basename = photonName.slice(0, -ext.length);
       break;
     }
   }
 
-  // Try each extension
+  // If namespace is specified, search only that namespace directory
+  if (namespace) {
+    for (const ext of opts.extensions) {
+      const filePath = path.join(dir, namespace, `${basename}${ext}`);
+      try {
+        await fs.access(filePath);
+        return filePath;
+      } catch {
+        // Continue
+      }
+    }
+    return null;
+  }
+
+  // Unqualified name: search flat files first (backward compat)
   for (const ext of opts.extensions) {
     const filePath = path.join(dir, `${basename}${ext}`);
     try {
       await fs.access(filePath);
       return filePath;
     } catch {
-      // Continue to next extension
+      // Continue
     }
   }
 
-  // Not found
+  // Then search namespace subdirectories (one level deep)
+  try {
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory() || SKIP_DIRS.has(entry.name) || entry.name.startsWith('.')) {
+        continue;
+      }
+      for (const ext of opts.extensions) {
+        const filePath = path.join(dir, entry.name, `${basename}${ext}`);
+        try {
+          await fs.access(filePath);
+          return filePath;
+        } catch {
+          // Continue
+        }
+      }
+    }
+  } catch {
+    // dir doesn't exist
+  }
+
   return null;
 }
 
 /**
- * List all matching files in a directory
+ * Result from listing files, including namespace information.
+ */
+export interface ListedPhoton {
+  /** Short name (e.g., 'whatsapp') */
+  name: string;
+  /** Namespace (e.g., 'portel-dev') or empty string for flat/root-level files */
+  namespace: string;
+  /** Qualified name (e.g., 'portel-dev:whatsapp' or 'whatsapp' for flat) */
+  qualifiedName: string;
+  /** Full absolute path to the file */
+  filePath: string;
+}
+
+/**
+ * List all matching files in a directory.
+ *
+ * Scans both flat files (backward compat) and namespace subdirectories.
+ * Returns short names for backward compatibility.
  */
 export async function listFiles(
   workingDir?: string,
   options?: ResolverOptions
 ): Promise<string[]> {
+  const listed = await listFilesWithNamespace(workingDir, options);
+  return listed.map((l) => l.name).sort();
+}
+
+/**
+ * List all matching files with full namespace metadata.
+ *
+ * Scans flat files at the root level and one level of namespace subdirectories.
+ */
+export async function listFilesWithNamespace(
+  workingDir?: string,
+  options?: ResolverOptions
+): Promise<ListedPhoton[]> {
   const opts = { ...defaultOptions, ...options };
   const dir = expandTilde(workingDir || opts.defaultDir);
+  const results: ListedPhoton[] = [];
 
   try {
-    // Ensure directory exists
     await fs.mkdir(dir, { recursive: true });
-
     const entries = await fs.readdir(dir, { withFileTypes: true });
-    const files: string[] = [];
 
+    // Scan flat files at root level (backward compat / pre-migration)
     for (const entry of entries) {
-      // Include both regular files and symlinks
       if (entry.isFile() || entry.isSymbolicLink()) {
-        // Check if file matches any extension
         for (const ext of opts.extensions) {
           if (entry.name.endsWith(ext)) {
-            // Remove extension for display
             const name = entry.name.slice(0, -ext.length);
-            files.push(name);
+            results.push({
+              name,
+              namespace: '',
+              qualifiedName: name,
+              filePath: path.join(dir, entry.name),
+            });
             break;
           }
         }
       }
     }
 
-    return files.sort();
+    // Scan namespace subdirectories (one level deep)
+    for (const entry of entries) {
+      if (!entry.isDirectory() || SKIP_DIRS.has(entry.name) || entry.name.startsWith('.')) {
+        continue;
+      }
+
+      const nsDir = path.join(dir, entry.name);
+      try {
+        const nsEntries = await fs.readdir(nsDir, { withFileTypes: true });
+        for (const nsEntry of nsEntries) {
+          if (nsEntry.isFile() || nsEntry.isSymbolicLink()) {
+            for (const ext of opts.extensions) {
+              if (nsEntry.name.endsWith(ext)) {
+                const name = nsEntry.name.slice(0, -ext.length);
+                results.push({
+                  name,
+                  namespace: entry.name,
+                  qualifiedName: `${entry.name}:${name}`,
+                  filePath: path.join(nsDir, nsEntry.name),
+                });
+                break;
+              }
+            }
+          }
+        }
+      } catch {
+        // Namespace dir unreadable, skip
+      }
+    }
   } catch {
-    return [];
+    // Root dir doesn't exist
   }
+
+  return results;
 }
 
 /**
@@ -132,4 +254,5 @@ export async function ensureDir(dir?: string): Promise<void> {
 // Convenience aliases for photon-specific usage
 export const resolvePhotonPath = resolvePath;
 export const listPhotonFiles = listFiles;
+export const listPhotonFilesWithNamespace = listFilesWithNamespace;
 export const ensurePhotonDir = ensureDir;
