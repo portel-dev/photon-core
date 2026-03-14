@@ -2856,7 +2856,15 @@ export class SchemaExtractor {
                 // Link UI asset to this method
                 const asset = uiAssets.find(a => a.id === uiId);
                 if (asset) {
-                  asset.linkedTool = methodName;
+                  // First method wins as primary (used for app detection)
+                  if (!asset.linkedTool) {
+                    asset.linkedTool = methodName;
+                  }
+                  // Track all methods that reference this UI
+                  if (!asset.linkedTools) asset.linkedTools = [];
+                  if (!asset.linkedTools.includes(methodName)) {
+                    asset.linkedTools.push(methodName);
+                  }
                 }
               }
             }

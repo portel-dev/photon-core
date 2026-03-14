@@ -432,8 +432,10 @@ export interface UIAsset {
   resolvedPath?: string;
   /** MIME type (detected from extension) */
   mimeType?: string;
-  /** Tool this UI is linked to (from method @ui annotation) */
+  /** Primary tool this UI is linked to (first method with @ui annotation — used for app detection) */
   linkedTool?: string;
+  /** All tools that reference this UI asset (multiple methods can share one template) */
+  linkedTools?: string[];
   /** MCP resource URI (set by loader, e.g., 'ui://photon-name/main-ui') */
   uri?: string;
 }
