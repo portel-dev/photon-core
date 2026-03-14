@@ -368,7 +368,7 @@ function wrapStatefulMethods(
 
   // Skip framework-injected methods from withPhotonCapabilities
   const frameworkMethods = new Set([
-    'emit', 'call', 'mcp', 'setMCPFactory', 'onInitialize', 'onShutdown',
+    'emit', 'render', 'call', 'mcp', 'setMCPFactory', 'onInitialize', 'onShutdown',
   ]);
 
   // Walk the prototype chain to find all public methods

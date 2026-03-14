@@ -125,6 +125,18 @@ export function withPhotonCapabilities<T extends Constructor>(Base: T): T {
     }
 
     /**
+     * Render a formatted value as an intermediate result.
+     * Each call replaces the previous render. Call with no args to clear.
+     */
+    protected render(format?: string, value?: any): void {
+      if (format === undefined) {
+        this.emit({ emit: 'render:clear' });
+      } else {
+        this.emit({ emit: 'render', format, value });
+      }
+    }
+
+    /**
      * Emit an event/progress update
      */
     protected emit(data: any): void {

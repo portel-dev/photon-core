@@ -357,8 +357,15 @@ export class Photon {
    * });
    * ```
    */
-  protected render(format: string, value: any): void {
-    this.emit({ emit: 'render', format, value });
+  protected render(format: string, value: any): void;
+  protected render(): void;
+  protected render(format?: string, value?: any): void {
+    if (format === undefined) {
+      // Clear the render zone without rendering new content
+      this.emit({ emit: 'render:clear' });
+    } else {
+      this.emit({ emit: 'render', format, value });
+    }
   }
 
   /**

@@ -743,6 +743,10 @@ export interface EmitRender {
   value: any;
 }
 
+export interface EmitRenderClear {
+  emit: 'render:clear';
+}
+
 export type EmitYield =
   | EmitStatus
   | EmitProgress
@@ -753,7 +757,8 @@ export type EmitYield =
   | EmitArtifact
   | EmitUI
   | EmitQR
-  | EmitRender;
+  | EmitRender
+  | EmitRenderClear;
 
 // ══════════════════════════════════════════════════════════════════════════════
 // COMBINED TYPES

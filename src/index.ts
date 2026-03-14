@@ -242,6 +242,8 @@ export {
   type EmitArtifact,
   type EmitUI,
   type EmitQR,
+  type EmitRender,
+  type EmitRenderClear,
 
   // Checkpoint yield type
   type CheckpointYield,
