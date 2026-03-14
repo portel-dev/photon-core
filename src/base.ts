@@ -329,6 +329,38 @@ export class Photon {
       });
     }
   }
+
+  /**
+   * Render a formatted value as an intermediate result
+   *
+   * Sends a value to the client (Beam, CLI, MCP) rendered with the specified
+   * format — the same formats available via `@format` docblock tags. Each call
+   * replaces the previous render in the result panel.
+   *
+   * For custom formats, place an HTML renderer at `assets/formats/<name>.html`.
+   *
+   * @param format The format type (table, qr, chart:bar, dashboard, or custom)
+   * @param value The data to render — same shape as a return value with that @format
+   *
+   * @example
+   * ```typescript
+   * // Show a QR code mid-execution
+   * this.render('qr', { value: 'https://wa.link/...' });
+   *
+   * // Show a status table
+   * this.render('table', [['Step', 'Status'], ['Auth', 'Done']]);
+   *
+   * // Composite dashboard
+   * this.render('dashboard', {
+   *   qr: { format: 'qr', data: 'https://wa.link/...' },
+   *   status: { format: 'text', data: 'Scan the QR code above' }
+   * });
+   * ```
+   */
+  protected render(format: string, value: any): void {
+    this.emit({ emit: 'render', format, value });
+  }
+
   /**
    * Cross-photon call handler - injected by runtime
    * @internal

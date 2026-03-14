@@ -730,6 +730,19 @@ export interface EmitQR {
   value: string;
 }
 
+/**
+ * Render emit — sends a formatted intermediate result to the client.
+ * The value is rendered using the same format pipeline as @format return values.
+ * Custom formats are resolved from assets/formats/<name>.html.
+ */
+export interface EmitRender {
+  emit: 'render';
+  /** Format type (table, qr, chart:bar, dashboard, or custom name) */
+  format: string;
+  /** Data to render — same shape as a return value with that @format */
+  value: any;
+}
+
 export type EmitYield =
   | EmitStatus
   | EmitProgress
@@ -739,7 +752,8 @@ export type EmitYield =
   | EmitThinking
   | EmitArtifact
   | EmitUI
-  | EmitQR;
+  | EmitQR
+  | EmitRender;
 
 // ══════════════════════════════════════════════════════════════════════════════
 // COMBINED TYPES
