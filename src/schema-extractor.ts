@@ -1329,6 +1329,7 @@ export class SchemaExtractor {
         .replace(/\{@pattern\s+[^}]+\}/g, '')
         .replace(/\{@format\s+[^}]+\}/g, '')
         .replace(/\{@choice\s+[^}]+\}/g, '')
+        .replace(/\{@choice-from\s+[^}]+\}/g, '')
         .replace(/\{@field\s+[^}]+\}/g, '')
         .replace(/\{@default\s+[^}]+\}/g, '')
         .replace(/\{@unique(?:Items)?\s*\}/g, '')
@@ -1402,6 +1403,12 @@ export class SchemaExtractor {
       if (choiceMatch) {
         const choices = choiceMatch[1].split(',').map((c: string) => c.trim());
         paramConstraints.enum = choices;
+      }
+
+      // Extract {@choice-from toolName} or {@choice-from toolName.field}
+      const choiceFromMatch = description.match(/\{@choice-from\s+([^}]+)\}/);
+      if (choiceFromMatch) {
+        paramConstraints.choiceFrom = choiceFromMatch[1].trim();
       }
 
       // Extract {@field type} - hints for UI form rendering
@@ -1526,7 +1533,7 @@ export class SchemaExtractor {
       }
 
       // Validate no unknown {@...} tags (typos in constraint names)
-      const allKnownTags = ['min', 'max', 'pattern', 'format', 'choice', 'field', 'default', 'unique', 'uniqueItems',
+      const allKnownTags = ['min', 'max', 'pattern', 'format', 'choice', 'choice-from', 'field', 'default', 'unique', 'uniqueItems',
                              'example', 'multipleOf', 'deprecated', 'readOnly', 'writeOnly', 'label', 'placeholder',
                              'hint', 'hidden', 'accept', 'minItems', 'maxItems'];
       const unknownTagRegex = /\{@([\w-]+)\s*(?:\s+[^}]*)?\}/g;
@@ -1714,6 +1721,10 @@ export class SchemaExtractor {
         if (!s.enum) {
           s.enum = constraints.enum;
         }
+      }
+      // Apply dynamic choice provider (x-choiceFrom extension)
+      if (constraints.choiceFrom !== undefined) {
+        s['x-choiceFrom'] = constraints.choiceFrom;
       }
       // Apply field hint for UI rendering
       if (constraints.field !== undefined) {
