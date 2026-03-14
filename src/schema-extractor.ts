@@ -2915,6 +2915,7 @@ export type PhotonCapability = 'emit' | 'memory' | 'call' | 'mcp' | 'lock' | 'in
 export function detectCapabilities(source: string): Set<PhotonCapability> {
   const caps = new Set<PhotonCapability>();
   if (/this\.emit\s*\(/.test(source)) caps.add('emit');
+  if (/this\.render\s*\(/.test(source)) caps.add('emit'); // render() needs emit injection
   if (/this\.memory\b/.test(source)) caps.add('memory');
   if (/this\.call\s*\(/.test(source)) caps.add('call');
   if (/this\.mcp\s*\(/.test(source)) caps.add('mcp');
