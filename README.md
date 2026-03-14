@@ -131,14 +131,14 @@ if (instance.onShutdown) {
 
 ## 📚 API Reference
 
-### `PhotonMCP`
+### `Photon` (alias: `PhotonMCP`)
 
 Base class for creating Photon classes (optional - you can use plain classes too).
 
 ```typescript
-import { PhotonMCP } from '@portel/photon-core';
+import { Photon } from '@portel/photon-core';
 
-export default class MyPhoton extends PhotonMCP {
+export default class MyPhoton extends Photon {
   async myMethod(params: { input: string }) {
     return `Hello ${params.input}`;
   }
@@ -159,6 +159,11 @@ export default class MyPhoton extends PhotonMCP {
 
 **Instance methods:**
 - `executeTool(name, params)` - Execute a method by name
+- `emit(data)` - Emit events to local handler or pub/sub channel
+- `render(format, value)` - Send formatted intermediate results to the client
+- `render()` - Clear the render zone
+- `storage(subpath)` - Get path to persistent data directory
+- `assets(subpath)` - Get path to bundled assets directory
 
 **Lifecycle hooks:**
 - `onInitialize()` - Called when photon is initialized
@@ -321,6 +326,8 @@ interface ExtractedSchema {
  * @param email Email address {@format email}
  * @param username Username {@pattern ^[a-z0-9_]+$}
  * @param count Count {@default 10}
+ * @param env Target environment {@choice-from environments}
+ * @param service Service to deploy {@choice-from services.name}
  */
 ```
 
@@ -507,6 +514,119 @@ sub.unsubscribe();
 - `PHOTON_CHANNEL_HTTP_URL` - HTTP webhook URL (auto-enables http broker)
 
 See [CHANNELS.md](./CHANNELS.md) for full architecture documentation.
+
+**Channel auto-prefixing:** When emitting with a `channel` property, the channel name is automatically prefixed with the photon name unless it already contains a colon:
+
+```typescript
+// In a photon named "whatsapp":
+this.emit({ channel: 'messages', event: 'new', data: msg });
+// → publishes to 'whatsapp:messages'
+
+// Explicit namespace (colon present = no auto-prefix)
+this.emit({ channel: 'board:updates', event: 'moved', data });
+// → publishes to 'board:updates' as-is
+```
+
+---
+
+### Intermediate Rendering (`this.render()`)
+
+Send formatted intermediate results to the client during method execution. Each call replaces the previous render in the result panel. Uses the same rendering pipeline as `@format` return values.
+
+```typescript
+export default class Scanner extends Photon {
+  async scan(params: { target: string }) {
+    // Show a progress table mid-execution
+    this.render('table', [{ host: params.target, status: 'scanning...' }]);
+
+    const results = await this.runScan(params.target);
+
+    // Update with final results
+    this.render('table', results);
+
+    // Clear the render zone
+    this.render();
+
+    return results;
+  }
+}
+```
+
+**Signatures:**
+- `this.render(format: string, value: any)` — render a formatted value
+- `this.render()` — clear the render zone (emits `render:clear`)
+
+---
+
+### Dynamic Enums (`{@choice-from}`)
+
+Populate parameter enum values dynamically by calling another tool at schema resolution time:
+
+```typescript
+export default class Deploy extends Photon {
+  /** @readOnly */
+  async environments() {
+    return ['staging', 'production', 'dev'];
+  }
+
+  /**
+   * Deploy to an environment
+   * @param env Target environment {@choice-from environments}
+   * @param service Service name {@choice-from services.name}
+   */
+  async deploy(params: { env: string; service: string }) { ... }
+}
+```
+
+The `{@choice-from toolName}` tag calls the specified tool and uses the result array as enum values. Use `{@choice-from toolName.field}` to extract a specific field from each result object.
+
+---
+
+### Namespace System & Storage/Assets
+
+Every photon gets scoped filesystem APIs for persistent data and bundled assets:
+
+```typescript
+export default class WhatsApp extends Photon {
+  async onInitialize() {
+    // Persistent data directory (follows symlink path)
+    const authDir = this.storage('auth');
+    // → ~/.photon/portel-dev/whatsapp/auth/
+
+    // Bundled assets directory (follows realpath to source)
+    const templates = this.assets('templates');
+    // → /real/path/to/whatsapp/assets/templates/
+  }
+}
+```
+
+Cross-namespace photon resolution uses `namespace:name` syntax:
+```typescript
+const wa = await this.photon.use('portel-dev:whatsapp', 'work');
+```
+
+---
+
+### Shared UI Assets (`linkedTools`)
+
+Multiple methods can reference the same `@ui` template. The first method becomes the primary link (used for app detection via `main()`), while all methods are tracked in `linkedTools[]`:
+
+```typescript
+export default class Dashboard extends Photon {
+  /** @ui dashboard ./ui/dashboard.html */
+  async main() { return this.status(); }
+
+  /** @ui dashboard */
+  async status() { return { uptime: process.uptime() }; }
+
+  /** @ui dashboard */
+  async metrics() { return { requests: 1234 }; }
+}
+```
+
+The `UIAsset` type tracks both:
+- `linkedTool` — first method (used for app detection)
+- `linkedTools[]` — all methods sharing this template
 
 ---
 
