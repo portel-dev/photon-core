@@ -457,16 +457,13 @@ export class Photon {
     ]);
 
     // Get all property names from prototype chain
+    // Use getOwnPropertyDescriptor to avoid triggering getters (which may call storage())
     let current = prototype;
     while (current && current !== Photon.prototype) {
       Object.getOwnPropertyNames(current).forEach((name) => {
-        // Skip private methods (starting with _) and convention methods
-        if (
-          !name.startsWith('_') &&
-          !conventionMethods.has(name) &&
-          typeof (prototype as any)[name] === 'function' &&
-          !methods.includes(name)
-        ) {
+        if (name.startsWith('_') || conventionMethods.has(name) || methods.includes(name)) return;
+        const desc = Object.getOwnPropertyDescriptor(current, name);
+        if (desc && typeof desc.value === 'function') {
           methods.push(name);
         }
       });
