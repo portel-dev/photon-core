@@ -110,12 +110,32 @@ export async function autoDiscoverAssets(
   assets: PhotonAssets,
 ): Promise<void> {
   // Auto-discover UI files
+  // .photon.html files (declarative mode) take priority over .html files with the same base name.
   const uiDir = path.join(assetFolder, 'ui');
   if (await fileExists(uiDir)) {
     try {
       const files = await fs.readdir(uiDir);
+      // Collect .photon.html files first so they take priority
+      const photonHtmlFiles = new Set<string>();
       for (const file of files) {
-        const id = path.basename(file, path.extname(file));
+        if (file.endsWith('.photon.html')) {
+          photonHtmlFiles.add(file.replace(/\.photon\.html$/, ''));
+        }
+      }
+      for (const file of files) {
+        // Determine the asset ID:
+        // - foo.photon.html → id "foo"
+        // - foo.html → id "foo" (but skipped if foo.photon.html exists)
+        let id: string;
+        if (file.endsWith('.photon.html')) {
+          id = file.replace(/\.photon\.html$/, '');
+        } else {
+          id = path.basename(file, path.extname(file));
+          // Skip .html files when a .photon.html with the same base name exists
+          if (file.endsWith('.html') && photonHtmlFiles.has(id)) {
+            continue;
+          }
+        }
         if (!assets.ui.find((u) => u.id === id)) {
           assets.ui.push({
             id,
