@@ -74,6 +74,7 @@ export {
   executionContext,
   runWithContext,
   getContext,
+  type CallerInfo,
 
   // Text Utils
   TextUtils,

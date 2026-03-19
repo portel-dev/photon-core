@@ -40,7 +40,7 @@
  */
 
 import { MCPClient, MCPClientFactory, createMCPProxy } from '@portel/mcp';
-import { executionContext } from '@portel/cli';
+import { executionContext, type CallerInfo } from '@portel/cli';
 import { getBroker } from './channels/index.js';
 import { withLock as withLockHelper } from './decorators.js';
 import { MemoryProvider } from './memory.js';
@@ -94,6 +94,28 @@ export class Photon {
    * @internal
    */
   _sessionId?: string;
+
+  /**
+   * Authenticated caller identity
+   *
+   * Populated from MCP OAuth when `@auth` is enabled on the photon.
+   * Returns the identity of whoever is calling the current method —
+   * human (via social login) or agent (via API key).
+   *
+   * Returns an anonymous caller if no auth token was provided.
+   *
+   * @example
+   * ```typescript
+   * // In a method:
+   * const userId = this.caller.id;     // stable user ID from JWT
+   * const name = this.caller.name;     // display name
+   * const isAnon = this.caller.anonymous; // true if no auth
+   * ```
+   */
+  get caller(): CallerInfo {
+    const store = executionContext.getStore();
+    return store?.caller ?? { id: 'anonymous', anonymous: true };
+  }
 
   /**
    * Scoped key-value storage for photon data

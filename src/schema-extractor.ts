@@ -24,6 +24,13 @@ export interface ExtractedMetadata {
   configSchema?: ConfigSchema;
   /** Notification subscription from @notify-on tag */
   notificationSubscriptions?: NotificationSubscription;
+  /**
+   * MCP OAuth auth requirement (from @auth tag)
+   * - 'required': all methods require authenticated caller
+   * - 'optional': caller populated if token present, anonymous allowed
+   * - string URL: OIDC provider URL (implies required)
+   */
+  auth?: 'required' | 'optional' | string;
 }
 
 /**
@@ -63,6 +70,9 @@ export class SchemaExtractor {
 
     // Notification subscriptions tracking (from @notify-on tag)
     let notificationSubscriptions: NotificationSubscription | undefined;
+
+    // MCP OAuth auth requirement (from @auth tag)
+    let auth: 'required' | 'optional' | string | undefined;
 
     try {
       // If source doesn't contain a class declaration, wrap it in one
@@ -448,6 +458,12 @@ export class SchemaExtractor {
           const classJsdoc = this.getJSDocComment(node as any, sourceFile);
           const isStatefulClass = /@stateful\b/i.test(classJsdoc);
 
+          // Extract @auth tag for MCP OAuth requirement
+          const authMatch = classJsdoc.match(/@auth(?:\s+(\S+))?/i);
+          if (authMatch) {
+            auth = authMatch[1]?.trim() || 'required';
+          }
+
           // Extract notification subscriptions from @notify-on tag
           notificationSubscriptions = this.extractNotifyOn(classJsdoc);
 
@@ -493,6 +509,11 @@ export class SchemaExtractor {
     // Include notification subscriptions if detected
     if (notificationSubscriptions) {
       result.notificationSubscriptions = notificationSubscriptions;
+    }
+
+    // Include auth requirement if detected
+    if (auth) {
+      result.auth = auth;
     }
 
     return result;
@@ -1220,7 +1241,7 @@ export class SchemaExtractor {
   private extractDescription(jsdocContent: string): string {
     // Split by @tags that appear at start of a JSDoc line (after optional * prefix)
     // This avoids matching @tag references inline in description text
-    const beforeTags = jsdocContent.split(/(?:^|\n)\s*\*?\s*@(?:param|example|returns?|throws?|see|since|deprecated|version|author|license|ui|icon|format|stateful|autorun|async|webhook|cron|scheduled|locked|fallback|logged|circuitBreaker|cached|timeout|retryable|throttled|debounced|queued|validate|use|Template|Static|mcp|photon|cli|tags|dependencies|csp|visibility)\b/)[0];
+    const beforeTags = jsdocContent.split(/(?:^|\n)\s*\*?\s*@(?:param|example|returns?|throws?|see|since|deprecated|version|author|license|ui|icon|format|stateful|autorun|async|webhook|cron|scheduled|locked|fallback|logged|circuitBreaker|cached|timeout|retryable|throttled|debounced|queued|validate|use|Template|Static|mcp|photon|cli|tags|dependencies|csp|visibility|auth)\b/)[0];
 
     // Remove leading * from each line and trim
     const lines = beforeTags
@@ -2920,7 +2941,7 @@ export class SchemaExtractor {
 /**
  * Capability types that can be auto-detected from source code
  */
-export type PhotonCapability = 'emit' | 'memory' | 'call' | 'mcp' | 'lock' | 'instanceMeta' | 'allInstances';
+export type PhotonCapability = 'emit' | 'memory' | 'call' | 'mcp' | 'lock' | 'instanceMeta' | 'allInstances' | 'caller';
 
 /**
  * Detect capabilities used by a Photon from its source code.
@@ -2941,5 +2962,6 @@ export function detectCapabilities(source: string): Set<PhotonCapability> {
   if (/this\.withLock\s*\(/.test(source)) caps.add('lock');
   if (/this\.instanceMeta\b/.test(source)) caps.add('instanceMeta');
   if (/this\.allInstances\s*\(/.test(source)) caps.add('allInstances');
+  if (/this\.caller\b/.test(source)) caps.add('caller');
   return caps;
 }

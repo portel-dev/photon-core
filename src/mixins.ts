@@ -23,7 +23,7 @@
  */
 
 import { MCPClient, MCPClientFactory, createMCPProxy } from '@portel/mcp';
-import { executionContext } from '@portel/cli';
+import { executionContext, type CallerInfo } from '@portel/cli';
 import { getBroker } from './channels/index.js';
 import { MemoryProvider } from './memory.js';
 import { ScheduleProvider } from './schedule.js';
@@ -93,6 +93,14 @@ export function withPhotonCapabilities<T extends Constructor>(Base: T): T {
      * @internal
      */
     private _mcpClients: Map<string, MCPClient & Record<string, (params?: any) => Promise<any>>> = new Map();
+
+    /**
+     * Authenticated caller identity from MCP OAuth
+     */
+    get caller(): CallerInfo {
+      const store = executionContext.getStore();
+      return store?.caller ?? { id: 'anonymous', anonymous: true };
+    }
 
     /**
      * Scoped key-value storage for photon data
