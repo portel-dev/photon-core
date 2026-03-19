@@ -1419,10 +1419,12 @@ export class SchemaExtractor {
           // File formats
           'path', 'file', 'directory',
         ];
-        if (!validFormats.includes(format)) {
+        // Allow subtypes like code:typescript, code:python
+        const formatBase = format.split(':')[0];
+        if (!validFormats.includes(format) && !validFormats.includes(formatBase)) {
           console.warn(
             `Invalid @format value: "${format}". ` +
-            `Valid formats: ${validFormats.join(', ')}. Format not applied.`
+            `Valid formats: ${validFormats.join(', ')} (with optional :subtype). Format not applied.`
           );
         } else {
           paramConstraints.format = format;
