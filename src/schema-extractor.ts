@@ -1408,7 +1408,17 @@ export class SchemaExtractor {
       if (formatMatch) {
         const format = formatMatch[1].trim();
         // Validate format is in whitelist (JSON Schema + custom formats)
-        const validFormats = ['email', 'date', 'date-time', 'time', 'duration', 'uri', 'uri-reference', 'uuid', 'ipv4', 'ipv6', 'hostname', 'json', 'table'];
+        const validFormats = [
+          // JSON Schema standard formats
+          'email', 'date', 'date-time', 'time', 'duration', 'uri', 'uri-reference', 'uuid', 'ipv4', 'ipv6', 'hostname',
+          // Photon display formats
+          'json', 'table', 'date-range', 'datetime-range',
+          // Enhanced input formats
+          'password', 'secret', 'url', 'phone', 'tel', 'search', 'color', 'textarea', 'slider',
+          'tags', 'rating', 'radio', 'segmented', 'code', 'markdown',
+          // File formats
+          'path', 'file', 'directory',
+        ];
         if (!validFormats.includes(format)) {
           console.warn(
             `Invalid @format value: "${format}". ` +
