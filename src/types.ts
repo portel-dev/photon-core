@@ -7,11 +7,12 @@
  * - Structural: primitive, table, tree, list, none, card, grid, chips, kv
  * - Content: json, markdown, yaml, xml, html, mermaid, code, code:<lang>
  * - Visualization: chart, chart:<type>, metric, gauge, timeline, dashboard, cart
+ * - Content: json, markdown, yaml, xml, html, mermaid, code, code:<lang>, slides
  * - Container: panels, tabs, accordion, stack, columns
  */
 export type OutputFormat =
   | 'primitive' | 'table' | 'tree' | 'list' | 'none'
-  | 'json' | 'markdown' | 'yaml' | 'xml' | 'html' | 'mermaid'
+  | 'json' | 'markdown' | 'yaml' | 'xml' | 'html' | 'mermaid' | 'slides'
   | 'card' | 'grid' | 'chips' | 'kv' | 'qr'
   | 'chart' | `chart:${string}` | 'metric' | 'gauge' | 'timeline' | 'dashboard' | 'cart'
   | 'panels' | 'tabs' | 'accordion' | 'stack' | 'columns'
