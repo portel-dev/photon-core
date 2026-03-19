@@ -259,6 +259,33 @@ export class Photon {
   }
 
   /**
+   * Get a URL path for an asset served by Beam
+   *
+   * Returns a relative URL like `/api/assets/my-photon/images/logo.png`
+   * that Beam serves from the photon's assets directory. Use this in
+   * HTML, markdown, or slides where browser-accessible URLs are needed.
+   *
+   * @param subpath Path within the assets folder
+   * @returns URL path (relative to Beam host)
+   *
+   * @example
+   * ```typescript
+   * const logoUrl = this.assetUrl('images/logo.png');
+   * // → '/api/assets/my-photon/images/logo.png'
+   *
+   * return `![Logo](${logoUrl})`;  // works in markdown/slides
+   * ```
+   */
+  protected assetUrl(subpath: string): string {
+    const name = this._photonName || this.constructor.name
+      .replace(/MCP$/, '')
+      .replace(/([A-Z])/g, '-$1')
+      .toLowerCase()
+      .replace(/^-/, '');
+    return `/api/assets/${encodeURIComponent(name)}/${subpath}`;
+  }
+
+  /**
    * Dynamic photon access
    *
    * Provides runtime access to other photons by name, with optional instance selection.
