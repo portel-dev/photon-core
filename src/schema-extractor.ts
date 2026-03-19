@@ -2321,7 +2321,7 @@ export class SchemaExtractor {
     }
 
     // Match visualization formats
-    if (['metric', 'gauge', 'timeline', 'dashboard', 'cart', 'qr'].includes(format)) {
+    if (['metric', 'gauge', 'progress', 'badge', 'timeline', 'dashboard', 'cart', 'qr', 'slides'].includes(format)) {
       return format as OutputFormat;
     }
 
