@@ -165,6 +165,16 @@ export default class MyPhoton extends Photon {
 - `storage(subpath)` - Get path to persistent data directory
 - `assets(subpath)` - Get path to bundled assets directory
 
+**Caller identity** (requires `@auth` tag):
+- `this.caller` - Authenticated caller info (`{ id, name, anonymous, scope, claims }`)
+
+**Identity-aware locks** (for multiplayer/turn-based):
+- `acquireLock(name, callerId, timeout?)` - Assign a lock to a specific caller
+- `transferLock(name, toCallerId, fromCallerId?)` - Move lock to another caller
+- `releaseLock(name, callerId?)` - Release a lock
+- `getLock(name)` - Query who holds a lock
+- `withLock(name, fn, timeout?)` - Execute function with a binary mutex lock
+
 **Lifecycle hooks:**
 - `onInitialize()` - Called when photon is initialized
 - `onShutdown()` - Called when photon is shut down
@@ -374,6 +384,62 @@ export default class DeployTool extends PhotonMCP {
 - `{ emit: 'status', message: string }` - Status update
 - `{ emit: 'log', level: 'info'|'warn'|'error', message: string }` - Log message
 - `{ emit: 'stream', data: string }` - Streaming output
+
+---
+
+### MCP OAuth & Caller Identity
+
+Photons can require authenticated callers using the `@auth` class-level tag. When enabled, `this.caller` provides the authenticated identity in every method.
+
+```typescript
+/**
+ * Chess game with authenticated players
+ * @stateful
+ * @auth required
+ */
+export default class Chess extends Photon {
+  players: Record<string, string> = {};
+
+  async join() {
+    const slot = !this.players.white ? 'white' : 'black';
+    this.players[slot] = this.caller.id;
+
+    if (slot === 'black') {
+      // Both joined — white goes first
+      await this.acquireLock('turn', this.players.white);
+    }
+    return { color: slot, playerId: this.caller.id, name: this.caller.name };
+  }
+
+  /** @locked turn */
+  async move(params: { from: string; to: string }) {
+    // Only reaches here if this.caller.id holds the 'turn' lock
+    const next = this.turn === 'white' ? this.players.black : this.players.white;
+    await this.transferLock('turn', next);
+    return this.board;
+  }
+}
+```
+
+**`@auth` tag values:**
+
+| Value | Behavior |
+|-------|----------|
+| `@auth required` | All methods require a valid JWT. Anonymous callers get 401. |
+| `@auth optional` | Caller populated if token present, anonymous allowed. |
+| `@auth https://accounts.google.com` | Specifies the OIDC provider URL (implies required). |
+
+**`this.caller` properties:**
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `id` | `string` | Stable user ID (JWT `sub` claim) |
+| `name` | `string?` | Display name from OIDC profile |
+| `anonymous` | `boolean` | `true` if no valid JWT was provided |
+| `scope` | `string?` | OAuth scopes |
+| `claims` | `Record<string, unknown>?` | Raw JWT claims |
+
+The MCP transport handles the OAuth 2.1 flow per the [MCP authorization spec](https://modelcontextprotocol.io/specification/latest/basic/authorization). The photon author never deals with tokens or OAuth directly.
 
 ---
 
