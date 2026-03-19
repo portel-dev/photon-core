@@ -2306,7 +2306,7 @@ export class SchemaExtractor {
     }
 
     // Match content formats
-    if (['json', 'markdown', 'yaml', 'xml', 'html', 'mermaid'].includes(format)) {
+    if (['json', 'markdown', 'yaml', 'xml', 'html', 'mermaid', 'embed'].includes(format)) {
       return format as OutputFormat;
     }
 
@@ -2321,7 +2321,14 @@ export class SchemaExtractor {
     }
 
     // Match visualization formats
-    if (['metric', 'gauge', 'progress', 'badge', 'timeline', 'dashboard', 'cart', 'qr', 'slides'].includes(format)) {
+    if (['metric', 'gauge', 'progress', 'badge', 'timeline', 'dashboard', 'cart', 'qr', 'slides',
+         'steps', 'stepper', 'log', 'image', 'hero', 'banner', 'quote', 'profile', 'heatmap',
+         'kanban', 'calendar', 'map', 'cron', 'comparison', 'invoice', 'receipt', 'network', 'graph'].includes(format)) {
+      return format as OutputFormat;
+    }
+
+    // Match layout/design formats
+    if (['stat-group', 'statgroup', 'feature-grid', 'features', 'carousel', 'gallery', 'masonry'].includes(format)) {
       return format as OutputFormat;
     }
 
