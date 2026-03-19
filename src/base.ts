@@ -637,4 +637,106 @@ export class Photon {
   ): Promise<T> {
     return withLockHelper(lockName, fn, timeout);
   }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // IDENTITY-AWARE LOCK MANAGEMENT
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Identity-aware lock handler - injected by runtime
+   * @internal
+   */
+  _lockHandler?: {
+    assign(lockName: string, holder: string, timeout?: number): Promise<boolean>;
+    transfer(lockName: string, fromHolder: string, toHolder: string, timeout?: number): Promise<boolean>;
+    release(lockName: string, holder: string): Promise<boolean>;
+    query(lockName: string): Promise<{ holder: string | null; acquiredAt?: number; expiresAt?: number }>;
+  };
+
+  /**
+   * Assign a lock to a specific caller (identity-aware)
+   *
+   * Unlike `withLock` which auto-acquires/releases around a function,
+   * this explicitly assigns a lock to a caller ID. The lock persists
+   * until transferred or released.
+   *
+   * @param lockName Name of the lock
+   * @param callerId Caller ID to assign the lock to
+   * @param timeout Lock timeout in ms (default 30000, auto-extended on transfer)
+   *
+   * @example
+   * ```typescript
+   * // Assign "turn" lock to first player
+   * await this.acquireLock('turn', this.caller.id);
+   * ```
+   */
+  protected async acquireLock(lockName: string, callerId: string, timeout?: number): Promise<boolean> {
+    if (!this._lockHandler) {
+      console.warn(`[photon] acquireLock('${lockName}'): no lock handler configured`);
+      return true;
+    }
+    return this._lockHandler.assign(lockName, callerId, timeout);
+  }
+
+  /**
+   * Transfer a lock from the current holder to another caller
+   *
+   * Only succeeds if `fromCallerId` is the current holder.
+   *
+   * @param lockName Name of the lock
+   * @param toCallerId Caller ID to transfer the lock to
+   * @param fromCallerId Current holder (defaults to this.caller.id)
+   *
+   * @example
+   * ```typescript
+   * // After a chess move, transfer turn to opponent
+   * await this.transferLock('turn', opponentId);
+   * ```
+   */
+  protected async transferLock(lockName: string, toCallerId: string, fromCallerId?: string): Promise<boolean> {
+    if (!this._lockHandler) {
+      console.warn(`[photon] transferLock('${lockName}'): no lock handler configured`);
+      return true;
+    }
+    return this._lockHandler.transfer(lockName, fromCallerId ?? this.caller.id, toCallerId);
+  }
+
+  /**
+   * Release a lock (make the method open to anyone)
+   *
+   * @param lockName Name of the lock
+   * @param callerId Holder to release from (defaults to this.caller.id)
+   *
+   * @example
+   * ```typescript
+   * // Presenter releases navigation control to audience
+   * await this.releaseLock('navigation');
+   * ```
+   */
+  protected async releaseLock(lockName: string, callerId?: string): Promise<boolean> {
+    if (!this._lockHandler) {
+      console.warn(`[photon] releaseLock('${lockName}'): no lock handler configured`);
+      return true;
+    }
+    return this._lockHandler.release(lockName, callerId ?? this.caller.id);
+  }
+
+  /**
+   * Query who holds a specific lock
+   *
+   * @param lockName Name of the lock
+   * @returns Lock holder info, or null holder if unlocked
+   *
+   * @example
+   * ```typescript
+   * const lock = await this.getLock('turn');
+   * if (lock.holder === this.caller.id) { ... }
+   * ```
+   */
+  protected async getLock(lockName: string): Promise<{ holder: string | null; acquiredAt?: number; expiresAt?: number }> {
+    if (!this._lockHandler) {
+      return { holder: null };
+    }
+    return this._lockHandler.query(lockName);
+  }
 }
