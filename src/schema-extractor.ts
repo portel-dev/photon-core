@@ -1652,7 +1652,13 @@ export class SchemaExtractor {
             `Pattern is ignored when specific values are defined via enum or @choice.`
           );
         }
-        // Skip enum types for most constraints (but still apply deprecated, examples, etc.)
+        // Skip enum types for most constraints (but still apply format, deprecated, examples, default)
+        if (constraints.format !== undefined) {
+          s.format = constraints.format;
+        }
+        if (constraints.default !== undefined) {
+          s.default = constraints.default;
+        }
         if (constraints.examples !== undefined) {
           s.examples = constraints.examples;
         }
