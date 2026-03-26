@@ -1068,12 +1068,35 @@ export class SchemaExtractor {
       return false;
     }
 
-    // Detect complex expressions
+    // Array literals — serialize elements recursively
+    if (ts.isArrayLiteralExpression(initializer)) {
+      const items: any[] = [];
+      for (const elem of initializer.elements) {
+        const val = this.extractDefaultValue(elem, sourceFile);
+        if (val === undefined) return undefined;
+        items.push(val);
+      }
+      return items;
+    }
+
+    // Object literals — serialize properties recursively
+    if (ts.isObjectLiteralExpression(initializer)) {
+      const obj: Record<string, any> = {};
+      for (const prop of initializer.properties) {
+        if (!ts.isPropertyAssignment(prop)) return undefined;
+        const key = prop.name?.getText(sourceFile);
+        if (!key) return undefined;
+        const val = this.extractDefaultValue(prop.initializer, sourceFile);
+        if (val === undefined) return undefined;
+        obj[key] = val;
+      }
+      return obj;
+    }
+
+    // Detect truly complex expressions that can't be serialized
     const expressionText = initializer.getText(sourceFile);
     const isComplexExpression =
       ts.isCallExpression(initializer) ||  // Function calls: Math.max(10, 100)
-      ts.isObjectLiteralExpression(initializer) ||  // Objects: { key: 'value' }
-      ts.isArrayLiteralExpression(initializer) ||  // Arrays: [1, 2, 3]
       ts.isBinaryExpression(initializer) ||  // Binary ops: 10 + 20
       ts.isConditionalExpression(initializer);  // Ternary: x ? a : b
 

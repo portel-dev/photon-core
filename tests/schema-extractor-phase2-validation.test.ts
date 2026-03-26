@@ -278,14 +278,30 @@ describe('SchemaExtractor - Phase 2 Validations', () => {
       expect(warnMessages.some(msg => msg.includes('default') || msg.includes('complex'))).toBe(true);
     });
 
-    it('should warn for object literal as default', () => {
+    it('should serialize object literal defaults', () => {
       const source = `
         export default class Test {
           async configure(opts: object = { key: 'value' }) {}
         }
       `;
-      extractSchemaFromSource(source);
-      expect(warnMessages.some(msg => msg.includes('complex'))).toBe(true);
+      const schema = extractSchemaFromSource(source);
+      const optsProp = schema.tools[0].inputSchema.properties.opts;
+
+      expect(optsProp.default).toEqual({ key: 'value' });
+      expect(warnMessages.some(msg => msg.includes('complex'))).toBe(false);
+    });
+
+    it('should serialize array literal defaults', () => {
+      const source = `
+        export default class Test {
+          async configure(tags: string[] = ['alpha', 'beta']) {}
+        }
+      `;
+      const schema = extractSchemaFromSource(source);
+      const tagsProp = schema.tools[0].inputSchema.properties.tags;
+
+      expect(tagsProp.default).toEqual(['alpha', 'beta']);
+      expect(warnMessages.some(msg => msg.includes('complex'))).toBe(false);
     });
 
     it('should accept simple literal defaults', () => {
