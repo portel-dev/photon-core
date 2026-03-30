@@ -166,13 +166,16 @@ export class DependencyManager {
   }
 
   /**
-   * Run npm install in a directory
+   * Run package install in a directory (bun or npm)
    */
   private async runNpmInstall(cwd: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+      // Prefer bun for speed, fall back to npm
+      const hasBun = (() => { try { require('child_process').execSync('bun --version', { stdio: 'ignore' }); return true; } catch { return false; } })();
+      const cmd = hasBun ? 'bun' : (process.platform === 'win32' ? 'npm.cmd' : 'npm');
+      const args = hasBun ? ['install', '--production'] : ['install', '--omit=dev', '--silent'];
 
-      const child = spawn(npmCmd, ['install', '--omit=dev', '--silent'], {
+      const child = spawn(cmd, args, {
         cwd,
         stdio: 'inherit',
       });
@@ -181,7 +184,7 @@ export class DependencyManager {
         if (code === 0) {
           resolve();
         } else {
-          reject(new Error(`npm install failed with code ${code}`));
+          reject(new Error(`${cmd} install failed with code ${code}`));
         }
       });
 
