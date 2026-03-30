@@ -2364,7 +2364,8 @@ export class SchemaExtractor {
     // Match visualization formats
     if (['metric', 'gauge', 'progress', 'badge', 'timeline', 'dashboard', 'cart', 'qr', 'slides',
          'steps', 'stepper', 'log', 'image', 'hero', 'banner', 'quote', 'profile', 'heatmap',
-         'kanban', 'calendar', 'map', 'cron', 'comparison', 'invoice', 'receipt', 'network', 'graph'].includes(format)) {
+         'kanban', 'calendar', 'map', 'cron', 'comparison', 'invoice', 'receipt', 'network', 'graph',
+         'checklist', 'article'].includes(format)) {
       return format as OutputFormat;
     }
 
