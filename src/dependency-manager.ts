@@ -169,27 +169,22 @@ export class DependencyManager {
    * Run package install in a directory (bun or npm)
    */
   private async runNpmInstall(cwd: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      // Prefer bun for speed, fall back to npm
-      const hasBun = (() => { try { require('child_process').execSync('bun --version', { stdio: 'ignore' }); return true; } catch { return false; } })();
-      const cmd = hasBun ? 'bun' : (process.platform === 'win32' ? 'npm.cmd' : 'npm');
-      const args = hasBun ? ['install', '--trust'] : ['install', '--omit=dev', '--silent'];
+    const { execSync } = require('child_process');
+    const hasBun = (() => { try { execSync('bun --version', { stdio: 'ignore' }); return true; } catch { return false; } })();
+    const cmd = hasBun ? 'bun' : (process.platform === 'win32' ? 'npm.cmd' : 'npm');
+    const args = hasBun ? ['install'] : ['install', '--omit=dev', '--silent'];
 
-      const child = spawn(cmd, args, {
-        cwd,
-        stdio: 'inherit',
-      });
-
-      child.on('exit', (code) => {
-        if (code === 0) {
-          resolve();
-        } else {
-          reject(new Error(`${cmd} install failed with code ${code}`));
-        }
-      });
-
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn(cmd, args, { cwd, stdio: 'inherit' });
+      child.on('exit', (code) => code === 0 ? resolve() : reject(new Error(`${cmd} install failed with code ${code}`)));
       child.on('error', reject);
     });
+
+    // Bun blocks untrusted postinstall scripts by default. Trust them so
+    // native packages (esbuild, crypto-js, etc.) can complete setup.
+    if (hasBun) {
+      try { execSync('bun pm trust --all', { cwd, stdio: 'ignore' }); } catch { /* no untrusted packages */ }
+    }
   }
 
   /**
