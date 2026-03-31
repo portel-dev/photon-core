@@ -173,7 +173,7 @@ export class DependencyManager {
       // Prefer bun for speed, fall back to npm
       const hasBun = (() => { try { require('child_process').execSync('bun --version', { stdio: 'ignore' }); return true; } catch { return false; } })();
       const cmd = hasBun ? 'bun' : (process.platform === 'win32' ? 'npm.cmd' : 'npm');
-      const args = hasBun ? ['install', '--production'] : ['install', '--omit=dev', '--silent'];
+      const args = hasBun ? ['install', '--production', '--trust'] : ['install', '--omit=dev', '--silent'];
 
       const child = spawn(cmd, args, {
         cwd,
