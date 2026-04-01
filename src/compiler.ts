@@ -174,8 +174,17 @@ export async function compilePhotonTS(
   // Ensure cache directory exists
   await fs.mkdir(options.cacheDir, { recursive: true });
 
+  // Inject createRequire shim so CJS dependencies work in ESM context.
+  // This is needed for Node.js — Bun handles CJS/ESM interop natively.
+  const requireShim = `import { createRequire as __createRequire } from 'module';
+import { fileURLToPath as __fileURLToPath } from 'url';
+const __filename = __fileURLToPath(import.meta.url);
+const require = __createRequire(import.meta.url);
+`;
+  const code = requireShim + result.code;
+
   // Write compiled JavaScript
-  await fs.writeFile(cachedJsPath, result.code, 'utf-8');
+  await fs.writeFile(cachedJsPath, code, 'utf-8');
 
   return cachedJsPath;
 }
