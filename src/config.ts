@@ -1,21 +1,17 @@
 /**
  * Photon Configuration Utilities
  *
- * Provides standard config storage for photons that implement the configure() convention.
- * Config is stored at ~/.photon/{photonName}/config.json
+ * Provides standard config storage for photons.
+ * Config is stored at .data/{namespace}/{photonName}/config.json
  *
  * Usage in a Photon:
  * ```typescript
- * import { loadPhotonConfig, savePhotonConfig, getPhotonConfigPath } from '@portel/photon-core';
+ * import { loadPhotonConfig, savePhotonConfig } from '@portel/photon-core';
  *
  * export default class MyPhoton extends Photon {
  *   async configure(params: { apiKey: string }) {
  *     savePhotonConfig('my-photon', params);
  *     return { success: true, config: params };
- *   }
- *
- *   async getConfig() {
- *     return loadPhotonConfig('my-photon');
  *   }
  * }
  * ```
@@ -23,47 +19,55 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
+
+import {
+  getPhotonConfigPath as getNewConfigPath,
+  getLegacyPhotonConfigPath,
+  getDataRoot,
+} from './data-paths.js';
 
 /**
- * Get the config directory for photons
- * Default: ~/.photon/
+ * Get the config file path for a specific photon.
+ * Uses new .data/ layout, falls back to legacy path for reads.
  */
-export function getPhotonConfigDir(): string {
-  return process.env.PHOTON_CONFIG_DIR || path.join(os.homedir(), '.photon');
+export function getPhotonConfigPath(photonName: string, namespace?: string): string {
+  const ns = namespace || 'local';
+  const newPath = getNewConfigPath(ns, photonName);
+
+  // Fallback: check legacy path for existing config
+  if (!fs.existsSync(newPath)) {
+    const legacyPath = getLegacyPhotonConfigPath(photonName);
+    if (fs.existsSync(legacyPath)) return legacyPath;
+  }
+
+  return newPath;
 }
 
 /**
- * Get the config file path for a specific photon
- * @param photonName The photon name (kebab-case)
- * @returns Path to config.json for this photon
+ * Get the config directory for photons (legacy compat)
+ * @deprecated Use getPhotonConfigPath with namespace instead
  */
-export function getPhotonConfigPath(photonName: string): string {
-  const safeName = photonName.replace(/[^a-zA-Z0-9_-]/g, '_');
-  return path.join(getPhotonConfigDir(), safeName, 'config.json');
+export function getPhotonConfigDir(): string {
+  return process.env.PHOTON_CONFIG_DIR || getDataRoot();
 }
 
 /**
  * Load configuration for a photon
- * @param photonName The photon name (kebab-case)
- * @param defaults Default values if config doesn't exist
- * @returns The config object or defaults
  */
 export function loadPhotonConfig<T extends Record<string, any>>(
   photonName: string,
-  defaults?: T
+  defaults?: T,
+  namespace?: string
 ): T {
-  const configPath = getPhotonConfigPath(photonName);
+  const configPath = getPhotonConfigPath(photonName, namespace);
 
   try {
     if (fs.existsSync(configPath)) {
       const content = fs.readFileSync(configPath, 'utf-8');
       const config = JSON.parse(content);
-      // Merge with defaults
       return defaults ? { ...defaults, ...config } : config;
     }
   } catch (error) {
-    // Log but don't throw - return defaults
     if (process.env.PHOTON_DEBUG) {
       console.error(`Failed to load config for ${photonName}:`, error);
     }
@@ -73,18 +77,17 @@ export function loadPhotonConfig<T extends Record<string, any>>(
 }
 
 /**
- * Save configuration for a photon
- * @param photonName The photon name (kebab-case)
- * @param config The configuration object to save
+ * Save configuration for a photon (always writes to new .data/ path)
  */
 export function savePhotonConfig<T extends Record<string, any>>(
   photonName: string,
-  config: T
+  config: T,
+  namespace?: string
 ): void {
-  const configPath = getPhotonConfigPath(photonName);
+  const ns = namespace || 'local';
+  const configPath = getNewConfigPath(ns, photonName);
   const configDir = path.dirname(configPath);
 
-  // Ensure directory exists
   if (!fs.existsSync(configDir)) {
     fs.mkdirSync(configDir, { recursive: true });
   }
@@ -94,19 +97,16 @@ export function savePhotonConfig<T extends Record<string, any>>(
 
 /**
  * Check if a photon has been configured
- * @param photonName The photon name (kebab-case)
- * @returns true if config file exists
  */
-export function hasPhotonConfig(photonName: string): boolean {
-  return fs.existsSync(getPhotonConfigPath(photonName));
+export function hasPhotonConfig(photonName: string, namespace?: string): boolean {
+  return fs.existsSync(getPhotonConfigPath(photonName, namespace));
 }
 
 /**
  * Delete configuration for a photon
- * @param photonName The photon name (kebab-case)
  */
-export function deletePhotonConfig(photonName: string): void {
-  const configPath = getPhotonConfigPath(photonName);
+export function deletePhotonConfig(photonName: string, namespace?: string): void {
+  const configPath = getPhotonConfigPath(photonName, namespace);
   if (fs.existsSync(configPath)) {
     fs.unlinkSync(configPath);
   }
@@ -114,21 +114,34 @@ export function deletePhotonConfig(photonName: string): void {
 
 /**
  * List all configured photons
- * @returns Array of photon names that have config
  */
 export function listConfiguredPhotons(): string[] {
-  const configDir = getPhotonConfigDir();
+  const dataRoot = getDataRoot();
 
-  if (!fs.existsSync(configDir)) {
+  if (!fs.existsSync(dataRoot)) {
     return [];
   }
 
+  const results: string[] = [];
   try {
-    return fs.readdirSync(configDir, { withFileTypes: true })
-      .filter(entry => entry.isDirectory())
-      .filter(entry => fs.existsSync(path.join(configDir, entry.name, 'config.json')))
-      .map(entry => entry.name);
+    // Scan namespace directories inside .data/
+    const nsDirs = fs.readdirSync(dataRoot, { withFileTypes: true })
+      .filter(e => e.isDirectory() && !e.name.startsWith('_') && !e.name.startsWith('.'));
+
+    for (const nsDir of nsDirs) {
+      const nsPath = path.join(dataRoot, nsDir.name);
+      const photonDirs = fs.readdirSync(nsPath, { withFileTypes: true })
+        .filter(e => e.isDirectory());
+
+      for (const pDir of photonDirs) {
+        if (fs.existsSync(path.join(nsPath, pDir.name, 'config.json'))) {
+          results.push(pDir.name);
+        }
+      }
+    }
   } catch {
-    return [];
+    // Data root doesn't exist or is unreadable
   }
+
+  return results;
 }

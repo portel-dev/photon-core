@@ -31,6 +31,9 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
+import * as fsSync from 'fs';
+
+import { getPhotonSchedulesDir, getLegacySchedulesDir } from './data-paths.js';
 import { randomUUID } from 'crypto';
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -136,13 +139,14 @@ function resolveCron(schedule: string): string {
 
 // ── Storage Helpers ────────────────────────────────────────────────────
 
-function getSchedulesDir(): string {
-  return process.env.PHOTON_SCHEDULES_DIR || path.join(os.homedir(), '.photon', 'schedules');
-}
-
-function photonScheduleDir(photonId: string): string {
-  const safeName = photonId.replace(/[^a-zA-Z0-9_-]/g, '_');
-  return path.join(getSchedulesDir(), safeName);
+function photonScheduleDir(photonId: string, namespace?: string): string {
+  const ns = namespace || 'local';
+  const newDir = getPhotonSchedulesDir(ns, photonId);
+  if (!fsSync.existsSync(newDir)) {
+    const legacyDir = getLegacySchedulesDir(photonId);
+    if (fsSync.existsSync(legacyDir)) return legacyDir;
+  }
+  return newDir;
 }
 
 function taskPath(photonId: string, taskId: string): string {

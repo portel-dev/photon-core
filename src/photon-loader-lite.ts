@@ -38,6 +38,7 @@ import { ScheduleProvider } from './schedule.js';
 import { toEnvVarName, parseEnvValue, type MissingParamInfo } from './env-utils.js';
 import type { ExtractedSchema } from './types.js';
 import type { MCPClientFactory } from '@portel/mcp';
+import { getCacheDir } from './data-paths.js';
 
 // ═══════════════════════════════════════════════════════════════════
 // Types
@@ -154,9 +155,7 @@ async function loadPhotonInternal(
     const source = await fs.readFile(absolutePath, 'utf-8');
 
     // 2. Compile TypeScript → JavaScript
-    const homeDir = process.env.HOME || process.env.USERPROFILE || '';
-    const cacheDir = path.join(homeDir, '.photon', 'cache');
-    const compiledPath = await compilePhotonTS(absolutePath, { cacheDir });
+    const compiledPath = await compilePhotonTS(absolutePath, { cacheDir: getCacheDir() });
 
     // 3. Import compiled module
     const moduleUrl = pathToFileURL(compiledPath).href;

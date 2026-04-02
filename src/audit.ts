@@ -19,8 +19,13 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 import * as crypto from 'crypto';
+
+import {
+  getPhotonLogsDir,
+  getLegacyLogsDir,
+  getDataRoot,
+} from './data-paths.js';
 
 /**
  * A single execution record
@@ -73,19 +78,25 @@ export function generateExecutionId(): string {
 }
 
 /**
- * Get the logs directory for a photon
+ * Get the logs directory for a photon.
+ * New path: .data/{namespace}/{photonName}/logs/
+ * Falls back to legacy ~/.photon/logs/{photonId}/ for reads.
  */
-function getLogDir(photonId: string): string {
-  const safeName = photonId.replace(/[^a-zA-Z0-9_-]/g, '_');
-  const baseDir = process.env.PHOTON_LOG_DIR || path.join(os.homedir(), '.photon', 'logs');
-  return path.join(baseDir, safeName);
+function getLogDir(photonId: string, namespace?: string): string {
+  const ns = namespace || 'local';
+  const newDir = getPhotonLogsDir(ns, photonId);
+  if (!fs.existsSync(newDir)) {
+    const legacyDir = getLegacyLogsDir(photonId);
+    if (fs.existsSync(legacyDir)) return legacyDir;
+  }
+  return newDir;
 }
 
 /**
  * Get the executions log file path
  */
-function getLogPath(photonId: string): string {
-  return path.join(getLogDir(photonId), 'executions.jsonl');
+function getLogPath(photonId: string, namespace?: string): string {
+  return path.join(getLogDir(photonId, namespace), 'executions.jsonl');
 }
 
 /**
@@ -234,16 +245,9 @@ export class AuditTrail {
       return this.findInLog(getLogPath(photonId), executionId);
     }
 
-    // Otherwise, search all photon logs
-    const baseDir = process.env.PHOTON_LOG_DIR || path.join(os.homedir(), '.photon', 'logs');
-    if (!fs.existsSync(baseDir)) return null;
-
-    const dirs = fs.readdirSync(baseDir, { withFileTypes: true })
-      .filter(d => d.isDirectory())
-      .map(d => d.name);
-
-    for (const dir of dirs) {
-      const found = this.findInLog(path.join(baseDir, dir, 'executions.jsonl'), executionId);
+    // Search all photon logs across namespaces in .data/
+    for (const logPath of this.allLogPaths()) {
+      const found = this.findInLog(logPath, executionId);
       if (found) return found;
     }
 
@@ -260,17 +264,8 @@ export class AuditTrail {
     const result = [root];
 
     // Find all children across all photon logs
-    const baseDir = process.env.PHOTON_LOG_DIR || path.join(os.homedir(), '.photon', 'logs');
-    if (!fs.existsSync(baseDir)) return result;
-
-    const dirs = fs.readdirSync(baseDir, { withFileTypes: true })
-      .filter(d => d.isDirectory())
-      .map(d => d.name);
-
-    for (const dir of dirs) {
-      const logPath = path.join(baseDir, dir, 'executions.jsonl');
+    for (const logPath of this.allLogPaths()) {
       if (!fs.existsSync(logPath)) continue;
-
       const content = fs.readFileSync(logPath, 'utf-8');
       const lines = content.trim().split('\n').filter(Boolean);
 
@@ -294,13 +289,47 @@ export class AuditTrail {
    * List all photons that have execution logs
    */
   listPhotons(): string[] {
-    const baseDir = process.env.PHOTON_LOG_DIR || path.join(os.homedir(), '.photon', 'logs');
-    if (!fs.existsSync(baseDir)) return [];
+    const results: string[] = [];
+    const dataRoot = getDataRoot();
+    if (!fs.existsSync(dataRoot)) return results;
 
-    return fs.readdirSync(baseDir, { withFileTypes: true })
-      .filter(d => d.isDirectory())
-      .filter(d => fs.existsSync(path.join(baseDir, d.name, 'executions.jsonl')))
-      .map(d => d.name);
+    try {
+      // Scan .data/{ns}/{photon}/logs/executions.jsonl
+      const nsDirs = fs.readdirSync(dataRoot, { withFileTypes: true })
+        .filter(e => e.isDirectory() && !e.name.startsWith('_') && !e.name.startsWith('.'));
+
+      for (const nsDir of nsDirs) {
+        const nsPath = path.join(dataRoot, nsDir.name);
+        const photonDirs = fs.readdirSync(nsPath, { withFileTypes: true })
+          .filter(e => e.isDirectory());
+
+        for (const pDir of photonDirs) {
+          if (fs.existsSync(path.join(nsPath, pDir.name, 'logs', 'executions.jsonl'))) {
+            results.push(pDir.name);
+          }
+        }
+      }
+    } catch {
+      // Unreadable
+    }
+
+    // Also check legacy path
+    try {
+      const legacyDir = path.join(path.dirname(dataRoot), 'logs');
+      if (fs.existsSync(legacyDir)) {
+        const dirs = fs.readdirSync(legacyDir, { withFileTypes: true })
+          .filter(d => d.isDirectory())
+          .filter(d => fs.existsSync(path.join(legacyDir, d.name, 'executions.jsonl')))
+          .map(d => d.name);
+        for (const d of dirs) {
+          if (!results.includes(d)) results.push(d);
+        }
+      }
+    } catch {
+      // Legacy dir doesn't exist
+    }
+
+    return results;
   }
 
   /**
@@ -366,10 +395,12 @@ export class AuditTrail {
       return;
     }
 
-    // Clear all
-    const baseDir = process.env.PHOTON_LOG_DIR || path.join(os.homedir(), '.photon', 'logs');
-    if (fs.existsSync(baseDir)) {
-      fs.rmSync(baseDir, { recursive: true, force: true });
+    // Clear all — remove log dirs inside .data/{ns}/{photon}/logs/
+    for (const logPath of this.allLogPaths()) {
+      const logDir = path.dirname(logPath);
+      if (fs.existsSync(logDir)) {
+        fs.rmSync(logDir, { recursive: true, force: true });
+      }
     }
   }
 
@@ -400,6 +431,48 @@ export class AuditTrail {
       return { _truncated: true, preview: str.slice(0, 1000), length: str.length };
     }
     return output;
+  }
+
+  /**
+   * Collect all executions.jsonl paths across namespaces
+   */
+  private allLogPaths(): string[] {
+    const paths: string[] = [];
+    const dataRoot = getDataRoot();
+
+    try {
+      if (fs.existsSync(dataRoot)) {
+        const nsDirs = fs.readdirSync(dataRoot, { withFileTypes: true })
+          .filter(e => e.isDirectory() && !e.name.startsWith('_') && !e.name.startsWith('.'));
+
+        for (const nsDir of nsDirs) {
+          const nsPath = path.join(dataRoot, nsDir.name);
+          try {
+            const photonDirs = fs.readdirSync(nsPath, { withFileTypes: true })
+              .filter(e => e.isDirectory());
+            for (const pDir of photonDirs) {
+              const logPath = path.join(nsPath, pDir.name, 'logs', 'executions.jsonl');
+              if (fs.existsSync(logPath)) paths.push(logPath);
+            }
+          } catch { /* skip unreadable ns dir */ }
+        }
+      }
+    } catch { /* data root doesn't exist */ }
+
+    // Also check legacy
+    try {
+      const legacyDir = path.join(path.dirname(dataRoot), 'logs');
+      if (fs.existsSync(legacyDir)) {
+        const dirs = fs.readdirSync(legacyDir, { withFileTypes: true })
+          .filter(d => d.isDirectory());
+        for (const d of dirs) {
+          const logPath = path.join(legacyDir, d.name, 'executions.jsonl');
+          if (fs.existsSync(logPath)) paths.push(logPath);
+        }
+      }
+    } catch { /* legacy doesn't exist */ }
+
+    return paths;
   }
 
   /**

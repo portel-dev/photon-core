@@ -25,9 +25,10 @@ function test(name: string, fn: () => void | Promise<void>): Promise<void> {
     });
 }
 
-// Use temp directory for tests
-const testDir = path.join(os.tmpdir(), `photon-audit-test-${Date.now()}`);
-process.env.PHOTON_LOG_DIR = testDir;
+// Use temp directory for tests — set PHOTON_DIR so data-paths resolves here
+const testBaseDir = path.join(os.tmpdir(), `photon-audit-test-${Date.now()}`);
+process.env.PHOTON_DIR = testBaseDir;
+// Logs now go to: {testBaseDir}/.data/local/{photonName}/logs/
 
 async function testGenerateId() {
   console.log('\nGenerateId:');
@@ -58,7 +59,7 @@ async function testRecord() {
       error: null,
     });
 
-    const logPath = path.join(testDir, 'test-photon', 'executions.jsonl');
+    const logPath = path.join(testBaseDir, '.data', 'local', 'test-photon', 'logs', 'executions.jsonl');
     assert.ok(fs.existsSync(logPath));
 
     const content = fs.readFileSync(logPath, 'utf-8');
@@ -338,8 +339,8 @@ async function testPrune() {
   await testClear();
 
   // Cleanup
-  fs.rmSync(testDir, { recursive: true, force: true });
-  delete process.env.PHOTON_LOG_DIR;
+  fs.rmSync(testBaseDir, { recursive: true, force: true });
+  delete process.env.PHOTON_DIR;
 
   console.log('\n' + '='.repeat(50));
   console.log(`Results: ${passed} passed, ${failed} failed`);

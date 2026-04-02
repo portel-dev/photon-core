@@ -54,6 +54,8 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
+
+import { getPhotonRunsDir, getLegacyRunsDir } from './data-paths.js';
 import { createReadStream } from 'fs';
 import { createInterface } from 'readline';
 import { executionContext } from '@portel/cli';
@@ -85,9 +87,10 @@ import {
 // ══════════════════════════════════════════════════════════════════════════════
 
 /**
- * Default runs directory (~/.photon/runs)
+ * Default runs directory (legacy: ~/.photon/runs)
+ * @deprecated Use getPhotonRunsDir(namespace, photonName) from data-paths.ts
  */
-export const RUNS_DIR = path.join(os.homedir(), '.photon', 'runs');
+export const RUNS_DIR = getLegacyRunsDir();
 
 // ══════════════════════════════════════════════════════════════════════════════
 // CHECKPOINT YIELD TYPE
