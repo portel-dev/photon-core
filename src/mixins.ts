@@ -57,6 +57,7 @@ export function withPhotonCapabilities<T extends Constructor>(Base: T): T {
      * @internal
      */
     _photonName?: string;
+    _photonNamespace?: string;
 
     /**
      * Session ID for session-scoped memory - set by runtime
@@ -112,7 +113,7 @@ export function withPhotonCapabilities<T extends Constructor>(Base: T): T {
           .replace(/([A-Z])/g, '-$1')
           .toLowerCase()
           .replace(/^-/, '');
-        this._memory = new MemoryProvider(name, this._sessionId);
+        this._memory = new MemoryProvider(name, this._sessionId, this._photonNamespace);
       }
       return this._memory;
     }

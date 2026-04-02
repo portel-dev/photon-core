@@ -64,6 +64,13 @@ export class Photon {
   _photonName?: string;
 
   /**
+   * Photon namespace (marketplace owner) - set by runtime loader
+   * Used for data path resolution: .data/{namespace}/{name}/
+   * @internal
+   */
+  _photonNamespace?: string;
+
+  /**
    * Absolute path to the .photon.ts/.photon.js source file - set by runtime loader
    * Used for storage() and assets() path resolution
    * @internal
@@ -145,7 +152,7 @@ export class Photon {
         .replace(/([A-Z])/g, '-$1')
         .toLowerCase()
         .replace(/^-/, '');
-      this._memory = new MemoryProvider(name, this._sessionId);
+      this._memory = new MemoryProvider(name, this._sessionId, this._photonNamespace);
     }
     return this._memory;
   }

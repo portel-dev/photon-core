@@ -55,6 +55,8 @@ export interface PhotonOptions {
   onEvent?: (event: PhotonEvent) => void;
   /** Session ID for session-scoped memory */
   sessionId?: string;
+  /** Namespace for data path resolution (marketplace owner). Defaults to 'local'. */
+  namespace?: string;
 }
 
 export interface PhotonEvent {
@@ -192,6 +194,7 @@ async function loadPhotonInternal(
 
     // 10. Set photon identity
     instance._photonName = photonName;
+    instance._photonNamespace = options.namespace || 'local';
     if (options.instanceName) {
       instance.instanceName = options.instanceName;
     }
