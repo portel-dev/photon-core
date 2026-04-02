@@ -583,3 +583,7 @@ export {
   type FieldType as FormFieldType,
   type FormOptions,
 } from './ui-types/index.js';
+
+// ===== DATA PATHS =====
+// Central data path resolver — single source of truth for all runtime data locations
+export * from './data-paths.js';
