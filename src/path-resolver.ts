@@ -14,6 +14,7 @@
  */
 
 import * as fs from 'fs/promises';
+import * as fsSync from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
@@ -243,12 +244,73 @@ export async function listFilesWithNamespace(
   return results;
 }
 
+/** Runtime data patterns that should never be committed to a marketplace repo */
+const GITIGNORE_DATA_PATTERNS = [
+  '# Photon runtime data (auto-generated)',
+  'state/',
+  'context/',
+  'env/',
+  'data/',
+  'runs/',
+  'logs/',
+  'tasks/',
+  'cache/',
+  '.cache/',
+  'lookout/',
+  'config.json',
+  '*.log',
+  '**/.state/',
+  'daemon.*',
+];
+
 /**
- * Ensure directory exists
+ * Check if a directory is inside a git repository
+ */
+function isGitRepo(dir: string): boolean {
+  let current = dir;
+  while (true) {
+    if (fsSync.existsSync(path.join(current, '.git'))) return true;
+    const parent = path.dirname(current);
+    if (parent === current) return false;
+    current = parent;
+  }
+}
+
+/**
+ * Ensure .gitignore in a git-tracked photon dir excludes runtime data.
+ * Only adds missing patterns — never removes or overwrites existing entries.
+ */
+async function ensureGitignore(dir: string): Promise<void> {
+  const gitignorePath = path.join(dir, '.gitignore');
+  let existing = '';
+  try {
+    existing = await fs.readFile(gitignorePath, 'utf-8');
+  } catch {
+    // No .gitignore yet
+  }
+
+  const existingLines = new Set(existing.split('\n').map((l) => l.trim()));
+  const missing = GITIGNORE_DATA_PATTERNS.filter((p) => !existingLines.has(p));
+
+  if (missing.length === 0) return;
+
+  const append = (existing && !existing.endsWith('\n') ? '\n' : '') + missing.join('\n') + '\n';
+  await fs.appendFile(gitignorePath, append);
+}
+
+/**
+ * Ensure directory exists.
+ * If the directory is inside a git repo (e.g., a marketplace repo),
+ * auto-generates .gitignore entries for runtime data directories.
  */
 export async function ensureDir(dir?: string): Promise<void> {
   const targetDir = expandTilde(dir || DEFAULT_PHOTON_DIR);
   await fs.mkdir(targetDir, { recursive: true });
+
+  // Auto-exclude runtime data when developing in a git-tracked marketplace repo
+  if (targetDir !== DEFAULT_PHOTON_DIR && isGitRepo(targetDir)) {
+    await ensureGitignore(targetDir);
+  }
 }
 
 // Convenience aliases for photon-specific usage
