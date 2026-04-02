@@ -2365,7 +2365,7 @@ export class SchemaExtractor {
     if (['metric', 'gauge', 'progress', 'badge', 'timeline', 'dashboard', 'cart', 'qr', 'slides',
          'steps', 'stepper', 'log', 'image', 'hero', 'banner', 'quote', 'profile', 'heatmap',
          'kanban', 'calendar', 'map', 'cron', 'comparison', 'invoice', 'receipt', 'network', 'graph',
-         'checklist', 'article', 'magazine'].includes(format)) {
+         'checklist', 'article', 'magazine', 'guide'].includes(format)) {
       return format as OutputFormat;
     }
 

@@ -397,7 +397,7 @@ export class Photon {
    * Also supports UI feedback formats: status, progress, toast.
    * For custom formats, place an HTML renderer at `assets/formats/<name>.html`.
    *
-   * @param format The format type (table, qr, status, progress, toast, or custom)
+   * @param format The format type (table, qr, status, progress, toast, guide, or custom)
    * @param value The data to render — shape depends on format
    *
    * @example
@@ -413,6 +413,13 @@ export class Photon {
    * // Toast notification
    * this.render('toast', 'Saved!');
    * this.render('toast', { message: 'Done!', type: 'success' });
+   *
+   * // Multi-step guide
+   * this.render('guide', [
+   *   { label: 'Create bot', status: 'done' },
+   *   { label: 'Enter token', status: 'active' },
+   *   { label: 'Connect', status: 'pending' },
+   * ]);
    *
    * // Formatted data
    * this.render('table', [['Step', 'Status'], ['Auth', 'Done']]);
