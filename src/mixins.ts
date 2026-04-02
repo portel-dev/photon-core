@@ -135,14 +135,34 @@ export function withPhotonCapabilities<T extends Constructor>(Base: T): T {
 
     /**
      * Render a formatted value as an intermediate result.
+     * Supports UI feedback formats (status, progress, toast) and data formats (table, qr, etc.).
      * Each call replaces the previous render. Call with no args to clear.
      */
     protected render(format?: string, value?: any): void {
       if (format === undefined) {
         this.emit({ emit: 'render:clear' });
-      } else {
-        this.emit({ emit: 'render', format, value });
+        return;
       }
+      switch (format) {
+        case 'status':
+          this.emit(typeof value === 'string' ? { emit: 'status', message: value } : { emit: 'status', ...value });
+          return;
+        case 'progress':
+          this.emit(typeof value === 'number' ? { emit: 'progress', value } : { emit: 'progress', ...value });
+          return;
+        case 'toast':
+          this.emit(typeof value === 'string' ? { emit: 'toast', message: value } : { emit: 'toast', ...value });
+          return;
+      }
+      this.emit({ emit: 'render', format, value });
+    }
+
+    /**
+     * Create a blocking input request for use in generator methods.
+     * Returns a yield object: `const name = yield this.ask('text', 'Name?');`
+     */
+    protected ask(type: string, message: string, options?: Record<string, any>): { ask: string; message: string; [key: string]: any } {
+      return { ask: type, message, ...options };
     }
 
     /**

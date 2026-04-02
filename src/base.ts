@@ -394,35 +394,87 @@ export class Photon {
    * format — the same formats available via `@format` docblock tags. Each call
    * replaces the previous render in the result panel.
    *
+   * Also supports UI feedback formats: status, progress, toast.
    * For custom formats, place an HTML renderer at `assets/formats/<name>.html`.
    *
-   * @param format The format type (table, qr, chart:bar, dashboard, or custom)
-   * @param value The data to render — same shape as a return value with that @format
+   * @param format The format type (table, qr, status, progress, toast, or custom)
+   * @param value The data to render — shape depends on format
    *
    * @example
    * ```typescript
-   * // Show a QR code mid-execution
-   * this.render('qr', { value: 'https://wa.link/...' });
+   * // Status message
+   * this.render('status', 'Connecting...');
+   * this.render('status', { message: 'Error!', type: 'error' });
    *
-   * // Show a status table
+   * // Progress bar (0–1)
+   * this.render('progress', 0.5);
+   * this.render('progress', { value: 0.75, message: 'Almost done' });
+   *
+   * // Toast notification
+   * this.render('toast', 'Saved!');
+   * this.render('toast', { message: 'Done!', type: 'success' });
+   *
+   * // Formatted data
    * this.render('table', [['Step', 'Status'], ['Auth', 'Done']]);
-   *
-   * // Composite dashboard
-   * this.render('dashboard', {
-   *   qr: { format: 'qr', data: 'https://wa.link/...' },
-   *   status: { format: 'text', data: 'Scan the QR code above' }
-   * });
+   * this.render('qr', { value: 'https://wa.link/...' });
    * ```
    */
   protected render(format: string, value: any): void;
   protected render(): void;
   protected render(format?: string, value?: any): void {
     if (format === undefined) {
-      // Clear the render zone without rendering new content
       this.emit({ emit: 'render:clear' });
-    } else {
-      this.emit({ emit: 'render', format, value });
+      return;
     }
+
+    // UI feedback formats — emit native shapes the frontend already handles
+    switch (format) {
+      case 'status':
+        this.emit(typeof value === 'string'
+          ? { emit: 'status', message: value }
+          : { emit: 'status', ...value });
+        return;
+      case 'progress':
+        this.emit(typeof value === 'number'
+          ? { emit: 'progress', value }
+          : { emit: 'progress', ...value });
+        return;
+      case 'toast':
+        this.emit(typeof value === 'string'
+          ? { emit: 'toast', message: value }
+          : { emit: 'toast', ...value });
+        return;
+    }
+
+    // All other formats — generic render
+    this.emit({ emit: 'render', format, value });
+  }
+
+  /**
+   * Create a blocking input request for use in generator methods.
+   *
+   * Returns a yield object — use with `yield` in async generators:
+   * ```typescript
+   * const name = yield this.ask('text', 'What is your name?');
+   * ```
+   *
+   * @param type Input type: text, password, confirm, select, number, file, date, form, url
+   * @param message The prompt message shown to the user
+   * @param options Type-specific options (placeholder, pattern, min/max, etc.)
+   *
+   * @example
+   * ```typescript
+   * async *setup() {
+   *   const token = yield this.ask('password', 'Enter API key:');
+   *   const env = yield this.ask('select', 'Environment:', {
+   *     options: ['dev', 'staging', 'prod']
+   *   });
+   *   const confirmed = yield this.ask('confirm', `Deploy to ${env}?`);
+   * }
+   * ```
+   */
+  protected ask(type: string, message: string, options?: Record<string, any>): { ask: string; message: string; [key: string]: any } {
+    return { ask: type, message, ...options };
   }
 
   /**
