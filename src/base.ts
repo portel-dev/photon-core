@@ -47,6 +47,7 @@ import { MemoryProvider } from './memory.js';
 import { ScheduleProvider } from './schedule.js';
 import * as path from 'path';
 import * as fs from 'fs';
+import { getPhotonDataDir } from './data-paths.js';
 
 /**
  * Simple base class for creating Photons
@@ -226,9 +227,9 @@ export class Photon {
         'Ensure this photon is loaded through the standard runtime.'
       );
     }
-    const dir = path.dirname(this._photonFilePath);
-    const name = path.basename(this._photonFilePath).replace(/\.photon\.(ts|js)$/, '');
-    const target = path.join(dir, name, subpath);
+    const name = this._photonName || path.basename(this._photonFilePath).replace(/\.photon\.(ts|js)$/, '');
+    const ns = this._photonNamespace || 'local';
+    const target = path.join(getPhotonDataDir(ns, name), subpath);
     fs.mkdirSync(target, { recursive: true });
     return target;
   }
