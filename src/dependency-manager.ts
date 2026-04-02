@@ -155,9 +155,18 @@ export class DependencyManager {
         }
       }
 
-      // Check if node_modules exists
+      // Check if node_modules exists and has actual packages
       const nodeModules = path.join(mcpDir, 'node_modules');
       await fs.access(nodeModules);
+
+      // Verify at least one expected dependency is present (catches empty dirs from failed installs)
+      for (const dep of dependencies) {
+        try {
+          await fs.access(path.join(nodeModules, dep.name));
+        } catch {
+          return false; // Expected package missing — reinstall
+        }
+      }
 
       return true;
     } catch {
