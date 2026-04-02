@@ -87,10 +87,10 @@ test('getPhotonDataDir with namespace', () => {
   );
 });
 
-test('getPhotonDataDir defaults empty namespace to local', () => {
+test('getPhotonDataDir defaults empty namespace to root', () => {
   assert.equal(
     getPhotonDataDir('', 'todo'),
-    path.join(defaultBase, '.data', 'local', 'todo')
+    path.join(defaultBase, '.data', 'todo')
   );
 });
 
@@ -103,15 +103,15 @@ test('getPhotonStatePath', () => {
 
 test('getPhotonStatePath defaults instance to default', () => {
   assert.equal(
-    getPhotonStatePath('local', 'todo', ''),
-    path.join(defaultBase, '.data', 'local', 'todo', 'state', 'default', 'state.json')
+    getPhotonStatePath('', 'todo', ''),
+    path.join(defaultBase, '.data', '', 'todo', 'state', 'default', 'state.json')
   );
 });
 
 test('getPhotonStateLogPath', () => {
   assert.equal(
-    getPhotonStateLogPath('local', 'todo', 'work'),
-    path.join(defaultBase, '.data', 'local', 'todo', 'state', 'work', 'state.log')
+    getPhotonStateLogPath('', 'todo', 'work'),
+    path.join(defaultBase, '.data', '', 'todo', 'state', 'work', 'state.log')
   );
 });
 
@@ -124,15 +124,15 @@ test('getPhotonMemoryDir', () => {
 
 test('getPhotonEnvPath', () => {
   assert.equal(
-    getPhotonEnvPath('local', 'todo'),
-    path.join(defaultBase, '.data', 'local', 'todo', 'env.json')
+    getPhotonEnvPath('', 'todo'),
+    path.join(defaultBase, '.data', '', 'todo', 'env.json')
   );
 });
 
 test('getPhotonContextPath', () => {
   assert.equal(
-    getPhotonContextPath('local', 'todo'),
-    path.join(defaultBase, '.data', 'local', 'todo', 'context.json')
+    getPhotonContextPath('', 'todo'),
+    path.join(defaultBase, '.data', '', 'todo', 'context.json')
   );
 });
 
@@ -145,22 +145,22 @@ test('getPhotonRunsDir', () => {
 
 test('getPhotonLogsDir', () => {
   assert.equal(
-    getPhotonLogsDir('local', 'todo'),
-    path.join(defaultBase, '.data', 'local', 'todo', 'logs')
+    getPhotonLogsDir('', 'todo'),
+    path.join(defaultBase, '.data', '', 'todo', 'logs')
   );
 });
 
 test('getPhotonSchedulesDir', () => {
   assert.equal(
-    getPhotonSchedulesDir('local', 'rss-feed'),
-    path.join(defaultBase, '.data', 'local', 'rss-feed', 'schedules')
+    getPhotonSchedulesDir('', 'rss-feed'),
+    path.join(defaultBase, '.data', 'rss-feed', 'schedules')
   );
 });
 
 test('getPhotonConfigPath', () => {
   assert.equal(
-    getPhotonConfigPath('local', 'todo'),
-    path.join(defaultBase, '.data', 'local', 'todo', 'config.json')
+    getPhotonConfigPath('', 'todo'),
+    path.join(defaultBase, '.data', '', 'todo', 'config.json')
   );
 });
 
@@ -178,7 +178,7 @@ test('getSessionMemoryDir', () => {
 });
 
 test('getSessionMemoryDir sanitizes session ID', () => {
-  const result = getSessionMemoryDir('ses/../../bad', 'local', 'x');
+  const result = getSessionMemoryDir('ses/../../bad', '', 'x');
   assert.ok(!result.includes('..'), 'should not contain path traversal');
   assert.ok(result.includes('_sessions'), 'should be under _sessions');
 });

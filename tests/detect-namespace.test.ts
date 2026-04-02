@@ -34,20 +34,20 @@ function cleanup(dir: string): void {
 
 console.log('detectNamespace:');
 
-test('returns "local" for non-git directory', () => {
+test('returns empty string for non-git directory', () => {
   const dir = makeTempDir();
   try {
-    assert.equal(detectNamespace(dir), 'local');
+    assert.equal(detectNamespace(dir), '');
   } finally {
     cleanup(dir);
   }
 });
 
-test('returns "local" for git repo without remote', () => {
+test('returns empty string for git repo without remote', () => {
   const dir = makeTempDir();
   try {
     execSync('git init', { cwd: dir, stdio: 'ignore' });
-    assert.equal(detectNamespace(dir), 'local');
+    assert.equal(detectNamespace(dir), '');
   } finally {
     cleanup(dir);
   }

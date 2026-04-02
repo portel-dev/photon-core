@@ -46,10 +46,12 @@ export function getDataRoot(baseDir?: string): string {
 
 // ── Per-Photon ───────────────────────────────────────────────────────────────
 
-/** Per-photon data root: .data/{namespace}/{photonName}/ */
+/** Per-photon data root: .data/{photonName}/ for local, .data/{namespace}/{photonName}/ for marketplace */
 export function getPhotonDataDir(namespace: string, photonName: string, baseDir?: string): string {
-  const ns = namespace || 'local';
-  return path.join(getDataRoot(baseDir), ns, photonName);
+  if (!namespace || namespace === 'local') {
+    return path.join(getDataRoot(baseDir), photonName);
+  }
+  return path.join(getDataRoot(baseDir), namespace, photonName);
 }
 
 /** Instance state file: .data/{ns}/{name}/state/{instance}/state.json */
@@ -104,11 +106,13 @@ export function getGlobalMemoryDir(baseDir?: string): string {
   return path.join(getDataRoot(baseDir), '_global');
 }
 
-/** Session-scoped memory: .data/_sessions/{sessionId}/{ns}/{photon}/ */
+/** Session-scoped memory: .data/_sessions/{sessionId}/{photon}/ or .data/_sessions/{sessionId}/{ns}/{photon}/ */
 export function getSessionMemoryDir(sessionId: string, namespace: string, photonName: string, baseDir?: string): string {
-  const ns = namespace || 'local';
   const safeSession = sessionId.replace(/[^a-zA-Z0-9_-]/g, '_');
-  return path.join(getDataRoot(baseDir), '_sessions', safeSession, ns, photonName);
+  if (!namespace || namespace === 'local') {
+    return path.join(getDataRoot(baseDir), '_sessions', safeSession, photonName);
+  }
+  return path.join(getDataRoot(baseDir), '_sessions', safeSession, namespace, photonName);
 }
 
 /** Compilation & marketplace cache: .data/.cache/ */
@@ -155,12 +159,12 @@ export function getDaemonLogPath(): string {
 
 /**
  * Detect the namespace for a photon directory by reading git remote origin.
- * Returns the owner/org from the remote URL, or 'local' if not a git repo.
+ * Returns the owner/org from the remote URL, or '' if not a git repo.
  *
  * Examples:
  *   git@github.com:portel-dev/photons.git     → 'portel-dev'
  *   https://github.com/arul-kumar/my-photons  → 'arul-kumar'
- *   (no git remote)                           → 'local'
+ *   (no git remote)                           → ''
  */
 export function detectNamespace(dir: string): string {
   try {
@@ -181,7 +185,7 @@ export function detectNamespace(dir: string): string {
   } catch {
     // Not a git repo or no remote — expected
   }
-  return 'local';
+  return '';
 }
 
 // ── Legacy Path Helpers (for migration fallback) ─────────────────────────────

@@ -133,17 +133,17 @@ async function testStaticPaths() {
 
   await test('statePath follows .data/ convention', () => {
     const p = InstanceStore.statePath('kanban', 'work', '/base');
-    assert.equal(p, path.join('/base', '.data', 'local', 'kanban', 'state', 'work', 'state.json'));
+    assert.equal(p, path.join('/base', '.data', 'kanban', 'state', 'work', 'state.json'));
   });
 
   await test('statePath defaults to "default" for empty name', () => {
     const p = InstanceStore.statePath('kanban', '', '/base');
-    assert.equal(p, path.join('/base', '.data', 'local', 'kanban', 'state', 'default', 'state.json'));
+    assert.equal(p, path.join('/base', '.data', 'kanban', 'state', 'default', 'state.json'));
   });
 
   await test('contextPath follows .data/ convention', () => {
     const p = InstanceStore.contextPath('kanban', '/base');
-    assert.equal(p, path.join('/base', '.data', 'local', 'kanban', 'context.json'));
+    assert.equal(p, path.join('/base', '.data', 'kanban', 'context.json'));
   });
 
   await test('statePath with namespace', () => {
