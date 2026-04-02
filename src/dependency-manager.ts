@@ -7,9 +7,9 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import * as os from 'os';
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
+import { getCacheDir } from './data-paths.js';
 
 interface DependencySpec {
   name: string;
@@ -22,9 +22,8 @@ interface DependencySpec {
 export class DependencyManager {
   private cacheDir: string;
 
-  constructor() {
-    // Store dependencies in ~/.cache/photon-mcp/dependencies/
-    this.cacheDir = path.join(os.homedir(), '.cache', 'photon-mcp', 'dependencies');
+  constructor(cacheDir?: string) {
+    this.cacheDir = cacheDir || path.join(getCacheDir(), 'dependencies');
   }
 
   /**
