@@ -38,17 +38,14 @@ function cleanup(dir: string): void {
 
 console.log('gitignore auto-generation:');
 
-await test('creates .gitignore in git-tracked PHOTON_DIR', async () => {
+await test('creates .gitignore with .data/ in git-tracked PHOTON_DIR', async () => {
   const dir = makeTempGitDir();
   const photonDir = path.join(dir, 'my-photons');
   try {
     process.env.PHOTON_DIR = photonDir;
     await ensureDir(photonDir);
     const gitignore = fs.readFileSync(path.join(photonDir, '.gitignore'), 'utf-8');
-    assert.ok(gitignore.includes('state/'), 'should include state/');
-    assert.ok(gitignore.includes('data/'), 'should include data/');
-    assert.ok(gitignore.includes('**/.state/'), 'should include **/.state/');
-    assert.ok(gitignore.includes('config.json'), 'should include config.json');
+    assert.ok(gitignore.includes('.data/'), 'should include .data/');
   } finally {
     delete process.env.PHOTON_DIR;
     cleanup(dir);
@@ -56,10 +53,6 @@ await test('creates .gitignore in git-tracked PHOTON_DIR', async () => {
 });
 
 await test('does not create .gitignore for ~/.photon (default dir)', async () => {
-  // ensureDir with no args uses DEFAULT_PHOTON_DIR — should NOT add .gitignore
-  // We can't test this destructively, so just verify the logic:
-  // The condition is: targetDir !== DEFAULT_PHOTON_DIR && isGitRepo(targetDir)
-  // ~/.photon is not typically a git repo, and even if it were, DEFAULT_PHOTON_DIR check prevents it
   assert.ok(true, 'default dir skipped by design');
 });
 
@@ -80,8 +73,8 @@ await test('is idempotent — does not duplicate patterns', async () => {
     await ensureDir(photonDir);
     await ensureDir(photonDir);
     const gitignore = fs.readFileSync(path.join(photonDir, '.gitignore'), 'utf-8');
-    const stateCount = gitignore.split('\n').filter((l) => l.trim() === 'state/').length;
-    assert.equal(stateCount, 1, 'state/ should appear exactly once');
+    const dataCount = gitignore.split('\n').filter((l) => l.trim() === '.data/').length;
+    assert.equal(dataCount, 1, '.data/ should appear exactly once');
   } finally {
     cleanup(dir);
   }
@@ -97,24 +90,22 @@ await test('preserves existing .gitignore entries', async () => {
     const gitignore = fs.readFileSync(path.join(photonDir, '.gitignore'), 'utf-8');
     assert.ok(gitignore.includes('node_modules/'), 'preserves existing entries');
     assert.ok(gitignore.includes('.DS_Store'), 'preserves existing entries');
-    assert.ok(gitignore.includes('state/'), 'adds missing patterns');
+    assert.ok(gitignore.includes('.data/'), 'adds .data/ pattern');
   } finally {
     cleanup(dir);
   }
 });
 
-await test('skips patterns already in .gitignore', async () => {
+await test('skips .data/ if already in .gitignore', async () => {
   const dir = makeTempGitDir();
   const photonDir = path.join(dir, 'photons');
   fs.mkdirSync(photonDir, { recursive: true });
-  fs.writeFileSync(path.join(photonDir, '.gitignore'), 'state/\n*.log\n');
+  fs.writeFileSync(path.join(photonDir, '.gitignore'), '.data/\n');
   try {
     await ensureDir(photonDir);
     const gitignore = fs.readFileSync(path.join(photonDir, '.gitignore'), 'utf-8');
-    const stateCount = gitignore.split('\n').filter((l) => l.trim() === 'state/').length;
-    assert.equal(stateCount, 1, 'does not duplicate state/');
-    const logCount = gitignore.split('\n').filter((l) => l.trim() === '*.log').length;
-    assert.equal(logCount, 1, 'does not duplicate *.log');
+    const dataCount = gitignore.split('\n').filter((l) => l.trim() === '.data/').length;
+    assert.equal(dataCount, 1, 'does not duplicate .data/');
   } finally {
     cleanup(dir);
   }

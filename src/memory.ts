@@ -5,11 +5,11 @@
  * boilerplate file I/O. Available as `this.memory` on Photon.
  *
  * Three scopes:
- * | Scope    | Meaning                          | Storage                           |
- * |----------|----------------------------------|-----------------------------------|
- * | photon   | Private to this photon (default)  | ~/.photon/data/{photonId}/        |
- * | session  | Per-user session (Beam sessions)  | ~/.photon/sessions/{sessionId}/   |
- * | global   | Shared across all photons         | ~/.photon/data/_global/           |
+ * | Scope    | Meaning                          | Storage                                       |
+ * |----------|----------------------------------|-----------------------------------------------|
+ * | photon   | Private to this photon (default)  | .data/{namespace}/{photonName}/memory/         |
+ * | session  | Per-user session (Beam sessions)  | .data/_sessions/{sessionId}/{ns}/{photon}/     |
+ * | global   | Shared across all photons         | .data/_global/                                |
  *
  * @example
  * ```typescript
@@ -25,42 +25,60 @@
  */
 
 import * as fs from 'fs/promises';
+import * as fsSync from 'fs';
 import * as path from 'path';
-import * as os from 'os';
+
+import {
+  getPhotonMemoryDir,
+  getGlobalMemoryDir,
+  getSessionMemoryDir,
+  getLegacyMemoryDir,
+  getLegacyGlobalMemoryDir,
+  getLegacySessionMemoryDir,
+} from './data-paths.js';
 
 export type MemoryScope = 'photon' | 'session' | 'global';
 
 /**
- * Get the base data directory
+ * Resolve storage directory for a given scope.
+ * Uses new .data/ paths with fallback to legacy locations.
  */
-function getDataDir(): string {
-  return process.env.PHOTON_DATA_DIR || path.join(os.homedir(), '.photon', 'data');
-}
-
-/**
- * Get the sessions directory
- */
-function getSessionsDir(): string {
-  return process.env.PHOTON_SESSIONS_DIR || path.join(os.homedir(), '.photon', 'sessions');
-}
-
-/**
- * Resolve storage directory for a given scope
- */
-function resolveDir(photonId: string, scope: MemoryScope, sessionId?: string): string {
-  const safeName = photonId.replace(/[^a-zA-Z0-9_-]/g, '_');
-
+function resolveDir(
+  photonId: string,
+  namespace: string,
+  scope: MemoryScope,
+  sessionId?: string,
+  baseDir?: string
+): string {
   switch (scope) {
-    case 'photon':
-      return path.join(getDataDir(), safeName);
-    case 'session':
+    case 'photon': {
+      const newDir = getPhotonMemoryDir(namespace, photonId, baseDir);
+      // Fallback: check legacy path if new path has no data yet
+      if (!fsSync.existsSync(newDir)) {
+        const legacyDir = getLegacyMemoryDir(photonId, baseDir);
+        if (fsSync.existsSync(legacyDir)) return legacyDir;
+      }
+      return newDir;
+    }
+    case 'session': {
       if (!sessionId) {
         throw new Error('Session ID required for session-scoped memory. Set via memory.sessionId.');
       }
-      const safeSession = sessionId.replace(/[^a-zA-Z0-9_-]/g, '_');
-      return path.join(getSessionsDir(), safeSession, safeName);
-    case 'global':
-      return path.join(getDataDir(), '_global');
+      const newDir = getSessionMemoryDir(sessionId, namespace, photonId, baseDir);
+      if (!fsSync.existsSync(newDir)) {
+        const legacyDir = getLegacySessionMemoryDir(sessionId, photonId, baseDir);
+        if (fsSync.existsSync(legacyDir)) return legacyDir;
+      }
+      return newDir;
+    }
+    case 'global': {
+      const newDir = getGlobalMemoryDir(baseDir);
+      if (!fsSync.existsSync(newDir)) {
+        const legacyDir = getLegacyGlobalMemoryDir(baseDir);
+        if (fsSync.existsSync(legacyDir)) return legacyDir;
+      }
+      return newDir;
+    }
     default:
       throw new Error(`Unknown memory scope: ${scope}`);
   }
@@ -94,11 +112,15 @@ async function pathExists(p: string): Promise<boolean> {
  */
 export class MemoryProvider {
   private _photonId: string;
+  private _namespace: string;
   private _sessionId?: string;
+  private _baseDir?: string;
 
-  constructor(photonId: string, sessionId?: string) {
+  constructor(photonId: string, sessionId?: string, namespace?: string, baseDir?: string) {
     this._photonId = photonId;
+    this._namespace = namespace || 'local';
     this._sessionId = sessionId;
+    this._baseDir = baseDir;
   }
 
   /**
@@ -120,7 +142,7 @@ export class MemoryProvider {
    * @returns The stored value, or null if not found
    */
   async get<T = any>(key: string, scope: MemoryScope = 'photon'): Promise<T | null> {
-    const dir = resolveDir(this._photonId, scope, this._sessionId);
+    const dir = resolveDir(this._photonId, this._namespace, scope, this._sessionId, this._baseDir);
     const filePath = keyPath(dir, key);
 
     try {
@@ -140,7 +162,7 @@ export class MemoryProvider {
    * @param scope Storage scope (default: 'photon')
    */
   async set<T = any>(key: string, value: T, scope: MemoryScope = 'photon'): Promise<void> {
-    const dir = resolveDir(this._photonId, scope, this._sessionId);
+    const dir = resolveDir(this._photonId, this._namespace, scope, this._sessionId, this._baseDir);
 
     if (!await pathExists(dir)) {
       await fs.mkdir(dir, { recursive: true });
@@ -158,7 +180,7 @@ export class MemoryProvider {
    * @returns true if the key existed and was deleted
    */
   async delete(key: string, scope: MemoryScope = 'photon'): Promise<boolean> {
-    const dir = resolveDir(this._photonId, scope, this._sessionId);
+    const dir = resolveDir(this._photonId, this._namespace, scope, this._sessionId, this._baseDir);
     const filePath = keyPath(dir, key);
 
     try {
@@ -177,7 +199,7 @@ export class MemoryProvider {
    * @param scope Storage scope (default: 'photon')
    */
   async has(key: string, scope: MemoryScope = 'photon'): Promise<boolean> {
-    const dir = resolveDir(this._photonId, scope, this._sessionId);
+    const dir = resolveDir(this._photonId, this._namespace, scope, this._sessionId, this._baseDir);
     return pathExists(keyPath(dir, key));
   }
 
@@ -187,7 +209,7 @@ export class MemoryProvider {
    * @param scope Storage scope (default: 'photon')
    */
   async keys(scope: MemoryScope = 'photon'): Promise<string[]> {
-    const dir = resolveDir(this._photonId, scope, this._sessionId);
+    const dir = resolveDir(this._photonId, this._namespace, scope, this._sessionId, this._baseDir);
 
     try {
       const files = await fs.readdir(dir);
@@ -206,7 +228,7 @@ export class MemoryProvider {
    * @param scope Storage scope (default: 'photon')
    */
   async clear(scope: MemoryScope = 'photon'): Promise<void> {
-    const dir = resolveDir(this._photonId, scope, this._sessionId);
+    const dir = resolveDir(this._photonId, this._namespace, scope, this._sessionId, this._baseDir);
 
     try {
       const files = await fs.readdir(dir);

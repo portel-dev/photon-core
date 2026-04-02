@@ -48,7 +48,8 @@ const defaultOptions: Required<ResolverOptions> = {
 
 /** Directories to skip when scanning for namespace subdirectories */
 const SKIP_DIRS = new Set([
-  'state', 'context', 'env', '.cache', '.config',
+  '.data', '.cache', '.config',
+  'state', 'context', 'env', // legacy data dirs (pre-.data/ consolidation)
   'node_modules', 'marketplace', 'photons', 'templates',
 ]);
 
@@ -247,20 +248,7 @@ export async function listFilesWithNamespace(
 /** Runtime data patterns that should never be committed to a marketplace repo */
 const GITIGNORE_DATA_PATTERNS = [
   '# Photon runtime data (auto-generated)',
-  'state/',
-  'context/',
-  'env/',
-  'data/',
-  'runs/',
-  'logs/',
-  'tasks/',
-  'cache/',
-  '.cache/',
-  'lookout/',
-  'config.json',
-  '*.log',
-  '**/.state/',
-  'daemon.*',
+  '.data/',
 ];
 
 /**

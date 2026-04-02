@@ -4,46 +4,75 @@
  * Shared state persistence for named photon instances.
  * Used by daemon, NCP, and Lumina to manage per-instance state.
  *
- * Paths (matching daemon convention):
+ * Paths (new .data/ layout):
+ * - State: .data/{namespace}/{photonName}/state/{instance}/state.json
+ * - Context: .data/{namespace}/{photonName}/context.json
+ *
+ * Falls back to legacy paths for migration:
  * - State: ~/.photon/state/{photonName}/{instanceName}.json
- * - Context: ~/.photon/context/{photonName}.json → { current: "name" }
+ * - Context: ~/.photon/context/{photonName}.json
  */
 
 import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
 import * as path from 'path';
-import * as os from 'os';
+
+import {
+  getPhotonStatePath,
+  getPhotonContextPath,
+  getPhotonDataDir,
+  getLegacyStatePath,
+  getLegacyContextPath,
+} from './data-paths.js';
 
 export interface InstanceStoreOptions {
   /** Base directory (default: ~/.photon) */
   baseDir?: string;
-}
-
-function getBaseDir(options?: InstanceStoreOptions): string {
-  return options?.baseDir || process.env.PHOTON_DIR || path.join(os.homedir(), '.photon');
+  /** Namespace (default: 'local') */
+  namespace?: string;
 }
 
 export class InstanceStore {
   private photonName: string;
-  private baseDir: string;
+  private namespace: string;
+  private baseDir?: string;
 
   constructor(photonName: string, options?: InstanceStoreOptions) {
     this.photonName = photonName;
-    this.baseDir = getBaseDir(options);
+    this.namespace = options?.namespace || 'local';
+    this.baseDir = options?.baseDir;
   }
 
   /**
-   * Get the state directory for this photon
+   * Get the state directory for this photon (new layout)
    */
   private stateDir(): string {
-    return path.join(this.baseDir, 'state', this.photonName);
+    return path.join(getPhotonDataDir(this.namespace, this.photonName, this.baseDir), 'state');
   }
 
   /**
-   * Get the context file path for this photon
+   * Get the context file path, with fallback to legacy
    */
   private contextPath(): string {
-    return path.join(this.baseDir, 'context', `${this.photonName}.json`);
+    const newPath = getPhotonContextPath(this.namespace, this.photonName, this.baseDir);
+    if (!fsSync.existsSync(newPath)) {
+      const legacyPath = getLegacyContextPath(this.photonName, this.baseDir);
+      if (fsSync.existsSync(legacyPath)) return legacyPath;
+    }
+    return newPath;
+  }
+
+  /**
+   * Resolve state file path with fallback to legacy
+   */
+  private resolveStatePath(instanceName: string): string {
+    const name = instanceName || 'default';
+    const newPath = getPhotonStatePath(this.namespace, this.photonName, name, this.baseDir);
+    if (!fsSync.existsSync(newPath)) {
+      const legacyPath = getLegacyStatePath(this.photonName, name, this.baseDir);
+      if (fsSync.existsSync(legacyPath)) return legacyPath;
+    }
+    return newPath;
   }
 
   /**
@@ -51,7 +80,21 @@ export class InstanceStore {
    */
   async list(): Promise<string[]> {
     try {
-      const files = await fs.readdir(this.stateDir());
+      // New layout: state/{instance}/ directories
+      const dir = this.stateDir();
+      const entries = await fs.readdir(dir, { withFileTypes: true });
+      const instances = entries
+        .filter((e) => e.isDirectory())
+        .map((e) => e.name);
+      if (instances.length > 0) return instances;
+    } catch {
+      // Fall through to legacy
+    }
+
+    // Legacy: state/{photonName}/*.json files
+    try {
+      const legacyDir = path.dirname(getLegacyStatePath(this.photonName, 'default', this.baseDir));
+      const files = await fs.readdir(legacyDir);
       return files
         .filter((f) => f.endsWith('.json'))
         .map((f) => f.slice(0, -5));
@@ -76,10 +119,10 @@ export class InstanceStore {
   }
 
   /**
-   * Set the current instance name
+   * Set the current instance name (always writes to new path)
    */
   async setCurrent(instanceName: string): Promise<void> {
-    const filePath = this.contextPath();
+    const filePath = getPhotonContextPath(this.namespace, this.photonName, this.baseDir);
     await fs.mkdir(path.dirname(filePath), { recursive: true });
     await fs.writeFile(filePath, JSON.stringify({ current: instanceName }, null, 2));
   }
@@ -89,7 +132,7 @@ export class InstanceStore {
    */
   async load<T = Record<string, unknown>>(instanceName?: string): Promise<T | null> {
     const name = instanceName ?? await this.getCurrent();
-    const filePath = InstanceStore.statePath(this.photonName, name, this.baseDir);
+    const filePath = this.resolveStatePath(name);
     try {
       const content = await fs.readFile(filePath, 'utf-8');
       return JSON.parse(content) as T;
@@ -100,10 +143,10 @@ export class InstanceStore {
   }
 
   /**
-   * Save state for an instance
+   * Save state for an instance (always writes to new path)
    */
   async save(instanceName: string, state: Record<string, unknown>): Promise<void> {
-    const filePath = InstanceStore.statePath(this.photonName, instanceName, this.baseDir);
+    const filePath = getPhotonStatePath(this.namespace, this.photonName, instanceName, this.baseDir);
     await fs.mkdir(path.dirname(filePath), { recursive: true });
     await fs.writeFile(filePath, JSON.stringify(state, null, 2));
   }
@@ -112,7 +155,7 @@ export class InstanceStore {
    * Delete an instance's state
    */
   async delete(instanceName: string): Promise<boolean> {
-    const filePath = InstanceStore.statePath(this.photonName, instanceName, this.baseDir);
+    const filePath = this.resolveStatePath(instanceName);
     try {
       await fs.unlink(filePath);
       return true;
@@ -127,7 +170,7 @@ export class InstanceStore {
    */
   async exists(instanceName?: string): Promise<boolean> {
     const name = instanceName ?? await this.getCurrent();
-    const filePath = InstanceStore.statePath(this.photonName, name, this.baseDir);
+    const filePath = this.resolveStatePath(name);
     try {
       await fs.access(filePath);
       return true;
@@ -137,19 +180,16 @@ export class InstanceStore {
   }
 
   /**
-   * Get the file path for instance state
+   * Get the file path for instance state (new .data/ layout)
    */
-  static statePath(photonName: string, instanceName: string, baseDir?: string): string {
-    const dir = baseDir || getBaseDir();
-    const name = instanceName || 'default';
-    return path.join(dir, 'state', photonName, `${name}.json`);
+  static statePath(photonName: string, instanceName: string, baseDir?: string, namespace?: string): string {
+    return getPhotonStatePath(namespace || 'local', photonName, instanceName, baseDir);
   }
 
   /**
-   * Get the context file path for a photon
+   * Get the context file path for a photon (new .data/ layout)
    */
-  static contextPath(photonName: string, baseDir?: string): string {
-    const dir = baseDir || getBaseDir();
-    return path.join(dir, 'context', `${photonName}.json`);
+  static contextPath(photonName: string, baseDir?: string, namespace?: string): string {
+    return getPhotonContextPath(namespace || 'local', photonName, baseDir);
   }
 }
