@@ -29,6 +29,7 @@
 
 import * as path from 'path';
 import * as os from 'os';
+import { execSync } from 'child_process';
 
 const DEFAULT_BASE = path.join(os.homedir(), '.photon');
 
@@ -148,6 +149,39 @@ export function getDaemonPidPath(): string {
 /** Daemon log file: always ~/.photon/.data/daemon.log */
 export function getDaemonLogPath(): string {
   return path.join(DEFAULT_BASE, '.data', 'daemon.log');
+}
+
+// ── Namespace Detection ──────────────────────────────────────────────────────
+
+/**
+ * Detect the namespace for a photon directory by reading git remote origin.
+ * Returns the owner/org from the remote URL, or 'local' if not a git repo.
+ *
+ * Examples:
+ *   git@github.com:portel-dev/photons.git     → 'portel-dev'
+ *   https://github.com/arul-kumar/my-photons  → 'arul-kumar'
+ *   (no git remote)                           → 'local'
+ */
+export function detectNamespace(dir: string): string {
+  try {
+    const remote = execSync('git remote get-url origin', {
+      cwd: dir,
+      encoding: 'utf-8',
+      timeout: 3000,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+
+    // SSH: git@github.com:owner/repo.git
+    const sshMatch = remote.match(/git@[^:]+:([^/]+)\//);
+    if (sshMatch) return sshMatch[1];
+
+    // HTTPS: https://github.com/owner/repo[.git]
+    const httpsMatch = remote.match(/https?:\/\/[^/]+\/([^/]+)\//);
+    if (httpsMatch) return httpsMatch[1];
+  } catch {
+    // Not a git repo or no remote — expected
+  }
+  return 'local';
 }
 
 // ── Legacy Path Helpers (for migration fallback) ─────────────────────────────
