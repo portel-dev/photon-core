@@ -458,16 +458,16 @@ export class Photon {
   }
 
   /**
-   * Push a notification to Claude Code when running as a channel.
-   * No-ops silently when not in channel mode.
+   * Send a message through the channel to the connected client (e.g. Claude Code).
+   * No-ops silently when the photon is not marked with @channel.
    *
    * The content becomes the body of the `<channel>` tag and each meta entry
    * becomes an attribute: `<channel source="telegram" chat_id="123">content</channel>`
    *
-   * @param content The event body text
+   * @param content The message text
    * @param meta Optional key-value attributes (e.g. chat_id, sender, type)
    */
-  protected push(content: string, meta?: Record<string, string>): void {
+  protected channel(content: string, meta?: Record<string, string>): void {
     // Injected by the loader — no-op by default
     void content;
     void meta;
