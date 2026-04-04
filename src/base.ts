@@ -458,20 +458,35 @@ export class Photon {
   }
 
   /**
-   * Send a message through the channel to the connected client (e.g. Claude Code).
+   * Channel interface for communicating with connected clients (e.g. Claude Code).
    * No-ops silently when the photon is not marked with @channel.
    *
-   * The content becomes the body of the `<channel>` tag and each meta entry
-   * becomes an attribute: `<channel source="telegram" chat_id="123">content</channel>`
+   * Call directly to send a message:
+   *   this.channel('Hello', { chat_id: '123' })
    *
-   * @param content The message text
-   * @param meta Optional key-value attributes (e.g. chat_id, sender, type)
+   * Use .respond() to answer permission requests:
+   *   this.channel.respond(request_id, 'allow')
+   *
+   * Use .onPermission() to handle incoming permission requests:
+   *   this.channel.onPermission((req) => { ... })
    */
-  protected channel(content: string, meta?: Record<string, string>): void {
-    // Injected by the loader — no-op by default
-    void content;
-    void meta;
-  }
+  protected channel: {
+    (content: string, meta?: Record<string, string>): void;
+    respond(requestId: string, behavior: 'allow' | 'deny'): void;
+    onPermission(handler: (request: { request_id: string; tool_name: string; description: string; input_preview: string }) => void): void;
+  } = Object.assign(
+    (_content: string, _meta?: Record<string, string>) => {
+      // Injected by the loader — no-op by default
+    },
+    {
+      respond: (_requestId: string, _behavior: 'allow' | 'deny') => {
+        // Injected by the loader — no-op by default
+      },
+      onPermission: (_handler: (request: any) => void) => {
+        // Injected by the loader — no-op by default
+      },
+    }
+  );
 
   /**
    * Create a blocking input request for use in generator methods.
