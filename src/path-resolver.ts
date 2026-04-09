@@ -178,10 +178,13 @@ export async function listFiles(
  * List all matching files with full namespace metadata.
  *
  * Scans flat files at the root level and one level of namespace subdirectories.
+ * Automatically removes broken symlinks (target deleted) and reports via onCleanup.
  */
 export async function listFilesWithNamespace(
   workingDir?: string,
-  options?: ResolverOptions
+  options?: ResolverOptions & {
+    onCleanup?: (name: string, symlinkPath: string) => void;
+  }
 ): Promise<ListedPhoton[]> {
   const opts = { ...defaultOptions, ...options };
   const dir = expandTilde(workingDir || opts.defaultDir);
@@ -194,6 +197,16 @@ export async function listFilesWithNamespace(
     // Scan flat files at root level (backward compat / pre-migration)
     for (const entry of entries) {
       if (entry.isFile() || entry.isSymbolicLink()) {
+        if (entry.isSymbolicLink()) {
+          const fullPath = path.join(dir, entry.name);
+          try { await fs.access(fullPath); } catch {
+            // Broken symlink — auto-remove and notify caller
+            const name = entry.name.replace(/\.photon\.(ts|js)$/, '');
+            await fs.unlink(fullPath).catch(() => {});
+            options?.onCleanup?.(name, fullPath);
+            continue;
+          }
+        }
         for (const ext of opts.extensions) {
           if (entry.name.endsWith(ext)) {
             const name = entry.name.slice(0, -ext.length);
@@ -220,6 +233,15 @@ export async function listFilesWithNamespace(
         const nsEntries = await fs.readdir(nsDir, { withFileTypes: true });
         for (const nsEntry of nsEntries) {
           if (nsEntry.isFile() || nsEntry.isSymbolicLink()) {
+            if (nsEntry.isSymbolicLink()) {
+              const fullPath = path.join(nsDir, nsEntry.name);
+              try { await fs.access(fullPath); } catch {
+                const name = nsEntry.name.replace(/\.photon\.(ts|js)$/, '');
+                await fs.unlink(fullPath).catch(() => {});
+                options?.onCleanup?.(name, fullPath);
+                continue;
+              }
+            }
             for (const ext of opts.extensions) {
               if (nsEntry.name.endsWith(ext)) {
                 const name = nsEntry.name.slice(0, -ext.length);
