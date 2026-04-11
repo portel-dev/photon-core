@@ -110,39 +110,57 @@ export async function autoDiscoverAssets(
   assets: PhotonAssets,
 ): Promise<void> {
   // Auto-discover UI files
-  // .photon.html files (declarative mode) take priority over .html files with the same base name.
+  // Priority: .photon.html > .photon.tsx > .html > .tsx
+  // Photon-prefixed variants (declarative mode) take priority over plain variants.
   const uiDir = path.join(assetFolder, 'ui');
   if (await fileExists(uiDir)) {
     try {
       const files = await fs.readdir(uiDir);
-      // Collect .photon.html files first so they take priority
-      const photonHtmlFiles = new Set<string>();
+      // Collect photon-prefixed files so they take priority over plain variants
+      const photonPrefixed = new Map<string, string>(); // baseName → extension
       for (const file of files) {
         if (file.endsWith('.photon.html')) {
-          photonHtmlFiles.add(file.replace(/\.photon\.html$/, ''));
+          const base = file.replace(/\.photon\.html$/, '');
+          photonPrefixed.set(base, '.photon.html');
+        } else if (file.endsWith('.photon.tsx')) {
+          const base = file.replace(/\.photon\.tsx$/, '');
+          if (!photonPrefixed.has(base)) {
+            photonPrefixed.set(base, '.photon.tsx');
+          }
         }
       }
       for (const file of files) {
-        // Determine the asset ID:
-        // - foo.photon.html → id "foo"
-        // - foo.html → id "foo" (but skipped if foo.photon.html exists)
+        // Supported extensions: .photon.html, .photon.tsx, .html, .tsx
+        const isPhotonHtml = file.endsWith('.photon.html');
+        const isPhotonTsx = file.endsWith('.photon.tsx');
+        const isHtml = !isPhotonHtml && file.endsWith('.html');
+        const isTsx = !isPhotonTsx && file.endsWith('.tsx');
+
+        if (!isPhotonHtml && !isPhotonTsx && !isHtml && !isTsx) continue;
+
         let id: string;
-        if (file.endsWith('.photon.html')) {
+        if (isPhotonHtml) {
           id = file.replace(/\.photon\.html$/, '');
+        } else if (isPhotonTsx) {
+          id = file.replace(/\.photon\.tsx$/, '');
+          // Skip if .photon.html exists for same base name
+          if (photonPrefixed.get(id) === '.photon.html') continue;
         } else {
           id = path.basename(file, path.extname(file));
-          // Skip .html files when a .photon.html with the same base name exists
-          if (file.endsWith('.html') && photonHtmlFiles.has(id)) {
-            continue;
+          // Skip plain variants when a photon-prefixed variant exists
+          if (photonPrefixed.has(id)) continue;
+          // Among plain variants, .html takes priority over .tsx
+          if (isTsx) {
+            const htmlSibling = `${id}.html`;
+            if (files.includes(htmlSibling)) continue;
           }
         }
+
         if (!assets.ui.find((u) => u.id === id)) {
           assets.ui.push({
             id,
             path: `./ui/${file}`,
             resolvedPath: path.join(uiDir, file),
-            // Don't set mimeType for UI assets - let server decide based on client capabilities
-            // Server will use getUIMimeType() to return text/html;profile=mcp-app for MCP Apps clients
           });
         }
       }
