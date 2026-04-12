@@ -193,10 +193,10 @@ function oklchToRgba(L: number, C: number, H: number, alpha: number): string {
 // =============================================================================
 
 export const themePresets: ThemePreset[] = [
-  { name: 'Default Violet', config: { hue: 260, chroma: 0.15, lightness: 0.65 } },
+  { name: 'Amber', config: { hue: 75, chroma: 0.14, lightness: 0.70 } },
   { name: 'Ocean Blue', config: { hue: 220, chroma: 0.12, lightness: 0.60 } },
   { name: 'Emerald', config: { hue: 155, chroma: 0.14, lightness: 0.60 } },
-  { name: 'Amber', config: { hue: 75, chroma: 0.14, lightness: 0.70 } },
+  { name: 'Violet', config: { hue: 260, chroma: 0.15, lightness: 0.65 } },
   { name: 'Rose', config: { hue: 350, chroma: 0.14, lightness: 0.62 } },
   { name: 'Monochrome', config: { hue: 0, chroma: 0.0, lightness: 0.65 } },
 ];
