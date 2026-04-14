@@ -443,8 +443,13 @@ export {
 
 // ===== SCOPED MEMORY =====
 // Framework-level key-value storage (this.memory on Photon base class)
+// MemoryBackend is the pluggable interface; FileMemoryBackend is the default.
 export {
   MemoryProvider,
+  FileMemoryBackend,
+  setDefaultMemoryBackend,
+  getDefaultMemoryBackend,
+  type MemoryBackend,
   type MemoryScope,
 } from './memory.js';
 

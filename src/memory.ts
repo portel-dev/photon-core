@@ -4,24 +4,16 @@
  * Framework-level key-value storage for photons that eliminates
  * boilerplate file I/O. Available as `this.memory` on Photon.
  *
- * Three scopes:
- * | Scope    | Meaning                          | Storage                                       |
- * |----------|----------------------------------|-----------------------------------------------|
- * | photon   | Private to this photon (default)  | .data/{namespace}/{photonName}/memory/         |
- * | session  | Per-user session (Beam sessions)  | .data/_sessions/{sessionId}/{ns}/{photon}/     |
- * | global   | Shared across all photons         | .data/_global/                                |
+ * Architecture: MemoryProvider delegates to a pluggable MemoryBackend.
+ * The default backend is FileMemoryBackend (JSON files on disk).
+ * Enterprise deployments can swap in Redis, Postgres, or SQLite.
  *
- * @example
- * ```typescript
- * export default class TodoList extends Photon {
- *   async add({ text }: { text: string }) {
- *     const items = await this.memory.get<Task[]>('items') ?? [];
- *     items.push({ id: crypto.randomUUID(), text });
- *     await this.memory.set('items', items);
- *     return items;
- *   }
- * }
- * ```
+ * Three scopes:
+ * | Scope    | Meaning                          |
+ * |----------|----------------------------------|
+ * | photon   | Private to this photon (default)  |
+ * | session  | Per-user session (Beam sessions)  |
+ * | global   | Shared across all photons         |
  */
 
 import * as fs from 'fs/promises';
@@ -39,10 +31,166 @@ import {
 
 export type MemoryScope = 'photon' | 'session' | 'global';
 
+// ════════════════════════════════════════════════════════════════════════════════
+// BACKEND INTERFACE
+// ════════════════════════════════════════════════════════════════════════════════
+
 /**
- * Resolve storage directory for a given scope.
- * Uses new .data/ paths with fallback to legacy locations.
+ * Pluggable storage backend for MemoryProvider.
+ *
+ * Implementations handle the actual persistence. All methods receive
+ * a resolved namespace (scope + photonId + sessionId already baked in)
+ * so the backend doesn't need to know about scoping rules.
  */
+export interface MemoryBackend {
+  get(namespace: string, key: string): Promise<any | null>;
+  set(namespace: string, key: string, value: any): Promise<void>;
+  delete(namespace: string, key: string): Promise<boolean>;
+  has(namespace: string, key: string): Promise<boolean>;
+  keys(namespace: string): Promise<string[]>;
+  clear(namespace: string): Promise<void>;
+  /**
+   * Atomic read-modify-write. Backends with native transactions (Redis WATCH,
+   * Postgres FOR UPDATE) should use them here. The default file backend
+   * uses a per-key promise chain.
+   */
+  update(namespace: string, key: string, updater: (current: any | null) => any): Promise<any>;
+}
+
+// ════════════════════════════════════════════════════════════════════════════════
+// FILE BACKEND (default)
+// ════════════════════════════════════════════════════════════════════════════════
+
+function keyPath(dir: string, key: string): string {
+  const safeKey = key.replace(/[^a-zA-Z0-9_.-]/g, '_');
+  return path.join(dir, `${safeKey}.json`);
+}
+
+async function pathExists(p: string): Promise<boolean> {
+  try {
+    await fs.access(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * File-based memory backend. Each key is a JSON file on disk.
+ * Uses per-key promise chains and temp+rename for safe concurrent access.
+ */
+export class FileMemoryBackend implements MemoryBackend {
+  private _locks = new Map<string, Promise<void>>();
+
+  private async withLock<T>(namespace: string, key: string, fn: () => Promise<T>): Promise<T> {
+    const lockKey = `${namespace}:${key}`;
+    const prev = this._locks.get(lockKey) ?? Promise.resolve();
+    let resolve!: () => void;
+    const next = new Promise<void>(r => { resolve = r; });
+    this._locks.set(lockKey, next);
+    try {
+      await prev;
+      return await fn();
+    } finally {
+      resolve();
+      if (this._locks.get(lockKey) === next) {
+        this._locks.delete(lockKey);
+      }
+    }
+  }
+
+  async get(namespace: string, key: string): Promise<any | null> {
+    return this.withLock(namespace, key, async () => {
+      const filePath = keyPath(namespace, key);
+      try {
+        const content = await fs.readFile(filePath, 'utf-8');
+        return JSON.parse(content);
+      } catch (error: any) {
+        if (error.code === 'ENOENT') return null;
+        throw error;
+      }
+    });
+  }
+
+  async set(namespace: string, key: string, value: any): Promise<void> {
+    return this.withLock(namespace, key, async () => {
+      if (!await pathExists(namespace)) {
+        await fs.mkdir(namespace, { recursive: true });
+      }
+      const filePath = keyPath(namespace, key);
+      const tmpPath = filePath + '.tmp';
+      await fs.writeFile(tmpPath, JSON.stringify(value, null, 2));
+      await fs.rename(tmpPath, filePath);
+    });
+  }
+
+  async delete(namespace: string, key: string): Promise<boolean> {
+    return this.withLock(namespace, key, async () => {
+      const filePath = keyPath(namespace, key);
+      try {
+        await fs.unlink(filePath);
+        return true;
+      } catch (error: any) {
+        if (error.code === 'ENOENT') return false;
+        throw error;
+      }
+    });
+  }
+
+  async has(namespace: string, key: string): Promise<boolean> {
+    return pathExists(keyPath(namespace, key));
+  }
+
+  async keys(namespace: string): Promise<string[]> {
+    try {
+      const files = await fs.readdir(namespace);
+      return files.filter(f => f.endsWith('.json') && !f.endsWith('.tmp')).map(f => f.slice(0, -5));
+    } catch (error: any) {
+      if (error.code === 'ENOENT') return [];
+      throw error;
+    }
+  }
+
+  async clear(namespace: string): Promise<void> {
+    try {
+      const files = await fs.readdir(namespace);
+      const jsonFiles = files.filter(f => f.endsWith('.json'));
+      await Promise.all(jsonFiles.map(file => fs.unlink(path.join(namespace, file))));
+    } catch (error: any) {
+      if (error.code === 'ENOENT') return;
+      throw error;
+    }
+  }
+
+  async update(namespace: string, key: string, updater: (current: any | null) => any): Promise<any> {
+    return this.withLock(namespace, key, async () => {
+      const filePath = keyPath(namespace, key);
+
+      let current: any = null;
+      try {
+        const content = await fs.readFile(filePath, 'utf-8');
+        current = JSON.parse(content);
+      } catch (error: any) {
+        if (error.code !== 'ENOENT') throw error;
+      }
+
+      const updated = updater(current);
+
+      if (!await pathExists(namespace)) {
+        await fs.mkdir(namespace, { recursive: true });
+      }
+      const tmpPath = filePath + '.tmp';
+      await fs.writeFile(tmpPath, JSON.stringify(updated, null, 2));
+      await fs.rename(tmpPath, filePath);
+      return updated;
+    });
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════════
+// SCOPE RESOLUTION
+// ════════════════════════════════════════════════════════════════════════════════
+
 function resolveDir(
   photonId: string,
   namespace: string,
@@ -53,7 +201,6 @@ function resolveDir(
   switch (scope) {
     case 'photon': {
       const newDir = getPhotonMemoryDir(namespace, photonId, baseDir);
-      // Fallback: check legacy path if new path has no data yet
       if (!fsSync.existsSync(newDir)) {
         const legacyDir = getLegacyMemoryDir(photonId, baseDir);
         if (fsSync.existsSync(legacyDir)) return legacyDir;
@@ -84,70 +231,59 @@ function resolveDir(
   }
 }
 
-/**
- * Get the file path for a key within a directory
- */
-function keyPath(dir: string, key: string): string {
-  const safeKey = key.replace(/[^a-zA-Z0-9_.-]/g, '_');
-  return path.join(dir, `${safeKey}.json`);
-}
+// ════════════════════════════════════════════════════════════════════════════════
+// MEMORY PROVIDER (public API — delegates to backend)
+// ════════════════════════════════════════════════════════════════════════════════
+
+/** Default shared backend instance (file-based) */
+let defaultBackend: MemoryBackend = new FileMemoryBackend();
 
 /**
- * Check if a path exists (async)
+ * Set the global default memory backend.
+ * Call before any photons are loaded to switch storage layer.
+ *
+ * @example
+ * ```typescript
+ * import { setDefaultMemoryBackend } from '@portel/photon-core';
+ * import { RedisMemoryBackend } from '@portel/photon-redis';
+ * setDefaultMemoryBackend(new RedisMemoryBackend({ url: 'redis://...' }));
+ * ```
  */
-async function pathExists(p: string): Promise<boolean> {
-  try {
-    await fs.access(p);
-    return true;
-  } catch {
-    return false;
-  }
+export function setDefaultMemoryBackend(backend: MemoryBackend): void {
+  defaultBackend = backend;
+}
+
+export function getDefaultMemoryBackend(): MemoryBackend {
+  return defaultBackend;
 }
 
 /**
  * Scoped Memory Provider
  *
- * Provides key-value storage with automatic JSON serialization.
- * Each key is stored as a separate file for atomic operations.
+ * The public API surface for `this.memory` on photon instances.
+ * Delegates all operations to the configured MemoryBackend.
  */
 export class MemoryProvider {
   private _photonId: string;
   private _namespace: string;
   private _sessionId?: string;
   private _baseDir?: string;
-  private _locks = new Map<string, Promise<void>>();
+  private _backend: MemoryBackend;
 
-  constructor(photonId: string, sessionId?: string, namespace?: string, baseDir?: string) {
+  constructor(
+    photonId: string,
+    sessionId?: string,
+    namespace?: string,
+    baseDir?: string,
+    backend?: MemoryBackend
+  ) {
     this._photonId = photonId;
     this._namespace = namespace || 'local';
     this._sessionId = sessionId;
     this._baseDir = baseDir;
+    this._backend = backend ?? defaultBackend;
   }
 
-  /**
-   * Serialize file operations per key to prevent concurrent write corruption.
-   * Reads also go through the lock to avoid reading a partially-written file.
-   */
-  private async withKeyLock<T>(key: string, scope: MemoryScope, fn: () => Promise<T>): Promise<T> {
-    const lockKey = `${scope}:${key}`;
-    const prev = this._locks.get(lockKey) ?? Promise.resolve();
-    let resolve!: () => void;
-    const next = new Promise<void>(r => { resolve = r; });
-    this._locks.set(lockKey, next);
-    try {
-      await prev;
-      return await fn();
-    } finally {
-      resolve();
-      if (this._locks.get(lockKey) === next) {
-        this._locks.delete(lockKey);
-      }
-    }
-  }
-
-  /**
-   * Current session ID (can be updated by the runtime)
-   */
   get sessionId(): string | undefined {
     return this._sessionId;
   }
@@ -156,174 +292,50 @@ export class MemoryProvider {
     this._sessionId = id;
   }
 
-  /**
-   * Get a value from memory
-   *
-   * @param key The key to retrieve
-   * @param scope Storage scope (default: 'photon')
-   * @returns The stored value, or null if not found
-   */
+  /** Resolve the storage namespace (directory for file backend, prefix for Redis, etc.) */
+  private ns(scope: MemoryScope): string {
+    return resolveDir(this._photonId, this._namespace, scope, this._sessionId, this._baseDir);
+  }
+
   async get<T = any>(key: string, scope: MemoryScope = 'photon'): Promise<T | null> {
-    return this.withKeyLock(key, scope, async () => {
-      const dir = resolveDir(this._photonId, this._namespace, scope, this._sessionId, this._baseDir);
-      const filePath = keyPath(dir, key);
-
-      try {
-        const content = await fs.readFile(filePath, 'utf-8');
-        return JSON.parse(content) as T;
-      } catch (error: any) {
-        if (error.code === 'ENOENT') return null;
-        throw error;
-      }
-    });
+    return this._backend.get(this.ns(scope), key);
   }
 
-  /**
-   * Set a value in memory
-   *
-   * @param key The key to store
-   * @param value The value (must be JSON-serializable)
-   * @param scope Storage scope (default: 'photon')
-   */
   async set<T = any>(key: string, value: T, scope: MemoryScope = 'photon'): Promise<void> {
-    return this.withKeyLock(key, scope, async () => {
-      const dir = resolveDir(this._photonId, this._namespace, scope, this._sessionId, this._baseDir);
-
-      if (!await pathExists(dir)) {
-        await fs.mkdir(dir, { recursive: true });
-      }
-
-      const filePath = keyPath(dir, key);
-      // Write to temp file then rename for atomic replacement
-      const tmpPath = filePath + '.tmp';
-      await fs.writeFile(tmpPath, JSON.stringify(value, null, 2));
-      await fs.rename(tmpPath, filePath);
-    });
+    return this._backend.set(this.ns(scope), key, value);
   }
 
-  /**
-   * Delete a key from memory
-   *
-   * @param key The key to delete
-   * @param scope Storage scope (default: 'photon')
-   * @returns true if the key existed and was deleted
-   */
   async delete(key: string, scope: MemoryScope = 'photon'): Promise<boolean> {
-    return this.withKeyLock(key, scope, async () => {
-      const dir = resolveDir(this._photonId, this._namespace, scope, this._sessionId, this._baseDir);
-      const filePath = keyPath(dir, key);
-
-      try {
-        await fs.unlink(filePath);
-        return true;
-      } catch (error: any) {
-        if (error.code === 'ENOENT') return false;
-        throw error;
-      }
-    });
+    return this._backend.delete(this.ns(scope), key);
   }
 
-  /**
-   * Check if a key exists in memory
-   *
-   * @param key The key to check
-   * @param scope Storage scope (default: 'photon')
-   */
   async has(key: string, scope: MemoryScope = 'photon'): Promise<boolean> {
-    const dir = resolveDir(this._photonId, this._namespace, scope, this._sessionId, this._baseDir);
-    return pathExists(keyPath(dir, key));
+    return this._backend.has(this.ns(scope), key);
   }
 
-  /**
-   * List all keys in memory for a scope
-   *
-   * @param scope Storage scope (default: 'photon')
-   */
   async keys(scope: MemoryScope = 'photon'): Promise<string[]> {
-    const dir = resolveDir(this._photonId, this._namespace, scope, this._sessionId, this._baseDir);
-
-    try {
-      const files = await fs.readdir(dir);
-      return files
-        .filter(f => f.endsWith('.json'))
-        .map(f => f.slice(0, -5));
-    } catch (error: any) {
-      if (error.code === 'ENOENT') return [];
-      throw error;
-    }
+    return this._backend.keys(this.ns(scope));
   }
 
-  /**
-   * Clear all keys in a scope
-   *
-   * @param scope Storage scope (default: 'photon')
-   */
   async clear(scope: MemoryScope = 'photon'): Promise<void> {
-    const dir = resolveDir(this._photonId, this._namespace, scope, this._sessionId, this._baseDir);
-
-    try {
-      const files = await fs.readdir(dir);
-      const jsonFiles = files.filter(f => f.endsWith('.json'));
-      await Promise.all(jsonFiles.map(file => fs.unlink(path.join(dir, file))));
-    } catch (error: any) {
-      if (error.code === 'ENOENT') return;
-      throw error;
-    }
+    return this._backend.clear(this.ns(scope));
   }
 
-  /**
-   * Get all key-value pairs in a scope
-   *
-   * @param scope Storage scope (default: 'photon')
-   */
   async getAll<T = any>(scope: MemoryScope = 'photon'): Promise<Record<string, T>> {
     const allKeys = await this.keys(scope);
     const result: Record<string, T> = {};
-
     for (const key of allKeys) {
       const value = await this.get<T>(key, scope);
-      if (value !== null) {
-        result[key] = value;
-      }
+      if (value !== null) result[key] = value;
     }
-
     return result;
   }
 
-  /**
-   * Atomic read-modify-write for a key.
-   * Serialized per key so concurrent updates don't corrupt data.
-   *
-   * @param key The key to update
-   * @param updater Function that receives current value and returns new value
-   * @param scope Storage scope (default: 'photon')
-   */
   async update<T = any>(
     key: string,
     updater: (current: T | null) => T,
     scope: MemoryScope = 'photon'
   ): Promise<T> {
-    return this.withKeyLock(key, scope, async () => {
-      const dir = resolveDir(this._photonId, this._namespace, scope, this._sessionId, this._baseDir);
-      const filePath = keyPath(dir, key);
-
-      let current: T | null = null;
-      try {
-        const content = await fs.readFile(filePath, 'utf-8');
-        current = JSON.parse(content) as T;
-      } catch (error: any) {
-        if (error.code !== 'ENOENT') throw error;
-      }
-
-      const updated = updater(current);
-
-      if (!await pathExists(dir)) {
-        await fs.mkdir(dir, { recursive: true });
-      }
-      const tmpPath = filePath + '.tmp';
-      await fs.writeFile(tmpPath, JSON.stringify(updated, null, 2));
-      await fs.rename(tmpPath, filePath);
-      return updated;
-    });
+    return this._backend.update(this.ns(scope), key, updater);
   }
 }
