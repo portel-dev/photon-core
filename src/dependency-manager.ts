@@ -7,7 +7,7 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { spawn } from 'child_process';
+import { spawn, execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { getCacheDir } from './data-paths.js';
 
@@ -177,7 +177,6 @@ export class DependencyManager {
    * Run package install in a directory (bun or npm)
    */
   private async runNpmInstall(cwd: string): Promise<void> {
-    const { execSync } = require('child_process');
     const hasBun = (() => { try { execSync('bun --version', { stdio: 'ignore' }); return true; } catch { return false; } })();
     const cmd = hasBun ? 'bun' : (process.platform === 'win32' ? 'npm.cmd' : 'npm');
     const args = hasBun ? ['install'] : ['install', '--omit=dev', '--silent'];
