@@ -115,12 +115,34 @@ export class MemoryProvider {
   private _namespace: string;
   private _sessionId?: string;
   private _baseDir?: string;
+  private _locks = new Map<string, Promise<void>>();
 
   constructor(photonId: string, sessionId?: string, namespace?: string, baseDir?: string) {
     this._photonId = photonId;
     this._namespace = namespace || 'local';
     this._sessionId = sessionId;
     this._baseDir = baseDir;
+  }
+
+  /**
+   * Serialize file operations per key to prevent concurrent write corruption.
+   * Reads also go through the lock to avoid reading a partially-written file.
+   */
+  private async withKeyLock<T>(key: string, scope: MemoryScope, fn: () => Promise<T>): Promise<T> {
+    const lockKey = `${scope}:${key}`;
+    const prev = this._locks.get(lockKey) ?? Promise.resolve();
+    let resolve!: () => void;
+    const next = new Promise<void>(r => { resolve = r; });
+    this._locks.set(lockKey, next);
+    try {
+      await prev;
+      return await fn();
+    } finally {
+      resolve();
+      if (this._locks.get(lockKey) === next) {
+        this._locks.delete(lockKey);
+      }
+    }
   }
 
   /**
@@ -142,16 +164,18 @@ export class MemoryProvider {
    * @returns The stored value, or null if not found
    */
   async get<T = any>(key: string, scope: MemoryScope = 'photon'): Promise<T | null> {
-    const dir = resolveDir(this._photonId, this._namespace, scope, this._sessionId, this._baseDir);
-    const filePath = keyPath(dir, key);
+    return this.withKeyLock(key, scope, async () => {
+      const dir = resolveDir(this._photonId, this._namespace, scope, this._sessionId, this._baseDir);
+      const filePath = keyPath(dir, key);
 
-    try {
-      const content = await fs.readFile(filePath, 'utf-8');
-      return JSON.parse(content) as T;
-    } catch (error: any) {
-      if (error.code === 'ENOENT') return null;
-      throw error;
-    }
+      try {
+        const content = await fs.readFile(filePath, 'utf-8');
+        return JSON.parse(content) as T;
+      } catch (error: any) {
+        if (error.code === 'ENOENT') return null;
+        throw error;
+      }
+    });
   }
 
   /**
@@ -162,14 +186,19 @@ export class MemoryProvider {
    * @param scope Storage scope (default: 'photon')
    */
   async set<T = any>(key: string, value: T, scope: MemoryScope = 'photon'): Promise<void> {
-    const dir = resolveDir(this._photonId, this._namespace, scope, this._sessionId, this._baseDir);
+    return this.withKeyLock(key, scope, async () => {
+      const dir = resolveDir(this._photonId, this._namespace, scope, this._sessionId, this._baseDir);
 
-    if (!await pathExists(dir)) {
-      await fs.mkdir(dir, { recursive: true });
-    }
+      if (!await pathExists(dir)) {
+        await fs.mkdir(dir, { recursive: true });
+      }
 
-    const filePath = keyPath(dir, key);
-    await fs.writeFile(filePath, JSON.stringify(value, null, 2));
+      const filePath = keyPath(dir, key);
+      // Write to temp file then rename for atomic replacement
+      const tmpPath = filePath + '.tmp';
+      await fs.writeFile(tmpPath, JSON.stringify(value, null, 2));
+      await fs.rename(tmpPath, filePath);
+    });
   }
 
   /**
@@ -180,16 +209,18 @@ export class MemoryProvider {
    * @returns true if the key existed and was deleted
    */
   async delete(key: string, scope: MemoryScope = 'photon'): Promise<boolean> {
-    const dir = resolveDir(this._photonId, this._namespace, scope, this._sessionId, this._baseDir);
-    const filePath = keyPath(dir, key);
+    return this.withKeyLock(key, scope, async () => {
+      const dir = resolveDir(this._photonId, this._namespace, scope, this._sessionId, this._baseDir);
+      const filePath = keyPath(dir, key);
 
-    try {
-      await fs.unlink(filePath);
-      return true;
-    } catch (error: any) {
-      if (error.code === 'ENOENT') return false;
-      throw error;
-    }
+      try {
+        await fs.unlink(filePath);
+        return true;
+      } catch (error: any) {
+        if (error.code === 'ENOENT') return false;
+        throw error;
+      }
+    });
   }
 
   /**
@@ -260,10 +291,8 @@ export class MemoryProvider {
   }
 
   /**
-   * Update a value with read-modify-write
-   *
-   * Note: Not truly atomic under concurrent access. For concurrent
-   * writes, use distributed locking via `withLock()`.
+   * Atomic read-modify-write for a key.
+   * Serialized per key so concurrent updates don't corrupt data.
    *
    * @param key The key to update
    * @param updater Function that receives current value and returns new value
@@ -274,9 +303,27 @@ export class MemoryProvider {
     updater: (current: T | null) => T,
     scope: MemoryScope = 'photon'
   ): Promise<T> {
-    const current = await this.get<T>(key, scope);
-    const updated = updater(current);
-    await this.set(key, updated, scope);
-    return updated;
+    return this.withKeyLock(key, scope, async () => {
+      const dir = resolveDir(this._photonId, this._namespace, scope, this._sessionId, this._baseDir);
+      const filePath = keyPath(dir, key);
+
+      let current: T | null = null;
+      try {
+        const content = await fs.readFile(filePath, 'utf-8');
+        current = JSON.parse(content) as T;
+      } catch (error: any) {
+        if (error.code !== 'ENOENT') throw error;
+      }
+
+      const updated = updater(current);
+
+      if (!await pathExists(dir)) {
+        await fs.mkdir(dir, { recursive: true });
+      }
+      const tmpPath = filePath + '.tmp';
+      await fs.writeFile(tmpPath, JSON.stringify(updated, null, 2));
+      await fs.rename(tmpPath, filePath);
+      return updated;
+    });
   }
 }
