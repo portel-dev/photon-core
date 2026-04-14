@@ -55,6 +55,11 @@ export interface MemoryBackend {
    * uses a per-key promise chain.
    */
   update(namespace: string, key: string, updater: (current: any | null) => any): Promise<any>;
+  /**
+   * List all key-value pairs in the namespace, optionally filtered by key prefix.
+   * Aligns with Deno KV's list() surface for minimal, predictable enumeration.
+   */
+  list(namespace: string, prefix?: string): Promise<Array<{ key: string; value: any }>>;
 }
 
 // ════════════════════════════════════════════════════════════════════════════════
@@ -184,6 +189,26 @@ export class FileMemoryBackend implements MemoryBackend {
       await fs.rename(tmpPath, filePath);
       return updated;
     });
+  }
+
+  async list(namespace: string, prefix?: string): Promise<Array<{ key: string; value: any }>> {
+    let allKeys: string[];
+    try {
+      const files = await fs.readdir(namespace);
+      allKeys = files.filter(f => f.endsWith('.json') && !f.endsWith('.tmp')).map(f => f.slice(0, -5));
+    } catch (error: any) {
+      if (error.code === 'ENOENT') return [];
+      throw error;
+    }
+
+    const filtered = prefix ? allKeys.filter(k => k.startsWith(prefix)) : allKeys;
+    const entries = await Promise.all(
+      filtered.map(async key => {
+        const value = await this.get(namespace, key);
+        return { key, value };
+      })
+    );
+    return entries.filter(e => e.value !== null);
   }
 }
 
@@ -329,6 +354,10 @@ export class MemoryProvider {
       if (value !== null) result[key] = value;
     }
     return result;
+  }
+
+  async list<T = any>(prefix?: string, scope: MemoryScope = 'photon'): Promise<Array<{ key: string; value: T }>> {
+    return this._backend.list(this.ns(scope), prefix) as Promise<Array<{ key: string; value: T }>>;
   }
 
   async update<T = any>(
