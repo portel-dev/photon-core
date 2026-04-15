@@ -12,15 +12,27 @@
 // ERROR BASE CLASSES
 // ══════════════════════════════════════════════════════════════════════════════
 
+export interface PhotonErrorOptions {
+  /** Root cause per ECMAScript Error `cause` proposal. Preserved on the error
+   * so OTel `recordException` can capture the original stack trace. */
+  cause?: unknown;
+}
+
 export class PhotonError extends Error {
+  public readonly cause?: unknown;
+
   constructor(
     message: string,
     public readonly code: string,
     public readonly details?: Record<string, unknown>,
     public readonly suggestion?: string,
+    options?: PhotonErrorOptions,
   ) {
     super(message);
     this.name = 'PhotonError';
+    if (options?.cause !== undefined) {
+      this.cause = options.cause;
+    }
     Error.captureStackTrace?.(this, this.constructor);
   }
 }
@@ -30,8 +42,9 @@ export class ValidationError extends PhotonError {
     message: string,
     details?: Record<string, unknown>,
     suggestion?: string,
+    options?: PhotonErrorOptions,
   ) {
-    super(message, 'VALIDATION_ERROR', details, suggestion);
+    super(message, 'VALIDATION_ERROR', details, suggestion, options);
     this.name = 'ValidationError';
   }
 }
