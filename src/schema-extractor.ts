@@ -1180,6 +1180,18 @@ export class SchemaExtractor {
       declarations.push({ name: 'circuitBreaker', config: circuitBreaker, phase: def?.phase ?? 8 });
     }
 
+    // @bulkhead
+    const bulkheadMatch = jsdocContent.match(/@bulkhead(?:\s+(\d+))?/i);
+    if (bulkheadMatch) {
+      const maxConcurrent = Math.max(1, parseInt(bulkheadMatch[1] || '1', 10));
+      const def = builtinRegistry.get('bulkhead');
+      declarations.push({
+        name: 'bulkhead',
+        config: { maxConcurrent },
+        phase: def?.phase ?? 15,
+      });
+    }
+
     // @cached
     const cached = this.extractCached(jsdocContent);
     if (cached) {

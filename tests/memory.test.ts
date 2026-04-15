@@ -25,11 +25,11 @@ function test(name: string, fn: () => void | Promise<void>): Promise<void> {
     });
 }
 
-// Use temp directories for tests
-const testDataDir = path.join(os.tmpdir(), `photon-memory-data-${Date.now()}`);
-const testSessionsDir = path.join(os.tmpdir(), `photon-memory-sessions-${Date.now()}`);
-process.env.PHOTON_DATA_DIR = testDataDir;
-process.env.PHOTON_SESSIONS_DIR = testSessionsDir;
+// Use a temp directory for test isolation. data-paths.ts resolves PHOTON_DIR
+// as the base; older PHOTON_DATA_DIR / PHOTON_SESSIONS_DIR names were never
+// read by the path resolver, so tests accidentally persisted to ~/.photon.
+const testBaseDir = path.join(os.tmpdir(), `photon-memory-test-${Date.now()}`);
+process.env.PHOTON_DIR = testBaseDir;
 
 async function testPhotonScope() {
   console.log('\nPhoton Scope (default):');
@@ -231,10 +231,8 @@ async function testEdgeCases() {
   await testEdgeCases();
 
   // Cleanup
-  fs.rmSync(testDataDir, { recursive: true, force: true });
-  fs.rmSync(testSessionsDir, { recursive: true, force: true });
-  delete process.env.PHOTON_DATA_DIR;
-  delete process.env.PHOTON_SESSIONS_DIR;
+  fs.rmSync(testBaseDir, { recursive: true, force: true });
+  delete process.env.PHOTON_DIR;
 
   console.log('\n' + '='.repeat(50));
   console.log(`Results: ${passed} passed, ${failed} failed`);

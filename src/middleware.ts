@@ -626,6 +626,54 @@ const retryableMiddleware = defineMiddleware<{ count: number; delay: number }>({
   },
 });
 
+// --- bulkhead (phase 15) ---
+// Caps concurrent in-flight executions per photon:instance:tool. Unlike
+// @throttled (which rate-limits over a time window), bulkhead protects
+// downstream resources from being overwhelmed by concurrent load.
+// Fast-fails when the cap is hit — callers should back off or queue.
+
+interface BulkheadStateEntry {
+  inFlight: number;
+}
+
+const bulkheadMiddleware = defineMiddleware<{ maxConcurrent: number }>({
+  name: 'bulkhead',
+  phase: 15,
+  parseShorthand(value: string) {
+    return { maxConcurrent: Math.max(1, parseInt(value.trim(), 10) || 1) };
+  },
+  parseConfig(raw) {
+    return {
+      maxConcurrent: Math.max(1, parseInt(raw.maxConcurrent || raw.max || '1', 10)),
+    };
+  },
+  create(config, state) {
+    return async (ctx, next) => {
+      const key = `${ctx.photon}:${ctx.instance}:${ctx.tool}`;
+      let entry = state.get<BulkheadStateEntry>(key);
+      if (!entry) {
+        entry = { inFlight: 0 };
+        state.set(key, entry);
+      }
+
+      if (entry.inFlight >= config.maxConcurrent) {
+        const error = new Error(
+          `Bulkhead full: ${ctx.photon}.${ctx.tool} has ${entry.inFlight} concurrent executions (cap: ${config.maxConcurrent})`
+        );
+        error.name = 'PhotonBulkheadFullError';
+        throw error;
+      }
+
+      entry.inFlight++;
+      try {
+        return await next();
+      } finally {
+        entry.inFlight = Math.max(0, entry.inFlight - 1);
+      }
+    };
+  },
+});
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // GLOBAL BUILT-IN REGISTRY
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -634,6 +682,7 @@ export const builtinRegistry = new MiddlewareRegistry();
 builtinRegistry.register(fallbackMiddleware);
 builtinRegistry.register(loggedMiddleware);
 builtinRegistry.register(circuitBreakerMiddleware);
+builtinRegistry.register(bulkheadMiddleware);
 builtinRegistry.register(throttledMiddleware);
 builtinRegistry.register(debouncedMiddleware);
 builtinRegistry.register(cachedMiddleware);
