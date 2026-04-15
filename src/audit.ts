@@ -294,18 +294,31 @@ export class AuditTrail {
     if (!fs.existsSync(dataRoot)) return results;
 
     try {
-      // Scan .data/{ns}/{photon}/logs/executions.jsonl
-      const nsDirs = fs.readdirSync(dataRoot, { withFileTypes: true })
+      // Local-namespace photons are flattened at dataRoot:
+      //   .data/{photon}/logs/executions.jsonl
+      // Marketplace-namespaced photons nest one level:
+      //   .data/{ns}/{photon}/logs/executions.jsonl
+      const topDirs = fs.readdirSync(dataRoot, { withFileTypes: true })
         .filter(e => e.isDirectory() && !e.name.startsWith('_') && !e.name.startsWith('.'));
 
-      for (const nsDir of nsDirs) {
-        const nsPath = path.join(dataRoot, nsDir.name);
-        const photonDirs = fs.readdirSync(nsPath, { withFileTypes: true })
-          .filter(e => e.isDirectory());
-
+      for (const dir of topDirs) {
+        const topPath = path.join(dataRoot, dir.name);
+        // Flat layout: this entry IS a photon if it has logs/executions.jsonl directly.
+        if (fs.existsSync(path.join(topPath, 'logs', 'executions.jsonl'))) {
+          if (!results.includes(dir.name)) results.push(dir.name);
+          continue;
+        }
+        // Otherwise treat as namespace and scan one level deeper.
+        let photonDirs: fs.Dirent[] = [];
+        try {
+          photonDirs = fs.readdirSync(topPath, { withFileTypes: true })
+            .filter(e => e.isDirectory());
+        } catch {
+          continue;
+        }
         for (const pDir of photonDirs) {
-          if (fs.existsSync(path.join(nsPath, pDir.name, 'logs', 'executions.jsonl'))) {
-            results.push(pDir.name);
+          if (fs.existsSync(path.join(topPath, pDir.name, 'logs', 'executions.jsonl'))) {
+            if (!results.includes(pDir.name)) results.push(pDir.name);
           }
         }
       }
@@ -442,16 +455,23 @@ export class AuditTrail {
 
     try {
       if (fs.existsSync(dataRoot)) {
-        const nsDirs = fs.readdirSync(dataRoot, { withFileTypes: true })
+        const topDirs = fs.readdirSync(dataRoot, { withFileTypes: true })
           .filter(e => e.isDirectory() && !e.name.startsWith('_') && !e.name.startsWith('.'));
 
-        for (const nsDir of nsDirs) {
-          const nsPath = path.join(dataRoot, nsDir.name);
+        for (const dir of topDirs) {
+          const topPath = path.join(dataRoot, dir.name);
+          // Flat local-namespace layout: .data/{photon}/logs/executions.jsonl
+          const flatLog = path.join(topPath, 'logs', 'executions.jsonl');
+          if (fs.existsSync(flatLog)) {
+            paths.push(flatLog);
+            continue;
+          }
+          // Otherwise treat as namespace and scan one level deeper.
           try {
-            const photonDirs = fs.readdirSync(nsPath, { withFileTypes: true })
+            const photonDirs = fs.readdirSync(topPath, { withFileTypes: true })
               .filter(e => e.isDirectory());
             for (const pDir of photonDirs) {
-              const logPath = path.join(nsPath, pDir.name, 'logs', 'executions.jsonl');
+              const logPath = path.join(topPath, pDir.name, 'logs', 'executions.jsonl');
               if (fs.existsSync(logPath)) paths.push(logPath);
             }
           } catch { /* skip unreadable ns dir */ }

@@ -59,7 +59,8 @@ async function testRecord() {
       error: null,
     });
 
-    const logPath = path.join(testBaseDir, '.data', 'local', 'test-photon', 'logs', 'executions.jsonl');
+    // Local-namespace photons flatten at the data root: .data/{photonName}/logs/
+    const logPath = path.join(testBaseDir, '.data', 'test-photon', 'logs', 'executions.jsonl');
     assert.ok(fs.existsSync(logPath));
 
     const content = fs.readFileSync(logPath, 'utf-8');
