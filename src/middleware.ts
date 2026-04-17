@@ -674,6 +674,102 @@ const bulkheadMiddleware = defineMiddleware<{ maxConcurrent: number }>({
   },
 });
 
+// --- mask (phase 85) ---
+// Post-execution redaction pass. Rewrites named fields in the result with
+// a masked placeholder before handoff to the transport layer. Defense
+// against oversharing and accidental PII exposure (OWASP MCP #10).
+// Runs AFTER execution, BEFORE __meta attachment (phase ≥ 85).
+
+function maskValue(value: unknown, keys: string[], placeholder: string): unknown {
+  if (value === null || value === undefined) return value;
+  if (Array.isArray(value)) {
+    return value.map((v) => maskValue(v, keys, placeholder));
+  }
+  if (typeof value === 'object') {
+    const src = value as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const k of Object.keys(src)) {
+      if (keys.includes(k)) {
+        out[k] = placeholder;
+      } else {
+        out[k] = maskValue(src[k], keys, placeholder);
+      }
+    }
+    return out;
+  }
+  return value;
+}
+
+const maskMiddleware = defineMiddleware<{ fields: string[]; placeholder: string }>({
+  name: 'mask',
+  phase: 85,
+  parseShorthand(value: string) {
+    const fields = value
+      .split(/[,\s]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    return { fields, placeholder: '[REDACTED]' };
+  },
+  parseConfig(raw) {
+    const fields = (raw.fields || '')
+      .split(/[,\s]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    return { fields, placeholder: raw.placeholder?.trim() || '[REDACTED]' };
+  },
+  create(config, _state) {
+    return async (ctx, next) => {
+      const result = await next();
+      if (config.fields.length === 0) return result;
+      return maskValue(result, config.fields, config.placeholder);
+    };
+  },
+});
+
+// --- maxResponseBytes (phase 88) ---
+// Caps the serialized response size. Hard truncates with a warning marker.
+// Prevents context-window flooding (OWASP MCP #10) — an oversized result
+// is an attack vector on its own even when the data is legitimate.
+// Runs after @mask so the cap applies to the redacted payload.
+
+const maxResponseBytesMiddleware = defineMiddleware<{ limit: number }>({
+  name: 'maxResponseBytes',
+  phase: 88,
+  parseShorthand(value: string) {
+    return { limit: Math.max(1, parseInt(value.trim(), 10) || 0) };
+  },
+  parseConfig(raw) {
+    const v = raw.limit || raw.bytes || raw.max;
+    return { limit: Math.max(1, parseInt(v || '0', 10) || 0) };
+  },
+  create(config, _state) {
+    return async (ctx, next) => {
+      const result = await next();
+      if (!config.limit || config.limit <= 0) return result;
+      let serialized: string;
+      try {
+        serialized = typeof result === 'string' ? result : JSON.stringify(result);
+      } catch {
+        return result; // unserializable → leave untouched
+      }
+      const byteLen = Buffer.byteLength(serialized, 'utf8');
+      if (byteLen <= config.limit) return result;
+      const truncated = serialized.slice(
+        0,
+        Math.max(0, config.limit - 32)
+      );
+      return {
+        truncated: true,
+        reason: 'maxResponseBytes',
+        limit: config.limit,
+        originalBytes: byteLen,
+        tool: `${ctx.photon}.${ctx.tool}`,
+        preview: truncated,
+      };
+    };
+  },
+});
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // GLOBAL BUILT-IN REGISTRY
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -691,6 +787,8 @@ builtinRegistry.register(queuedMiddleware);
 builtinRegistry.register(lockedMiddleware);
 builtinRegistry.register(timeoutMiddleware);
 builtinRegistry.register(retryableMiddleware);
+builtinRegistry.register(maskMiddleware);
+builtinRegistry.register(maxResponseBytesMiddleware);
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // PIPELINE ASSEMBLY

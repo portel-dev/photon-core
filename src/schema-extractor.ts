@@ -1268,6 +1268,29 @@ export class SchemaExtractor {
       declarations.push({ name: 'locked', config: { name: lockName }, phase: def?.phase ?? 60 });
     }
 
+    // @mask <field1,field2,...> — redact named fields from the response.
+    // Accepts comma- or whitespace-separated field names.
+    const maskMatch = jsdocContent.match(/@mask\s+([^\n@]+)/i);
+    if (maskMatch) {
+      const def = builtinRegistry.get('mask');
+      const rawValue = maskMatch[1].trim();
+      const config = def?.parseShorthand
+        ? def.parseShorthand(rawValue)
+        : { fields: rawValue.split(/[,\s]+/).filter(Boolean), placeholder: '[REDACTED]' };
+      declarations.push({ name: 'mask', config, phase: def?.phase ?? 85 });
+    }
+
+    // @maxResponseBytes <N> — cap serialized response size.
+    const maxBytesMatch = jsdocContent.match(/@maxResponseBytes\s+(\d+)/i);
+    if (maxBytesMatch) {
+      const def = builtinRegistry.get('maxResponseBytes');
+      const rawValue = maxBytesMatch[1];
+      const config = def?.parseShorthand
+        ? def.parseShorthand(rawValue)
+        : { limit: parseInt(rawValue, 10) || 0 };
+      declarations.push({ name: 'maxResponseBytes', config, phase: def?.phase ?? 88 });
+    }
+
     // 2. Extract @use declarations
     const useDecls = this.extractUseDeclarations(jsdocContent);
     for (const { name, rawConfig } of useDecls) {
@@ -1295,7 +1318,7 @@ export class SchemaExtractor {
   private extractDescription(jsdocContent: string): string {
     // Split by @tags that appear at start of a JSDoc line (after optional * prefix)
     // This avoids matching @tag references inline in description text
-    const beforeTags = jsdocContent.split(/(?:^|\n)\s*\*?\s*@(?:param|example|returns?|throws?|see|since|deprecated|version|author|license|ui|icon|format|stateful|autorun|async|webhook|cron|scheduled|locked|fallback|logged|circuitBreaker|cached|timeout|retryable|throttled|debounced|queued|validate|use|Template|Static|mcp|photon|cli|tags|dependencies|csp|visibility|auth)\b/)[0];
+    const beforeTags = jsdocContent.split(/(?:^|\n)\s*\*?\s*@(?:param|example|returns?|throws?|see|since|deprecated|version|author|license|ui|icon|format|stateful|autorun|async|webhook|cron|scheduled|locked|fallback|logged|circuitBreaker|cached|timeout|retryable|throttled|debounced|queued|validate|use|Template|Static|mcp|photon|cli|tags|dependencies|csp|visibility|auth|mask|maxResponseBytes)\b/)[0];
 
     // Remove leading * from each line and trim
     const lines = beforeTags
