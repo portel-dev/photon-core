@@ -265,39 +265,6 @@ export function getLegacyTasksDir(baseDir?: string): string {
   return path.join(getBase(baseDir), 'tasks');
 }
 
-/** Old audit path: ~/.photon/audit.jsonl */
-export function getLegacyAuditPath(): string {
-  return path.join(DEFAULT_PHOTON_DIR, 'audit.jsonl');
-}
-
-/** Old metadata path: {baseDir}/.metadata.json */
-export function getLegacyMetadataPath(baseDir?: string): string {
-  return path.join(getBase(baseDir), '.metadata.json');
-}
-
-/** Old daemon socket: ~/.photon/daemon.sock */
-export function getLegacyDaemonSocketPath(): string {
-  if (process.platform === 'win32') {
-    return '\\\\.\\pipe\\photon-daemon';
-  }
-  return path.join(DEFAULT_PHOTON_DIR, 'daemon.sock');
-}
-
-/** Old daemon PID: ~/.photon/daemon.pid */
-export function getLegacyDaemonPidPath(): string {
-  return path.join(DEFAULT_PHOTON_DIR, 'daemon.pid');
-}
-
-/** Old daemon log: ~/.photon/daemon.log */
-export function getLegacyDaemonLogPath(): string {
-  return path.join(DEFAULT_PHOTON_DIR, 'daemon.log');
-}
-
-/** Old cache dir: {baseDir}/.cache/ or {baseDir}/cache/ */
-export function getLegacyCacheDir(baseDir?: string): string {
-  return path.join(getBase(baseDir), '.cache');
-}
-
 /** Old schedules dir: ~/.photon/schedules/{photonName}/ */
 export function getLegacySchedulesDir(photonName: string): string {
   const safeName = photonName.replace(/[^a-zA-Z0-9_-]/g, '_');
