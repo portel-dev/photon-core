@@ -187,6 +187,11 @@ export function getBasesRegistryPath(): string {
  *   git@github.com:portel-dev/photons.git     → 'portel-dev'
  *   https://github.com/arul-kumar/my-photons  → 'arul-kumar'
  *   (no git remote)                           → ''
+ *
+ * @deprecated Under Option B the namespace is a pure function of the
+ *   photon file's position relative to PHOTON_DIR; git state must never
+ *   influence data paths. Scheduled for removal in the next minor release.
+ *   See docs/internals/PHOTON-DIR-AND-NAMESPACE.md §3.
  */
 export function detectNamespace(dir: string): string {
   try {
