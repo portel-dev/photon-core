@@ -269,6 +269,43 @@ async function loadPhotonInternal(
     // docs/internals/PHOTON-DIR-AND-NAMESPACE.md §3.
     instance._photonName = photonName;
     instance._photonNamespace = options.namespace ?? deriveNamespace(absolutePath, options.baseDir);
+    instance._photonFilePath = absolutePath;
+    // Stat-gate baseline. When executeTool() sees the source file has
+    // changed, it fires _photonReloader (registered just below) to swap
+    // in the fresh compile before dispatching.
+    try {
+      const s = fsSync.statSync(absolutePath);
+      instance._photonSourceStat = { mtimeMs: s.mtimeMs, size: s.size, ino: s.ino };
+    } catch {
+      // No stat — skip baselining so the gate is a no-op.
+    }
+    instance._photonReloader = async () => {
+      // Invalidate the cache entry, then re-run the whole load pipeline
+      // and copy public surface from the fresh instance onto the existing
+      // one. Callers already holding a reference to the proxy see new
+      // method behavior on the very next dispatch.
+      instanceCache.delete(cacheKey);
+      const fresh = (await photon(absolutePath, options)) as Record<string, any>;
+      // Refresh stat baseline on success so we don't re-trigger.
+      try {
+        const s = fsSync.statSync(absolutePath);
+        instance._photonSourceStat = { mtimeMs: s.mtimeMs, size: s.size, ino: s.ino };
+      } catch {
+        // ignore — next call will re-evaluate
+      }
+      // Rewire every own property from the fresh instance onto the
+      // live one. Prototype-level methods are re-looked-up through the
+      // instance's class on each dispatch via the proxy's method lookup,
+      // so they pick up the new code automatically. Own-property state
+      // (collections, explicit fields) gets refreshed here.
+      for (const key of Object.keys(fresh)) {
+        try {
+          (instance as Record<string, any>)[key] = fresh[key];
+        } catch {
+          // Read-only own property — skip; the proxy path will handle it.
+        }
+      }
+    };
     if (options.instanceName) {
       instance.instanceName = options.instanceName;
     }

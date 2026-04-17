@@ -79,6 +79,25 @@ export class Photon {
   _photonFilePath?: string;
 
   /**
+   * Stat snapshot captured when the current photon instance was loaded.
+   * Used by executeTool() to detect out-of-band edits so CLI-direct and
+   * lite-loader callers see new code immediately after a file save.
+   * See `_photonReloader` for the callback invoked on change.
+   * @internal
+   */
+  _photonSourceStat?: { mtimeMs: number; size: number; ino: number };
+
+  /**
+   * Callback the loader registers so executeTool() can trigger a live
+   * reload when `_photonFilePath` has changed since load. The loader is
+   * expected to re-evaluate the file, replace the cached module, and
+   * update `_photonSourceStat` on success. Missing callback means the
+   * gate is a no-op (the original behavior).
+   * @internal
+   */
+  _photonReloader?: () => Promise<void>;
+
+  /**
    * Dynamic photon resolver - injected by runtime loader
    * Used by this.photon.use() for runtime photon access
    * @internal
@@ -624,6 +643,15 @@ export class Photon {
    * Execute a tool method
    */
   async executeTool(toolName: string, parameters: any, options?: { outputHandler?: (data: any) => void }): Promise<any> {
+    // Stat-gate: close the edit→dispatch race on non-daemon paths. The
+    // daemon has its own equivalent at src/daemon/server.ts; this runs
+    // for CLI-direct dispatch and for callers using the lite loader's
+    // programmatic photon() API. If the source file has changed since
+    // the instance was loaded, hand off to the loader-registered
+    // reloader before dispatching so the first call after a save sees
+    // the new code.
+    await this._statGateIfStale();
+
     const method = (this as any)[toolName];
 
     if (!method || typeof method !== 'function') {
@@ -640,6 +668,41 @@ export class Photon {
         throw error;
       }
     });
+  }
+
+  /**
+   * If a reloader is registered and the source file has changed since it
+   * was last loaded, invoke the reloader. Silent on missing file or
+   * reloader failure — dispatch continues on the stale instance rather
+   * than throwing for an observability concern.
+   */
+  private async _statGateIfStale(): Promise<void> {
+    const filePath = this._photonFilePath;
+    const reloader = this._photonReloader;
+    const cached = this._photonSourceStat;
+    if (!filePath || !reloader || !cached) return;
+    let current: { mtimeMs: number; size: number; ino: number } | null = null;
+    try {
+      const s = fs.statSync(filePath);
+      current = { mtimeMs: s.mtimeMs, size: s.size, ino: s.ino };
+    } catch {
+      // Source gone or unreadable — nothing to gate against. Dispatch
+      // will surface the missing-photon error through its own path.
+      return;
+    }
+    if (
+      current.mtimeMs === cached.mtimeMs &&
+      current.size === cached.size &&
+      current.ino === cached.ino
+    ) {
+      return;
+    }
+    try {
+      await reloader();
+    } catch {
+      // Reloader errors are non-fatal — keep running on the stale
+      // instance rather than making dispatch itself fail.
+    }
   }
 
   /**
