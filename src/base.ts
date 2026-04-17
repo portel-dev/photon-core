@@ -636,9 +636,43 @@ export class Photon {
         return result;
       } catch (error: any) {
         console.error(`Tool execution failed: ${toolName} - ${error.message}`);
+        await this._invokeErrorHook(error, { tool: toolName, params: parameters });
         throw error;
       }
     });
+  }
+
+  /**
+   * Invoke the onError observability hook with a bounded timeout. Never
+   * suppresses the original error and never throws itself — a throw or
+   * timeout inside the hook is logged and swallowed so observability code
+   * can never cascade into the request path.
+   */
+  private async _invokeErrorHook(
+    error: unknown,
+    ctx: { tool: string; params: any }
+  ): Promise<void> {
+    const hook = (this as any).onError;
+    if (typeof hook !== 'function') return;
+    const TIMEOUT_MS = 5000;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        Promise.resolve(hook.call(this, error, ctx)),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error(`onError hook exceeded ${TIMEOUT_MS}ms`)),
+            TIMEOUT_MS
+          );
+        }),
+      ]);
+    } catch (hookError: any) {
+      console.error(
+        `onError hook failed for ${ctx.tool}: ${hookError?.message ?? String(hookError)}`
+      );
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   }
 
   /**
@@ -654,6 +688,15 @@ export class Photon {
    * During hot-reload, receives context so you can skip resource cleanup.
    */
   async onShutdown?(ctx?: { reason?: string }): Promise<void>;
+  /**
+   * Called when any tool method throws. Observability only — the hook
+   * cannot suppress or transform the error. A throw or timeout inside
+   * the hook is logged and swallowed. Default timeout is 5s.
+   *
+   * Use it for centralized logging, metrics, or error reporting instead
+   * of wrapping every method in try/catch.
+   */
+  async onError?(error: unknown, ctx: { tool: string; params: any }): Promise<void>;
 
   /**
    * Get an MCP client for calling external MCP servers
