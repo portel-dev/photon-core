@@ -14,6 +14,21 @@ import { ExtractedSchema, ConstructorParam, TemplateInfo, StaticInfo, OutputForm
 import { parseDuration, parseRate } from './utils/duration.js';
 import { builtinRegistry, type MiddlewareDeclaration } from './middleware.js';
 
+// Track which `handle*` method names have already emitted a deprecation
+// warning this process so large photons don't spam the console.
+const handlePrefixWarned = new Set<string>();
+
+function warnHandlePrefixOnce(methodName: string): void {
+  if (handlePrefixWarned.has(methodName)) return;
+  handlePrefixWarned.add(methodName);
+  // eslint-disable-next-line no-console
+  console.error(
+    `[photon] deprecation: method "${methodName}" is being auto-registered as a ` +
+      `webhook via the legacy handle* prefix. Add an explicit "@webhook" JSDoc ` +
+      `tag; the prefix convention will be removed in the next minor release.`,
+  );
+}
+
 export interface ExtractedMetadata {
   tools: ExtractedSchema[];
   templates: TemplateInfo[];
@@ -2048,10 +2063,15 @@ export class SchemaExtractor {
   // ═══════════════════════════════════════════════════════════════════════════════
 
   /**
-   * Extract webhook configuration from @webhook tag or handle* prefix
+   * Extract webhook configuration from @webhook tag or handle* prefix.
    * - @webhook → use method name as path
    * - @webhook stripe → custom path "stripe"
-   * - handle* prefix → auto-detected as webhook
+   * - handle* prefix → auto-detected as webhook (DEPRECATED)
+   *
+   * The handle* prefix is a legacy convention being removed. It still
+   * works for one release but emits a one-time stderr warning per
+   * method so users can migrate to the explicit @webhook tag before
+   * the convention is dropped.
    */
   private extractWebhook(jsdocContent: string, methodName: string): boolean | string | undefined {
     // Check for @webhook tag with optional path
@@ -2063,8 +2083,9 @@ export class SchemaExtractor {
       return path || true;
     }
 
-    // Check for handle* prefix (convention)
+    // Check for handle* prefix (legacy convention — deprecated).
     if (methodName.startsWith('handle')) {
+      warnHandlePrefixOnce(methodName);
       return true;
     }
 
