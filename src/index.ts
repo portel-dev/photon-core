@@ -172,6 +172,7 @@ export {
   resolvePhotonPath,
   listPhotonFiles,
   listPhotonFilesWithNamespace,
+  listPhotonSourceFiles,
   ensurePhotonDir,
   DEFAULT_PHOTON_DIR,
   type ResolverOptions,

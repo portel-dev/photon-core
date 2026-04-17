@@ -57,6 +57,28 @@ const SKIP_DIRS = new Set([
 ]);
 
 /**
+ * List photon source file names in a directory. Returns just filenames
+ * (not full paths) so callers can choose to either join with the dir
+ * or operate on the basename directly. Missing/unreadable dirs return [].
+ *
+ * Replaces scattered `readdirSync(dir).filter(f => f.endsWith('.photon.ts'))`
+ * expressions so the default extension list stays consistent.
+ */
+export function listPhotonSourceFiles(
+  dir: string,
+  options?: { extensions?: string[] },
+): string[] {
+  const extensions = options?.extensions ?? defaultOptions.extensions;
+  try {
+    return fsSync
+      .readdirSync(dir)
+      .filter((f) => extensions.some((ext) => f.endsWith(ext)));
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Resolve a file path from name.
  *
  * Supports namespace-qualified names: 'namespace:photonName'
