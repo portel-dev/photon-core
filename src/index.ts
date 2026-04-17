@@ -592,3 +592,8 @@ export {
 // ===== DATA PATHS =====
 // Central data path resolver — single source of truth for all runtime data locations
 export * from './data-paths.js';
+
+// ===== BASES REGISTRY =====
+// Daemon-owned registry of every PHOTON_DIR served. Used to discover schedules
+// and other per-base data on daemon startup. See data-paths getBasesRegistryPath.
+export * from './bases-registry.js';

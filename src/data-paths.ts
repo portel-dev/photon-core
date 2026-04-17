@@ -155,6 +155,22 @@ export function getDaemonLogPath(): string {
   return path.join(DEFAULT_BASE, '.data', 'daemon.log');
 }
 
+/**
+ * Bases registry: always ~/.photon/.data/.bases.json (global, one per user).
+ *
+ * The daemon maintains this file to track every PHOTON_DIR it has served.
+ * On startup it reads the registry and scans each base for schedules and
+ * other long-lived per-photon state that must survive daemon restarts.
+ *
+ * The `PHOTON_BASES_REGISTRY` env var exists as a test-only override;
+ * production always uses the fixed global path.
+ *
+ * See docs/internals/PHOTON-DIR-AND-NAMESPACE.md §8.
+ */
+export function getBasesRegistryPath(): string {
+  return process.env.PHOTON_BASES_REGISTRY ?? path.join(DEFAULT_BASE, '.data', '.bases.json');
+}
+
 // ── Namespace Detection ──────────────────────────────────────────────────────
 
 /**
