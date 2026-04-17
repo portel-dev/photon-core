@@ -18,7 +18,10 @@ import * as fsSync from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
-export const DEFAULT_PHOTON_DIR = path.join(os.homedir(), '.photon');
+import { DEFAULT_PHOTON_DIR } from './data-paths.js';
+// Re-exported so existing `import { DEFAULT_PHOTON_DIR } from '@portel/photon-core'`
+// callers keep working. One canonical definition lives in data-paths.ts.
+export { DEFAULT_PHOTON_DIR };
 
 /**
  * Expand tilde (~) to user's home directory

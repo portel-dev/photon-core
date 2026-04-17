@@ -31,10 +31,16 @@ import * as path from 'path';
 import * as os from 'os';
 import { execSync } from 'child_process';
 
-const DEFAULT_BASE = path.join(os.homedir(), '.photon');
+/**
+ * Default PHOTON_DIR when none is explicitly resolved: the user's home
+ * `.photon` directory. Single source of truth — path-resolver.ts and
+ * photon/src/context.ts re-export this so there is exactly one constant
+ * for the concept.
+ */
+export const DEFAULT_PHOTON_DIR = path.join(os.homedir(), '.photon');
 
 function getBase(baseDir?: string): string {
-  return baseDir || process.env.PHOTON_DIR || DEFAULT_BASE;
+  return baseDir || process.env.PHOTON_DIR || DEFAULT_PHOTON_DIR;
 }
 
 // ── Root ─────────────────────────────────────────────────────────────────────
@@ -142,17 +148,17 @@ export function getDaemonSocketPath(): string {
   if (process.platform === 'win32') {
     return '\\\\.\\pipe\\photon-daemon';
   }
-  return path.join(DEFAULT_BASE, '.data', 'daemon.sock');
+  return path.join(DEFAULT_PHOTON_DIR, '.data', 'daemon.sock');
 }
 
 /** Daemon PID file: always ~/.photon/.data/daemon.pid */
 export function getDaemonPidPath(): string {
-  return path.join(DEFAULT_BASE, '.data', 'daemon.pid');
+  return path.join(DEFAULT_PHOTON_DIR, '.data', 'daemon.pid');
 }
 
 /** Daemon log file: always ~/.photon/.data/daemon.log */
 export function getDaemonLogPath(): string {
-  return path.join(DEFAULT_BASE, '.data', 'daemon.log');
+  return path.join(DEFAULT_PHOTON_DIR, '.data', 'daemon.log');
 }
 
 /**
@@ -168,7 +174,7 @@ export function getDaemonLogPath(): string {
  * See docs/internals/PHOTON-DIR-AND-NAMESPACE.md §8.
  */
 export function getBasesRegistryPath(): string {
-  return process.env.PHOTON_BASES_REGISTRY ?? path.join(DEFAULT_BASE, '.data', '.bases.json');
+  return process.env.PHOTON_BASES_REGISTRY ?? path.join(DEFAULT_PHOTON_DIR, '.data', '.bases.json');
 }
 
 // ── Namespace Detection ──────────────────────────────────────────────────────
@@ -261,7 +267,7 @@ export function getLegacyTasksDir(baseDir?: string): string {
 
 /** Old audit path: ~/.photon/audit.jsonl */
 export function getLegacyAuditPath(): string {
-  return path.join(DEFAULT_BASE, 'audit.jsonl');
+  return path.join(DEFAULT_PHOTON_DIR, 'audit.jsonl');
 }
 
 /** Old metadata path: {baseDir}/.metadata.json */
@@ -274,17 +280,17 @@ export function getLegacyDaemonSocketPath(): string {
   if (process.platform === 'win32') {
     return '\\\\.\\pipe\\photon-daemon';
   }
-  return path.join(DEFAULT_BASE, 'daemon.sock');
+  return path.join(DEFAULT_PHOTON_DIR, 'daemon.sock');
 }
 
 /** Old daemon PID: ~/.photon/daemon.pid */
 export function getLegacyDaemonPidPath(): string {
-  return path.join(DEFAULT_BASE, 'daemon.pid');
+  return path.join(DEFAULT_PHOTON_DIR, 'daemon.pid');
 }
 
 /** Old daemon log: ~/.photon/daemon.log */
 export function getLegacyDaemonLogPath(): string {
-  return path.join(DEFAULT_BASE, 'daemon.log');
+  return path.join(DEFAULT_PHOTON_DIR, 'daemon.log');
 }
 
 /** Old cache dir: {baseDir}/.cache/ or {baseDir}/cache/ */
@@ -295,11 +301,11 @@ export function getLegacyCacheDir(baseDir?: string): string {
 /** Old schedules dir: ~/.photon/schedules/{photonName}/ */
 export function getLegacySchedulesDir(photonName: string): string {
   const safeName = photonName.replace(/[^a-zA-Z0-9_-]/g, '_');
-  return path.join(DEFAULT_BASE, 'schedules', safeName);
+  return path.join(DEFAULT_PHOTON_DIR, 'schedules', safeName);
 }
 
 /** Old per-photon config: ~/.photon/{photonName}/config.json */
 export function getLegacyPhotonConfigPath(photonName: string): string {
   const safeName = photonName.replace(/[^a-zA-Z0-9_-]/g, '_');
-  return path.join(DEFAULT_BASE, safeName, 'config.json');
+  return path.join(DEFAULT_PHOTON_DIR, safeName, 'config.json');
 }
