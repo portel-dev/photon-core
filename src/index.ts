@@ -162,6 +162,12 @@ export { DependencyManager } from './dependency-manager.js';
 
 // Schema extraction
 export { SchemaExtractor, detectCapabilities, type PhotonCapability } from './schema-extractor.js';
+export {
+  sanitizeDescription,
+  MAX_DESCRIPTION_LENGTH,
+  type SanitizerWarning,
+  type SanitizeResult,
+} from './description-sanitizer.js';
 
 // Path resolution (Photon-specific paths)
 export {

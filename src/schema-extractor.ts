@@ -13,6 +13,10 @@ import * as ts from 'typescript';
 import { ExtractedSchema, ConstructorParam, TemplateInfo, StaticInfo, OutputFormat, YieldInfo, MCPDependency, PhotonDependency, CLIDependency, ResolvedInjection, PhotonAssets, UIAsset, PromptAsset, ResourceAsset, ConfigSchema, ConfigParam, SettingsSchema, SettingsProperty, NotificationSubscription } from './types.js';
 import { parseDuration, parseRate } from './utils/duration.js';
 import { builtinRegistry, type MiddlewareDeclaration } from './middleware.js';
+import { sanitizeDescription } from './description-sanitizer.js';
+
+// Warn once per unique (method, rule) pair so poisoned photons don't spam.
+const sanitizeWarnings = new Set<string>();
 
 // Track which `handle*` method names have already emitted a deprecation
 // warning this process so large photons don't spam the console.
@@ -1328,8 +1332,26 @@ export class SchemaExtractor {
 
     const description = parts.join('');
 
-    // Clean up multiple spaces
-    return description.replace(/\s+/g, ' ').trim() || 'No description';
+    // Clean up multiple spaces, then defend against tool-description poisoning.
+    const collapsed = description.replace(/\s+/g, ' ').trim() || 'No description';
+    const { cleaned, warnings, truncated } = sanitizeDescription(collapsed);
+    if (warnings.length > 0 || truncated) {
+      for (const w of warnings) {
+        const key = `${w.rule}|${w.sample}`;
+        if (sanitizeWarnings.has(key)) continue;
+        sanitizeWarnings.add(key);
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[photon] description sanitizer: redacted ${w.rule} (sample: "${w.sample}")`
+        );
+      }
+      if (truncated && !sanitizeWarnings.has('truncated')) {
+        sanitizeWarnings.add('truncated');
+        // eslint-disable-next-line no-console
+        console.warn('[photon] description sanitizer: truncated oversized description');
+      }
+    }
+    return cleaned;
   }
 
   /**
