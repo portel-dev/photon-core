@@ -87,10 +87,21 @@ import {
 // ══════════════════════════════════════════════════════════════════════════════
 
 /**
- * Default runs directory (legacy: ~/.photon/runs)
- * @deprecated Use getPhotonRunsDir(namespace, photonName) from data-paths.ts
+ * Resolve the default runs directory at call time so a long-lived daemon
+ * that serves multiple PHOTON_DIRs picks up each base's runs. Previously
+ * a module-level const frozen at import time.
+ * @deprecated Use getPhotonRunsDir(namespace, photonName, baseDir) for per-photon runs.
  */
-export const RUNS_DIR = getLegacyRunsDir();
+function defaultRunsDir(): string {
+  return getLegacyRunsDir();
+}
+
+/**
+ * Back-compat export. Resolved at import time — kept for consumers that
+ * read `RUNS_DIR` as a constant. New code should call getPhotonRunsDir().
+ * @deprecated Use getPhotonRunsDir(namespace, photonName, baseDir).
+ */
+export const RUNS_DIR = defaultRunsDir();
 
 // ══════════════════════════════════════════════════════════════════════════════
 // CHECKPOINT YIELD TYPE
@@ -136,7 +147,9 @@ export class StateLog {
   private logPath: string;
 
   constructor(runId: string, runsDir?: string) {
-    this.logPath = path.join(runsDir || RUNS_DIR, `${runId}.jsonl`);
+    // Resolve runs dir at call time so the current PHOTON_DIR is honored
+    // even when a long-lived process has served earlier bases.
+    this.logPath = path.join(runsDir || defaultRunsDir(), `${runId}.jsonl`);
   }
 
   /**
@@ -573,7 +586,7 @@ export async function executeStatefulGenerator<T>(
  * List all workflow runs
  */
 export async function listRuns(runsDir?: string): Promise<WorkflowRun[]> {
-  const dir = runsDir || RUNS_DIR;
+  const dir = runsDir || defaultRunsDir();
   const runs: WorkflowRun[] = [];
 
   try {
@@ -639,7 +652,7 @@ export async function getRunInfo(runId: string, runsDir?: string): Promise<Workf
  * Delete a workflow run
  */
 export async function deleteRun(runId: string, runsDir?: string): Promise<void> {
-  const logPath = path.join(runsDir || RUNS_DIR, `${runId}.jsonl`);
+  const logPath = path.join(runsDir || defaultRunsDir(), `${runId}.jsonl`);
   await fs.unlink(logPath);
 }
 

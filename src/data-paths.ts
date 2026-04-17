@@ -244,19 +244,19 @@ export function getLegacySessionMemoryDir(sessionId: string, photonName: string,
   return path.join(getBase(baseDir), 'sessions', safeSession, safeName);
 }
 
-/** Old runs dir: ~/.photon/runs/ */
-export function getLegacyRunsDir(): string {
-  return path.join(DEFAULT_BASE, 'runs');
+/** Old runs dir: {baseDir}/runs/ */
+export function getLegacyRunsDir(baseDir?: string): string {
+  return path.join(getBase(baseDir), 'runs');
 }
 
-/** Old logs dir: ~/.photon/logs/{photonId}/ */
-export function getLegacyLogsDir(photonName: string): string {
-  return path.join(DEFAULT_BASE, 'logs', photonName);
+/** Old logs dir: {baseDir}/logs/{photonId}/ */
+export function getLegacyLogsDir(photonName: string, baseDir?: string): string {
+  return path.join(getBase(baseDir), 'logs', photonName);
 }
 
-/** Old tasks dir: ~/.photon/tasks/ */
-export function getLegacyTasksDir(): string {
-  return path.join(DEFAULT_BASE, 'tasks');
+/** Old tasks dir: {baseDir}/tasks/ */
+export function getLegacyTasksDir(baseDir?: string): string {
+  return path.join(getBase(baseDir), 'tasks');
 }
 
 /** Old audit path: ~/.photon/audit.jsonl */
