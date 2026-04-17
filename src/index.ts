@@ -494,7 +494,14 @@ export {
 
 // ===== PHOTON LOADER LITE =====
 // Direct TypeScript API for loading .photon.ts files with full enhancements
-export { photon, clearPhotonCache, type PhotonOptions, type PhotonEvent } from './photon-loader-lite.js';
+export {
+  photon,
+  clearPhotonCache,
+  disposePhoton,
+  disposeAllPhotons,
+  type PhotonOptions,
+  type PhotonEvent,
+} from './photon-loader-lite.js';
 
 // ===== FILE WATCHING =====
 // Reusable photon file watcher with symlink resolution, debouncing, rename handling

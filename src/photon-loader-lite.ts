@@ -18,7 +18,9 @@
  */
 
 import * as fs from 'fs/promises';
+import * as fsSync from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import { pathToFileURL } from 'url';
 import { compilePhotonTS } from './compiler.js';
 import { findPhotonClass } from './class-detection.js';
@@ -135,10 +137,79 @@ export async function photon<T = any>(
 }
 
 /**
- * Clear the photon instance cache. Useful for testing.
+ * Clear the photon instance cache. Fires onShutdown on each cached
+ * instance first so resources held across loads get a chance to drain.
  */
-export function clearPhotonCache(): void {
+export async function clearPhotonCache(): Promise<void> {
+  await disposeAllPhotons('clear-cache');
+}
+
+/**
+ * Dispose one cached photon instance (by absolute path + optional instance
+ * name). Invokes onShutdown with the given reason before evicting the
+ * cache entry. Errors from onShutdown are logged and swallowed.
+ */
+export async function disposePhoton(
+  filePath: string,
+  opts: { instanceName?: string; reason?: string } = {},
+): Promise<boolean> {
+  const absolutePath = path.isAbsolute(filePath)
+    ? filePath
+    : path.resolve(process.cwd(), filePath);
+  const cacheKey = opts.instanceName ? `${absolutePath}::${opts.instanceName}` : absolutePath;
+  const proxy = instanceCache.get(cacheKey);
+  if (!proxy) return false;
+  await invokeShutdownQuietly(proxy, opts.reason || 'dispose');
+  instanceCache.delete(cacheKey);
+  return true;
+}
+
+/**
+ * Dispose every cached photon instance and clear the cache. Fires
+ * onShutdown on each with the given reason.
+ */
+export async function disposeAllPhotons(reason = 'dispose'): Promise<void> {
+  const proxies = Array.from(instanceCache.values());
   instanceCache.clear();
+  await Promise.all(proxies.map((p) => invokeShutdownQuietly(p, reason)));
+}
+
+/** Fire onShutdown with a bounded timeout; never propagates errors. */
+async function invokeShutdownQuietly(proxy: any, reason: string): Promise<void> {
+  try {
+    const hook = proxy?.onShutdown;
+    if (typeof hook !== 'function') return;
+    const TIMEOUT_MS = 10_000;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        Promise.resolve(hook.call(proxy, { reason })),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error(`onShutdown hook exceeded ${TIMEOUT_MS}ms`)),
+            TIMEOUT_MS,
+          );
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  } catch (err: any) {
+    // eslint-disable-next-line no-console
+    console.error(`[photon] onShutdown failed during ${reason}: ${err?.message ?? err}`);
+  }
+}
+
+/** Register a single beforeExit handler that drains cached instances. */
+let exitHookRegistered = false;
+function registerExitHook(): void {
+  if (exitHookRegistered) return;
+  exitHookRegistered = true;
+  process.on('beforeExit', () => {
+    // Fire and forget — beforeExit allows async work, but we don't
+    // block process exit if a photon's onShutdown misbehaves.
+    void disposeAllPhotons('process-exit');
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -192,9 +263,12 @@ async function loadPhotonInternal(
     // 9. Instantiate
     const instance = new EnhancedClass(...constructorArgs) as Record<string, any>;
 
-    // 10. Set photon identity
+    // 10. Set photon identity. Namespace mirrors the file's position under
+    // baseDir (same rule the classic loader applies). Falls back to 'local'
+    // when no baseDir context is available. See
+    // docs/internals/PHOTON-DIR-AND-NAMESPACE.md §3.
     instance._photonName = photonName;
-    instance._photonNamespace = options.namespace || 'local';
+    instance._photonNamespace = options.namespace ?? deriveNamespace(absolutePath, options.baseDir);
     if (options.instanceName) {
       instance.instanceName = options.instanceName;
     }
@@ -219,7 +293,7 @@ async function loadPhotonInternal(
       method: string,
       params: Record<string, any>,
     ) => {
-      const targetPath = resolvePhotonPath(targetPhotonName, absolutePath);
+      const targetPath = resolvePhotonPath(targetPhotonName, absolutePath, options.baseDir);
       const target = await photon(targetPath, {
         baseDir: options.baseDir,
         mcpFactory: options.mcpFactory,
@@ -233,13 +307,33 @@ async function loadPhotonInternal(
       await instance.onInitialize();
     }
 
-    // 16. Build middleware proxy
+    // 16. Build middleware proxy (wraps dispatch with onError observability)
     const proxy = buildMiddlewareProxy(instance, photonName, toolSchemas, options);
+
+    // 17. Register for shutdown on process exit so onShutdown fires for
+    // lite-loaded photons the caller never explicitly disposed.
+    registerExitHook();
 
     return proxy;
   } finally {
     loadingPaths.delete(absolutePath);
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Namespace derivation (mirrors classic loader's resolveNamespace)
+// ═══════════════════════════════════════════════════════════════════
+
+function deriveNamespace(absolutePath: string, baseDir?: string): string {
+  if (!baseDir) return 'local';
+  const resolvedBase = path.resolve(baseDir);
+  const rel = path.relative(resolvedBase, absolutePath);
+  // File outside baseDir — fall back to 'local'.
+  if (rel.startsWith('..')) return 'local';
+  const parts = rel.split(path.sep);
+  // Flat file at baseDir root — use 'local' (equivalent to '' in getPhotonDataDir).
+  if (parts.length < 2) return 'local';
+  return parts.slice(0, -1).join(path.sep);
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -268,7 +362,12 @@ async function resolveConstructorArgs(
       case 'photon': {
         // Recursive photon loading
         const dep = injection.photonDependency!;
-        const depPath = resolvePhotonDepPath(dep.source, dep.sourceType, currentPath);
+        const depPath = resolvePhotonDepPath(
+          dep.source,
+          dep.sourceType,
+          currentPath,
+          options.baseDir,
+        );
         const depInstance = await photon(depPath, {
           baseDir: options.baseDir,
           mcpFactory: options.mcpFactory,
@@ -507,14 +606,18 @@ function buildMiddlewareProxy(
 
       const schema = toolMap.get(prop);
       const declarations: MiddlewareDeclaration[] = schema?.middleware || [];
+      const hasErrorHook = typeof instance.onError === 'function';
 
-      // No middleware — return bound method directly
-      if (declarations.length === 0) {
+      // No middleware AND no onError — preserve the bound-method fast path
+      // (keeps sync methods sync for callers that don't need the hook).
+      if (declarations.length === 0 && !hasErrorHook) {
         return value.bind(target);
       }
 
-      // Return a function that applies middleware on each call
-      return (...args: any[]) => {
+      // Return a function that runs through the middleware chain (if any)
+      // and routes any thrown error through the onError observability hook
+      // before re-throwing. Hook cannot suppress or transform the error.
+      return async (...args: any[]) => {
         const ctx: MiddlewareContext = {
           photon: photonName,
           tool: prop,
@@ -523,18 +626,50 @@ function buildMiddlewareProxy(
         };
 
         const execute = () => value.apply(target, args);
-        const chain = buildMiddlewareChain(
-          execute,
-          declarations,
-          registry,
-          stateStores,
-          ctx,
-        );
+        const dispatch =
+          declarations.length === 0
+            ? execute
+            : buildMiddlewareChain(execute, declarations, registry, stateStores, ctx);
 
-        return chain();
+        try {
+          return await dispatch();
+        } catch (err) {
+          await invokeErrorHookLite(instance, err, { tool: prop, params: args[0] ?? {} });
+          throw err;
+        }
       };
     },
   });
+}
+
+/** Fire onError with a bounded 5s timeout. Never throws, never suppresses. */
+async function invokeErrorHookLite(
+  instance: Record<string, any>,
+  error: unknown,
+  ctx: { tool: string; params: any },
+): Promise<void> {
+  const hook = instance.onError;
+  if (typeof hook !== 'function') return;
+  const TIMEOUT_MS = 5_000;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      Promise.resolve(hook.call(instance, error, ctx)),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`onError hook exceeded ${TIMEOUT_MS}ms`)),
+          TIMEOUT_MS,
+        );
+      }),
+    ]);
+  } catch (hookErr: any) {
+    // eslint-disable-next-line no-console
+    console.error(
+      `onError hook failed for ${ctx.tool}: ${hookErr?.message ?? String(hookErr)}`,
+    );
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -553,12 +688,15 @@ function derivePhotonName(filePath: string): string {
 }
 
 /**
- * Resolve a photon dependency source to an absolute path.
+ * Resolve a photon dependency source to an absolute path. Marketplace
+ * lookups respect the resolved PHOTON_DIR so lite-loaded photons find
+ * their dependencies under the same base the caller configured.
  */
 function resolvePhotonDepPath(
   source: string,
   sourceType: string,
   currentPhotonPath: string,
+  baseDir?: string,
 ): string {
   if (sourceType === 'local') {
     if (source.startsWith('./') || source.startsWith('../')) {
@@ -567,10 +705,14 @@ function resolvePhotonDepPath(
     return source;
   }
 
-  // For marketplace photons, look in ~/.photon/photons/<name>/
+  // Marketplace photons live under the resolved PHOTON_DIR (not hardcoded
+  // to ~/.photon as before). Canonical layout is `{base}/{source}.photon.ts`
+  // for flat installs, `{base}/<ns>/{source}.photon.ts` for namespaced ones.
+  // Here we return the flat path; callers that need namespaced resolution
+  // should use the classic loader.
   if (sourceType === 'marketplace') {
-    const homeDir = process.env.HOME || process.env.USERPROFILE || '';
-    return path.join(homeDir, '.photon', 'photons', source, `${source}.photon.ts`);
+    const base = baseDir || process.env.PHOTON_DIR || path.join(os.homedir(), '.photon');
+    return path.join(base, `${source}.photon.ts`);
   }
 
   // npm and github sources — for now, throw a helpful error
@@ -583,14 +725,15 @@ function resolvePhotonDepPath(
 
 /**
  * Resolve a photon name to a path for cross-photon calls.
- * Searches: sibling files, then ~/.photon/photons/
+ * Prefers a sibling file next to the caller; falls back to the resolved
+ * PHOTON_DIR. Returns the most likely path; the caller reports an
+ * actionable error if it doesn't exist.
  */
-function resolvePhotonPath(photonName: string, callerPath: string): string {
-  // Try sibling file first
-  const dir = path.dirname(callerPath);
-  const siblingPath = path.join(dir, `${photonName}.photon.ts`);
-
-  // We can't do sync fs.existsSync in an async context cleanly,
-  // so just return the sibling path — the load will fail with a clear error if not found
-  return siblingPath;
+function resolvePhotonPath(photonName: string, callerPath: string, baseDir?: string): string {
+  const siblingPath = path.join(path.dirname(callerPath), `${photonName}.photon.ts`);
+  if (fsSync.existsSync(siblingPath)) return siblingPath;
+  const base = baseDir || process.env.PHOTON_DIR || path.join(os.homedir(), '.photon');
+  const baseFlat = path.join(base, `${photonName}.photon.ts`);
+  if (fsSync.existsSync(baseFlat)) return baseFlat;
+  return siblingPath; // load will fail with a clear error if missing
 }

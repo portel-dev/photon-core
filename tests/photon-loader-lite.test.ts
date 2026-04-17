@@ -5,7 +5,13 @@
 
 import { strict as assert } from 'assert';
 import * as path from 'path';
-import { photon, clearPhotonCache, type PhotonEvent } from '../src/photon-loader-lite.js';
+import {
+  photon,
+  clearPhotonCache,
+  disposePhoton,
+  disposeAllPhotons,
+  type PhotonEvent,
+} from '../src/photon-loader-lite.js';
 
 const FIXTURES = path.join(import.meta.dirname, 'fixtures');
 
@@ -255,6 +261,85 @@ async function run() {
     } catch (e: any) {
       assert.ok(e.message || e.code, 'Should have error info');
     }
+  });
+
+  // ─── Lifecycle parity (onError, onShutdown, namespace) ──────
+
+  console.log('\n  Lifecycle parity');
+
+  // The fixture stores events on globalThis so the compiled photon module
+  // and this test file share state (lite loader compiles a copy, which is
+  // not identity-equal to a direct import).
+  const lifecycleEvents = (): Array<{ type: string; payload: any }> => {
+    const g = globalThis as any;
+    if (!g.__PHOTON_LIFECYCLE_EVENTS__) g.__PHOTON_LIFECYCLE_EVENTS__ = [];
+    return g.__PHOTON_LIFECYCLE_EVENTS__;
+  };
+  const resetLifecycleEvents = () => {
+    (globalThis as any).__PHOTON_LIFECYCLE_EVENTS__ = [];
+  };
+
+  await test('onError fires when a method throws and re-raises the original error', async () => {
+    await clearPhotonCache();
+    resetLifecycleEvents();
+    const p: any = await photon(path.join(FIXTURES, 'lifecycle.photon.ts'));
+    const origErr = console.error;
+    console.error = () => {};
+    try {
+      await assert.rejects(() => p.doWork({ ok: false }), /intentional/);
+    } finally {
+      console.error = origErr;
+    }
+    const errorEvents = lifecycleEvents().filter((e) => e.type === 'error');
+    assert.equal(errorEvents.length, 1);
+    assert.equal(errorEvents[0].payload.tool, 'doWork');
+    assert.equal(errorEvents[0].payload.msg, 'intentional');
+  });
+
+  await test('disposePhoton fires onShutdown with the given reason', async () => {
+    await clearPhotonCache();
+    resetLifecycleEvents();
+    await photon(path.join(FIXTURES, 'lifecycle.photon.ts'));
+    const disposed = await disposePhoton(path.join(FIXTURES, 'lifecycle.photon.ts'), {
+      reason: 'test-cleanup',
+    });
+    assert.equal(disposed, true);
+    const shutdownEvents = lifecycleEvents().filter((e) => e.type === 'shutdown');
+    assert.equal(shutdownEvents.length, 1);
+    assert.equal(shutdownEvents[0].payload.reason, 'test-cleanup');
+  });
+
+  await test('disposeAllPhotons fires onShutdown on every cached instance', async () => {
+    await clearPhotonCache();
+    resetLifecycleEvents();
+    await photon(path.join(FIXTURES, 'lifecycle.photon.ts'));
+    await disposeAllPhotons('bulk-test');
+    const shutdownEvents = lifecycleEvents().filter((e) => e.type === 'shutdown');
+    assert.equal(shutdownEvents.length, 1);
+    assert.equal(shutdownEvents[0].payload.reason, 'bulk-test');
+  });
+
+  await test('namespace for flat file matches directory position (fallback: local)', async () => {
+    await clearPhotonCache();
+    const p: any = await photon(path.join(FIXTURES, 'simple-calc.photon.ts'), {
+      baseDir: FIXTURES,
+    });
+    assert.equal(p._photonNamespace, 'local', 'flat file under baseDir uses local');
+    await clearPhotonCache();
+  });
+
+  await test('namespace for file in subdirectory derives from directory name', async () => {
+    await clearPhotonCache();
+    const parentDir = path.dirname(FIXTURES);
+    const p: any = await photon(path.join(FIXTURES, 'simple-calc.photon.ts'), {
+      baseDir: parentDir,
+    });
+    assert.equal(
+      p._photonNamespace,
+      path.basename(FIXTURES),
+      'file in subdir uses the subdir as namespace',
+    );
+    await clearPhotonCache();
   });
 
   // ─── Summary ────────────────────────────────────────────────
