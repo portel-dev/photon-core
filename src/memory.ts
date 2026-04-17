@@ -27,6 +27,7 @@ import {
   getLegacyMemoryDir,
   getLegacyGlobalMemoryDir,
   getLegacySessionMemoryDir,
+  getDataRoot,
 } from './data-paths.js';
 
 export type MemoryScope = 'photon' | 'session' | 'global';
@@ -216,6 +217,83 @@ export class FileMemoryBackend implements MemoryBackend {
 // SCOPE RESOLUTION
 // ════════════════════════════════════════════════════════════════════════════════
 
+/**
+ * Compatibility shim — one-release migration only.
+ *
+ * Under docs/internals/PHOTON-DIR-AND-NAMESPACE.md the namespace comes
+ * purely from directory position and never changes silently. But installs
+ * that ran with the old git-remote-based namespace detection may have data
+ * sitting under a stale namespace bucket. On first read, if the canonical
+ * dir is empty but exactly one sibling namespace contains this photon's
+ * memory, migrate it atomically to the canonical location.
+ *
+ * Multiple matches → ambiguous; warn to stderr so the user can consolidate
+ * manually rather than proceeding with empty memory.
+ *
+ * @deprecated Remove this helper and its caller one release after the
+ *   PHOTON_DIR-and-namespace change ships.
+ */
+function findAndMigrateStrandedMemory(
+  photonId: string,
+  canonicalDir: string,
+  baseDir?: string
+): string | null {
+  const dataRoot = getDataRoot(baseDir);
+  let entries: string[];
+  try {
+    entries = fsSync.readdirSync(dataRoot);
+  } catch {
+    return null;
+  }
+
+  const matches: string[] = [];
+  for (const entry of entries) {
+    // Skip non-namespace buckets. `_global`, `_sessions`, `.cache`, `tasks`
+    // live at the same level but are reserved names.
+    if (entry.startsWith('_') || entry.startsWith('.') || entry === 'tasks') continue;
+    const candidate = path.join(dataRoot, entry, photonId, 'memory');
+    try {
+      const stat = fsSync.statSync(candidate);
+      if (stat.isDirectory()) {
+        // Only count non-empty dirs as real data.
+        if (fsSync.readdirSync(candidate).length > 0) matches.push(candidate);
+      }
+    } catch {
+      // Not a match, continue.
+    }
+  }
+
+  if (matches.length === 0) return null;
+  if (matches.length > 1) {
+    process.stderr.write(
+      `[photon] warning: photon '${photonId}' has memory data stranded under multiple namespaces:\n` +
+        matches.map((m) => `  - ${m}`).join('\n') +
+        `\n  Canonical path is ${canonicalDir}.\n` +
+        `  Move the correct one into the canonical path and delete the others to consolidate.\n`
+    );
+    return null;
+  }
+
+  const stranded = matches[0];
+  try {
+    fsSync.mkdirSync(path.dirname(canonicalDir), { recursive: true });
+    fsSync.renameSync(stranded, canonicalDir);
+    // Clean up now-empty parent if it has no siblings.
+    try {
+      const strandedParent = path.dirname(stranded);
+      if (fsSync.readdirSync(strandedParent).length === 0) fsSync.rmdirSync(strandedParent);
+      const strandedNs = path.dirname(strandedParent);
+      if (fsSync.readdirSync(strandedNs).length === 0) fsSync.rmdirSync(strandedNs);
+    } catch {
+      // Non-fatal: leave parent dirs if cleanup fails.
+    }
+    return canonicalDir;
+  } catch {
+    // Cross-device rename or permission issue — fall back to reading in place.
+    return stranded;
+  }
+}
+
 function resolveDir(
   photonId: string,
   namespace: string,
@@ -229,6 +307,9 @@ function resolveDir(
       if (!fsSync.existsSync(newDir)) {
         const legacyDir = getLegacyMemoryDir(photonId, baseDir);
         if (fsSync.existsSync(legacyDir)) return legacyDir;
+        // Last resort: data stranded under a different namespace bucket.
+        const recovered = findAndMigrateStrandedMemory(photonId, newDir, baseDir);
+        if (recovered) return recovered;
       }
       return newDir;
     }
