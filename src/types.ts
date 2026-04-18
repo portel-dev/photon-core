@@ -299,6 +299,13 @@ export interface ConstructorParam {
   defaultValue?: any;
   /** True if type is string, number, or boolean (inject from env var) */
   isPrimitive: boolean;
+  /**
+   * Per-parameter JSDoc description, taken from an inline `/** ... *\/`
+   * comment immediately before the parameter, or from a constructor-level
+   * `@param <name>` tag when the inline form is absent. Used by the Beam
+   * Setup form for field help text.
+   */
+  description?: string;
 }
 
 /**

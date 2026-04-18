@@ -400,6 +400,33 @@ export class SchemaExtractor {
 
         const properties: SettingsProperty[] = [];
 
+        // Inline-JSDoc helper: pull the description from a /** ... */ comment
+        // that immediately precedes a property assignment inside the object
+        // literal. Class-level @property tags still win when both are
+        // present (so existing photons aren't disrupted).
+        const sourceText = sourceFile.text;
+        const inlineDescriptionFor = (prop: ts.Node): string | undefined => {
+          const ranges = ts.getLeadingCommentRanges(sourceText, prop.pos);
+          if (!ranges || ranges.length === 0) return undefined;
+          // Use the last comment block before the property (closest to it).
+          const block = ranges[ranges.length - 1];
+          if (
+            sourceText[block.pos] !== '/' ||
+            sourceText[block.pos + 1] !== '*' ||
+            sourceText[block.pos + 2] !== '*'
+          ) {
+            return undefined;
+          }
+          const raw = sourceText.slice(block.pos + 3, block.end - 2);
+          // Strip leading "*" markers, trim, collapse whitespace.
+          return raw
+            .split('\n')
+            .map((line) => line.replace(/^\s*\*\s?/, '').trim())
+            .filter(Boolean)
+            .join(' ')
+            .trim();
+        };
+
         for (const prop of member.initializer.properties) {
           if (!ts.isPropertyAssignment(prop)) continue;
           const propName = prop.name.getText(sourceFile);
@@ -456,7 +483,7 @@ export class SchemaExtractor {
           properties.push({
             name: propName,
             type,
-            description: propertyDocs.get(propName),
+            description: propertyDocs.get(propName) ?? inlineDescriptionFor(prop),
             default: defaultValue,
             required,
           });
@@ -1000,10 +1027,36 @@ export class SchemaExtractor {
         true
       );
 
+      // Per-parameter JSDoc: prefer an inline /** ... */ block immediately
+      // before the parameter (the natural way authors write it), fall back
+      // to a constructor-level @param tag.
+      const sourceText = sourceFile.text;
+      const inlineDescriptionFor = (param: ts.Node): string | undefined => {
+        const ranges = ts.getLeadingCommentRanges(sourceText, param.pos);
+        if (!ranges || ranges.length === 0) return undefined;
+        const block = ranges[ranges.length - 1];
+        if (
+          sourceText[block.pos] !== '/' ||
+          sourceText[block.pos + 1] !== '*' ||
+          sourceText[block.pos + 2] !== '*'
+        ) {
+          return undefined;
+        }
+        const raw = sourceText.slice(block.pos + 3, block.end - 2);
+        return raw
+          .split('\n')
+          .map((line) => line.replace(/^\s*\*\s?/, '').trim())
+          .filter(Boolean)
+          .join(' ')
+          .trim();
+      };
+
       const visit = (node: ts.Node) => {
         if (ts.isClassDeclaration(node)) {
           node.members.forEach((member) => {
             if (ts.isConstructorDeclaration(member)) {
+              const ctorJsdoc = this.getJSDocComment(member as any, sourceFile);
+              const ctorParamDocs = this.extractParamDocs(ctorJsdoc);
               member.parameters.forEach((param) => {
                 if (param.name && ts.isIdentifier(param.name)) {
                   const name = param.name.getText(sourceFile);
@@ -1023,6 +1076,7 @@ export class SchemaExtractor {
                     hasDefault,
                     defaultValue,
                     isPrimitive: this.isPrimitiveType(type),
+                    description: inlineDescriptionFor(param) ?? ctorParamDocs.get(name),
                   });
                 }
               });
