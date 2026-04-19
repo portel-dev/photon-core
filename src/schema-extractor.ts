@@ -2511,6 +2511,11 @@ export class SchemaExtractor {
       return format as OutputFormat;
     }
 
+    // Match declarative UI formats (A2UI v0.9 rides on AG-UI)
+    if (format === 'a2ui') {
+      return 'a2ui' as OutputFormat;
+    }
+
     return undefined;
   }
 

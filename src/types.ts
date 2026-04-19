@@ -9,6 +9,7 @@
  * - Visualization: chart, chart:<type>, metric, gauge, timeline, dashboard, cart
  * - Content: json, markdown, yaml, xml, html, mermaid, code, code:<lang>, slides
  * - Container: panels, tabs, accordion, stack, columns
+ * - Declarative: a2ui (A2UI v0.9 JSONL — emits createSurface/updateComponents/updateDataModel)
  */
 export type OutputFormat =
   | 'primitive' | 'table' | 'tree' | 'list' | 'none'
@@ -16,6 +17,7 @@ export type OutputFormat =
   | 'card' | 'grid' | 'chips' | 'kv' | 'qr'
   | 'chart' | `chart:${string}` | 'metric' | 'gauge' | 'timeline' | 'dashboard' | 'cart'
   | 'panels' | 'tabs' | 'accordion' | 'stack' | 'columns'
+  | 'a2ui'
   | `code` | `code:${string}`;
 
 export interface PhotonTool {
