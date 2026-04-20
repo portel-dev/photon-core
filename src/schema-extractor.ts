@@ -3130,24 +3130,46 @@ export class SchemaExtractor {
 export type PhotonCapability = 'emit' | 'memory' | 'call' | 'mcp' | 'lock' | 'instanceMeta' | 'allInstances' | 'caller';
 
 /**
+ * Match a `this`-like base in source code. Covers:
+ *   this            — literal
+ *   (this as any)   — TS `as` cast (the most common workaround when
+ *                     TypeScript can't see a runtime-injected method)
+ *   (this as SomeClass), (this as unknown as T)
+ *   (<any>this), (<T>this) — older angle-bracket cast syntax
+ *
+ * Not covered: aliasing (`const self = this`), destructuring
+ * (`const { call } = this`), or bracket access (`this['call']`).
+ * Those require dataflow analysis which a regex can't do; the loader
+ * compensates by always-injecting the cheap convenience methods whose
+ * gating would otherwise silently fail for those patterns.
+ */
+const THIS_BASE =
+  String.raw`(?:\bthis\b|\(\s*<[^>]+>\s*this\s*\)|\(\s*this\s+as\s+[^)]+\))`;
+
+function memberAccess(name: string, trailing: '\\(' | '\\b'): RegExp {
+  return new RegExp(`${THIS_BASE}\\s*\\.\\s*${name}\\s*${trailing}`);
+}
+
+/**
  * Detect capabilities used by a Photon from its source code.
  *
  * Scans for `this.emit(`, `this.memory`, `this.call(`, etc. patterns
- * and returns the set of capabilities that the runtime should inject.
+ * (including typed-access workarounds like `(this as any).call(`) and
+ * returns the set of capabilities that the runtime should inject.
  *
  * This enables plain classes (no extends Photon) to use all framework
  * features — the loader detects usage and injects automatically.
  */
 export function detectCapabilities(source: string): Set<PhotonCapability> {
   const caps = new Set<PhotonCapability>();
-  if (/this\.emit\s*\(/.test(source)) caps.add('emit');
-  if (/this\.render\s*\(/.test(source)) caps.add('emit'); // render() needs emit injection
-  if (/this\.memory\b/.test(source)) caps.add('memory');
-  if (/this\.call\s*\(/.test(source)) caps.add('call');
-  if (/this\.mcp\s*\(/.test(source)) caps.add('mcp');
-  if (/this\.withLock\s*\(/.test(source)) caps.add('lock');
-  if (/this\.instanceMeta\b/.test(source)) caps.add('instanceMeta');
-  if (/this\.allInstances\s*\(/.test(source)) caps.add('allInstances');
-  if (/this\.caller\b/.test(source)) caps.add('caller');
+  if (memberAccess('emit', '\\(').test(source)) caps.add('emit');
+  if (memberAccess('render', '\\(').test(source)) caps.add('emit'); // render() needs emit injection
+  if (memberAccess('memory', '\\b').test(source)) caps.add('memory');
+  if (memberAccess('call', '\\(').test(source)) caps.add('call');
+  if (memberAccess('mcp', '\\(').test(source)) caps.add('mcp');
+  if (memberAccess('withLock', '\\(').test(source)) caps.add('lock');
+  if (memberAccess('instanceMeta', '\\b').test(source)) caps.add('instanceMeta');
+  if (memberAccess('allInstances', '\\(').test(source)) caps.add('allInstances');
+  if (memberAccess('caller', '\\b').test(source)) caps.add('caller');
   return caps;
 }
