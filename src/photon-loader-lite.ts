@@ -269,6 +269,7 @@ async function loadPhotonInternal(
     // docs/internals/PHOTON-DIR-AND-NAMESPACE.md §3.
     instance._photonName = photonName;
     instance._photonNamespace = options.namespace ?? deriveNamespace(absolutePath, options.baseDir);
+    instance._baseDir = options.baseDir;
     instance._photonFilePath = absolutePath;
     // Stat-gate baseline. When executeTool() sees the source file has
     // changed, it fires _photonReloader (registered just below) to swap

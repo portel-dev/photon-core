@@ -58,6 +58,13 @@ export function withPhotonCapabilities<T extends Constructor>(Base: T): T {
      */
     _photonName?: string;
     _photonNamespace?: string;
+    /**
+     * PHOTON_DIR this instance was loaded from - set by runtime loader.
+     * Pinned so memory and other .data/-rooted state resolve to the same
+     * root regardless of which process reads back later.
+     * @internal
+     */
+    _baseDir?: string;
 
     /**
      * Session ID for session-scoped memory - set by runtime
@@ -113,7 +120,12 @@ export function withPhotonCapabilities<T extends Constructor>(Base: T): T {
           .replace(/([A-Z])/g, '-$1')
           .toLowerCase()
           .replace(/^-/, '');
-        this._memory = new MemoryProvider(name, this._sessionId, this._photonNamespace);
+        this._memory = new MemoryProvider(
+          name,
+          this._sessionId,
+          this._photonNamespace,
+          this._baseDir
+        );
       }
       return this._memory;
     }

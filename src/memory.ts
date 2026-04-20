@@ -294,6 +294,33 @@ function findAndMigrateStrandedMemory(
   }
 }
 
+/**
+ * Photons whose loader pinned a baseDir get deterministic paths regardless
+ * of which process reads them back. When baseDir is missing, getBase()
+ * silently falls back to PHOTON_DIR env or ~/.photon, which means the same
+ * photon can write to <repo>/.data/ from a CLI process and read from
+ * ~/.photon/.data/ from a daemon worker started in a different cwd. We
+ * warn once per photon so this drift is noticeable rather than silent.
+ *
+ * To suppress in test environments where the fallback is intentional, set
+ * PHOTON_MEMORY_NO_BASEDIR_WARN=1.
+ */
+const _baseDirFallbackWarned = new Set<string>();
+function warnIfBaseDirMissing(photonId: string, baseDir?: string): void {
+  if (baseDir) return;
+  if (process.env.PHOTON_MEMORY_NO_BASEDIR_WARN) return;
+  if (_baseDirFallbackWarned.has(photonId)) return;
+  _baseDirFallbackWarned.add(photonId);
+  process.stderr.write(
+    `[photon-core] memory.resolveDir for "${photonId}" got no baseDir — ` +
+      `falling back to PHOTON_DIR env or ~/.photon. If this photon was ` +
+      `loaded with a workingDir, the loader is failing to set ` +
+      `instance._baseDir. Symptom: writes from one process land at the ` +
+      `loader's baseDir but reads from another process land at the env ` +
+      `fallback. See memory-baseDir-resolution-bug for details.\n`
+  );
+}
+
 function resolveDir(
   photonId: string,
   namespace: string,
@@ -301,6 +328,7 @@ function resolveDir(
   sessionId?: string,
   baseDir?: string
 ): string {
+  warnIfBaseDirMissing(photonId, baseDir);
   switch (scope) {
     case 'photon': {
       const newDir = getPhotonMemoryDir(namespace, photonId, baseDir);

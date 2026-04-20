@@ -72,6 +72,16 @@ export class Photon {
   _photonNamespace?: string;
 
   /**
+   * PHOTON_DIR this instance was loaded from - set by runtime loader.
+   * Pinned so .data/ resolves to the same root regardless of which
+   * process (CLI, daemon, worker) reads the photon back later. Without
+   * this pin, MemoryProvider falls back to getDefaultContext().baseDir
+   * and writes/reads can drift between cwd-derived locations.
+   * @internal
+   */
+  _baseDir?: string;
+
+  /**
    * Absolute path to the .photon.ts/.photon.js source file - set by runtime loader
    * Used for storage() and assets() path resolution
    * @internal
@@ -172,7 +182,12 @@ export class Photon {
         .replace(/([A-Z])/g, '-$1')
         .toLowerCase()
         .replace(/^-/, '');
-      this._memory = new MemoryProvider(name, this._sessionId, this._photonNamespace);
+      this._memory = new MemoryProvider(
+        name,
+        this._sessionId,
+        this._photonNamespace,
+        this._baseDir
+      );
     }
     return this._memory;
   }
