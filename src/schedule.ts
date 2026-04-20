@@ -139,9 +139,9 @@ function resolveCron(schedule: string): string {
 
 // ── Storage Helpers ────────────────────────────────────────────────────
 
-function photonScheduleDir(photonId: string, namespace?: string): string {
+function photonScheduleDir(photonId: string, namespace?: string, baseDir?: string): string {
   const ns = namespace || 'local';
-  const newDir = getPhotonSchedulesDir(ns, photonId);
+  const newDir = getPhotonSchedulesDir(ns, photonId, baseDir);
   if (!fsSync.existsSync(newDir)) {
     const legacyDir = getLegacySchedulesDir(photonId);
     if (fsSync.existsSync(legacyDir)) return legacyDir;
@@ -149,8 +149,8 @@ function photonScheduleDir(photonId: string, namespace?: string): string {
   return newDir;
 }
 
-function taskPath(photonId: string, taskId: string): string {
-  return path.join(photonScheduleDir(photonId), `${taskId}.json`);
+function taskPath(photonId: string, taskId: string, baseDir?: string): string {
+  return path.join(photonScheduleDir(photonId, undefined, baseDir), `${taskId}.json`);
 }
 
 async function ensureDir(dir: string): Promise<void> {
@@ -171,9 +171,19 @@ async function ensureDir(dir: string): Promise<void> {
  */
 export class ScheduleProvider {
   private _photonId: string;
+  private _baseDir?: string;
 
-  constructor(photonId: string) {
+  /**
+   * @param photonId Photon identifier used as the bucket under .data/
+   * @param baseDir PHOTON_DIR the photon was loaded from. Pinned so
+   *   schedule files stay under this base regardless of which process
+   *   reads back later — mirrors the fix applied to MemoryProvider.
+   *   Without it, photonScheduleDir falls through to PHOTON_DIR env or
+   *   ~/.photon and schedule files drift across daemon restarts.
+   */
+  constructor(photonId: string, baseDir?: string) {
     this._photonId = photonId;
+    this._baseDir = baseDir;
   }
 
   /**
@@ -222,7 +232,10 @@ export class ScheduleProvider {
    */
   async get(taskId: string): Promise<ScheduledTask | null> {
     try {
-      const content = await fs.readFile(taskPath(this._photonId, taskId), 'utf-8');
+      const content = await fs.readFile(
+        taskPath(this._photonId, taskId, this._baseDir),
+        'utf-8'
+      );
       return JSON.parse(content) as ScheduledTask;
     } catch (err: any) {
       if (err.code === 'ENOENT') return null;
@@ -242,7 +255,7 @@ export class ScheduleProvider {
    * List all scheduled tasks, optionally filtered by status
    */
   async list(status?: ScheduleStatus): Promise<ScheduledTask[]> {
-    const dir = photonScheduleDir(this._photonId);
+    const dir = photonScheduleDir(this._photonId, undefined, this._baseDir);
     let files: string[];
     try {
       files = await fs.readdir(dir);
@@ -323,7 +336,7 @@ export class ScheduleProvider {
    */
   async cancel(taskId: string): Promise<boolean> {
     try {
-      await fs.unlink(taskPath(this._photonId, taskId));
+      await fs.unlink(taskPath(this._photonId, taskId, this._baseDir));
       return true;
     } catch (err: any) {
       if (err.code === 'ENOENT') return false;
@@ -362,8 +375,11 @@ export class ScheduleProvider {
 
   /** @internal */
   private async _save(task: ScheduledTask): Promise<void> {
-    const dir = photonScheduleDir(this._photonId);
+    const dir = photonScheduleDir(this._photonId, undefined, this._baseDir);
     await ensureDir(dir);
-    await fs.writeFile(taskPath(this._photonId, task.id), JSON.stringify(task, null, 2));
+    await fs.writeFile(
+      taskPath(this._photonId, task.id, this._baseDir),
+      JSON.stringify(task, null, 2)
+    );
   }
 }

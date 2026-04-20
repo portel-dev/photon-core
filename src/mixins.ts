@@ -140,7 +140,7 @@ export function withPhotonCapabilities<T extends Constructor>(Base: T): T {
           .replace(/([A-Z])/g, '-$1')
           .toLowerCase()
           .replace(/^-/, '');
-        this._schedule = new ScheduleProvider(name);
+        this._schedule = new ScheduleProvider(name, this._baseDir);
       }
       return this._schedule;
     }
