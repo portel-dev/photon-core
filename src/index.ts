@@ -265,6 +265,12 @@ export {
   type OutputHandler,
   type GeneratorExecutorConfig,
   type ExtractedAsk,
+  // Sampling (MCP createMessage) — powers this.sample()
+  type SampleParams,
+  type SamplingMessage,
+  type SamplingResult,
+  type SamplingProvider,
+  type ModelPreferences,
 } from './generator.js';
 
 // Stateful Workflow Execution

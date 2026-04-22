@@ -41,6 +41,7 @@ SUITES=(
   tests/mixin.test.ts
   tests/oklch.test.ts
   tests/on-error-hook.test.ts
+  tests/photon-base-sample-elicit.test.ts
   tests/photon-error.test.ts
   tests/photon-loader-lite.test.ts
   tests/shared-utils.test.ts

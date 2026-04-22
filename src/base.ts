@@ -48,6 +48,13 @@ import { ScheduleProvider } from './schedule.js';
 import * as path from 'path';
 import * as fs from 'fs';
 import { getPhotonDataDir } from './data-paths.js';
+import type {
+  AskYield,
+  InputProvider,
+  SampleParams,
+  SamplingMessage,
+  SamplingProvider,
+} from './generator.js';
 
 /**
  * Simple base class for creating Photons
@@ -152,6 +159,127 @@ export class Photon {
   get caller(): CallerInfo {
     const store = executionContext.getStore();
     return store?.caller ?? { id: 'anonymous', anonymous: true };
+  }
+
+  /**
+   * Ask the caller a yes/no question and await the answer.
+   *
+   * Imperative sugar over the existing `{ ask: 'confirm' }` yield.
+   * Works in any method (generator or plain async), routed through the
+   * runtime's elicitation pipeline — returns `true`/`false` based on the
+   * user's response in whichever surface the client offers (Beam
+   * dialog, Claude confirm prompt, CLI readline, etc.).
+   *
+   * @throws If no client with elicitation capability is connected.
+   *
+   * @example
+   * ```typescript
+   * if (await this.confirm('Delete all records?')) {
+   *   await purge();
+   * }
+   * ```
+   */
+  async confirm(question: string): Promise<boolean> {
+    const provider = this._resolveInputProvider('this.confirm()');
+    const result = await provider({ ask: 'confirm', question, message: question } as AskYield);
+    return Boolean(result);
+  }
+
+  /**
+   * Pose an arbitrary elicitation request and await the answer.
+   *
+   * Accepts any `AskYield` (text, password, select, number, form, etc.)
+   * and returns the client's response. Prefer `this.confirm()` for
+   * yes/no; use `yield { ask: ... }` inside async-generator workflows.
+   * `this.elicit()` is the imperative form for plain async methods
+   * that need a single input without the generator plumbing.
+   *
+   * The name matches MCP spec terminology (`elicitation/create`) to
+   * avoid ambiguity with the legacy `this.ask(type, message, opts)`
+   * factory, which just constructs an `AskYield` object for use with
+   * `yield`.
+   *
+   * @throws If no client with elicitation capability is connected.
+   */
+  async elicit<T = unknown>(params: AskYield): Promise<T> {
+    const provider = this._resolveInputProvider('this.elicit()');
+    return (await provider(params)) as T;
+  }
+
+  /**
+   * Ask the client's LLM to generate text (MCP `sampling/createMessage`).
+   *
+   * The caller's agent model generates the completion — no API key
+   * needed in the photon, and inference cost is borne by whoever is
+   * driving the tool. The client must declare the `sampling`
+   * capability during initialize; otherwise this throws.
+   *
+   * Returns just the generated text for the common case. For
+   * multi-block / image / structured responses, access the underlying
+   * provider via the runtime.
+   *
+   * @example
+   * ```typescript
+   * async summarize(params: { text: string }) {
+   *   return await this.sample({
+   *     prompt: `Summarize this in one sentence:\n\n${params.text}`,
+   *     maxTokens: 128,
+   *   });
+   * }
+   * ```
+   */
+  async sample(params: SampleParams): Promise<string> {
+    const store = executionContext.getStore() as { samplingProvider?: SamplingProvider } | undefined;
+    const provider = store?.samplingProvider;
+    if (!provider) {
+      throw new Error(
+        'this.sample() requires the connected MCP client to declare the ' +
+          '`sampling` capability. None is available in this invocation — ' +
+          "either the client didn't declare sampling during initialize, or " +
+          'this method is being called outside an MCP request context (e.g. ' +
+          'from a scheduled task without a live session).'
+      );
+    }
+    if (!params.prompt && !params.messages?.length) {
+      throw new Error('this.sample() requires either `prompt` or `messages`.');
+    }
+    const messages: SamplingMessage[] =
+      params.messages ??
+      [{ role: 'user', content: { type: 'text', text: params.prompt! } }];
+    const result = await provider({
+      messages,
+      systemPrompt: params.systemPrompt,
+      maxTokens: params.maxTokens ?? 1024,
+      temperature: params.temperature,
+      modelPreferences: params.modelPreferences,
+      stopSequences: params.stopSequences,
+      includeContext: params.includeContext,
+    });
+    const first = Array.isArray(result.content) ? result.content[0] : result.content;
+    if (first && first.type === 'text') return first.text;
+    // Non-text responses (image-only) — return empty string rather than
+    // a JSON-stringified blob so callers can reliably concatenate the
+    // result. Users needing image output should hit the provider directly.
+    return '';
+  }
+
+  /**
+   * Internal: resolve the runtime-supplied input provider, throwing a
+   * clear error if none is attached to the current execution context.
+   * @internal
+   */
+  private _resolveInputProvider(forMethod: string): InputProvider {
+    const store = executionContext.getStore() as { inputProvider?: InputProvider } | undefined;
+    const provider = store?.inputProvider;
+    if (!provider) {
+      throw new Error(
+        `${forMethod} requires a connected MCP client that supports elicitation. ` +
+          'The runtime attaches an input provider for every tool invocation; ' +
+          "this call is running outside that context (e.g. a background task " +
+          'without a session, or a client that declined elicitation).'
+      );
+    }
+    return provider;
   }
 
   /**

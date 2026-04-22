@@ -921,6 +921,99 @@ export type InputProvider = (ask: AskYield) => Promise<any>;
  */
 export type OutputHandler = (emit: EmitYield) => void | Promise<void>;
 
+// ══════════════════════════════════════════════════════════════════════════════
+// SAMPLING - Photon-to-client LLM requests (MCP sampling/createMessage)
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * A message in an MCP sampling conversation.
+ *
+ * Mirrors `SamplingMessage` in the MCP spec: `role` plus either text or
+ * image content. Most photon callers only need `{ role: 'user', content:
+ * { type: 'text', text: '...' } }` — use the `prompt` shortcut on
+ * `SampleParams` to build that automatically.
+ */
+export interface SamplingMessage {
+  role: 'user' | 'assistant';
+  content:
+    | { type: 'text'; text: string }
+    | { type: 'image'; data: string; mimeType: string };
+}
+
+/**
+ * Preferences passed to the client's sampling LLM (MCP modelPreferences).
+ * All fields are advisory — the client picks the final model.
+ */
+export interface ModelPreferences {
+  /** Hints at desired models, in priority order (e.g. `[{name:'claude-3-5-sonnet'}]`) */
+  hints?: Array<{ name: string }>;
+  /** 0-1 weight favoring cheaper models */
+  costPriority?: number;
+  /** 0-1 weight favoring faster responses */
+  speedPriority?: number;
+  /** 0-1 weight favoring stronger models */
+  intelligencePriority?: number;
+}
+
+/**
+ * Parameters for `this.sample()`.
+ *
+ * Pick ONE of `prompt` or `messages`. `prompt` is the ergonomic path:
+ * it becomes a single user-role text message. `messages` gives full
+ * control over multi-turn conversations or image content.
+ */
+export interface SampleParams {
+  /** Convenience: wraps the string as a single user message */
+  prompt?: string;
+  /** Full message array (alternative to `prompt`) */
+  messages?: SamplingMessage[];
+  /** Optional system prompt */
+  systemPrompt?: string;
+  /**
+   * Max tokens the client should generate. MCP spec requires this field;
+   * defaults to 1024 when omitted. Keep modest — sampling is not free.
+   */
+  maxTokens?: number;
+  temperature?: number;
+  modelPreferences?: ModelPreferences;
+  stopSequences?: string[];
+  /** Whether the client should include this or other servers' context */
+  includeContext?: 'none' | 'thisServer' | 'allServers';
+}
+
+/**
+ * Result of a sampling request (a `CreateMessageResult` from MCP).
+ * The `content` union accommodates both single-block responses (the
+ * common case) and multi-block responses from tool-capable sampling.
+ */
+export interface SamplingResult {
+  role: 'assistant';
+  content:
+    | { type: 'text'; text: string }
+    | { type: 'image'; data: string; mimeType: string }
+    | Array<{ type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }>;
+  model: string;
+  stopReason?: string;
+}
+
+/**
+ * Runtime hook that forwards a sampling request to the MCP client.
+ *
+ * Runtimes implement this by calling the client's
+ * `sampling/createMessage`. When the client doesn't declare the
+ * `sampling` capability, the runtime should throw or omit the provider
+ * entirely — `this.sample()` surfaces a clear error in that case.
+ */
+export type SamplingProvider = (params: {
+  messages: SamplingMessage[];
+  systemPrompt?: string;
+  maxTokens: number;
+  temperature?: number;
+  modelPreferences?: ModelPreferences;
+  stopSequences?: string[];
+  includeContext?: 'none' | 'thisServer' | 'allServers';
+}) => Promise<SamplingResult>;
+
 /**
  * Configuration for generator execution
  */
