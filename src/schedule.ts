@@ -382,13 +382,30 @@ export class ScheduleProvider {
     // in-memory registration might still be alive (ghost schedule from
     // a prior session). The daemon's unschedule is idempotent, so an
     // extra call when no registration exists is harmless.
+    //
+    // Eviction is best-effort. If the daemon is unreachable we log
+    // loudly and rely on the fire-time phantom-prune (daemon checks
+    // sourceFile before running) to catch the ghost on its next
+    // scheduled tick. For low-frequency schedules that tick may be
+    // hours away, so a silent swallow would let `cancel()` return
+    // truthy while duplicate runs continue; logging gives operators
+    // a chance to see and retry.
     if (this._unscheduleHook) {
+      const jobId = this._jobId(taskId);
       try {
-        await this._unscheduleHook(this._jobId(taskId));
-      } catch {
-        // Best effort. If the daemon is unreachable the fire-time
-        // phantom-prune path (daemon checks sourceFile before
-        // running) catches the ghost on its next scheduled tick.
+        const acknowledged = await this._unscheduleHook(jobId);
+        if (!acknowledged) {
+          console.warn(
+            `[schedule] cancel(${taskId}): daemon did not acknowledge unschedule for ${jobId}. ` +
+              `The disk file was removed; the ghost cron registration will be pruned at next fire.`
+          );
+        }
+      } catch (err) {
+        console.warn(
+          `[schedule] cancel(${taskId}): unschedule hook threw for ${jobId} — ` +
+            `relying on fire-time phantom-prune as fallback.`,
+          err instanceof Error ? err.message : err
+        );
       }
     }
 
