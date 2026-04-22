@@ -359,10 +359,26 @@ export class Photon {
         .replace(/([A-Z])/g, '-$1')
         .toLowerCase()
         .replace(/^-/, '');
-      this._schedule = new ScheduleProvider(name, this._baseDir);
+      this._schedule = new ScheduleProvider(
+        name,
+        this._baseDir,
+        this._scheduleUnscheduleHook
+      );
     }
     return this._schedule;
   }
+
+  /**
+   * Runtime-injected hook that evicts an in-memory cron registration.
+   * The photon runtime (photon-repo loader) attaches a callback that
+   * IPCs the daemon's `unschedule` request; photon-core doesn't know
+   * about the daemon, so the hook is passed through to ScheduleProvider
+   * which calls it after unlinking the disk file. Without the hook,
+   * `this.schedule.cancel()` leaves a ghost registration that keeps
+   * firing until the next daemon restart.
+   * @internal
+   */
+  _scheduleUnscheduleHook?: import('./schedule.js').UnscheduleHook;
 
   /**
    * Get an absolute path to a storage directory for this photon's data.

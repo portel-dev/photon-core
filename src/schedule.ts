@@ -164,6 +164,20 @@ async function ensureDir(dir: string): Promise<void> {
 // ── Schedule Provider ──────────────────────────────────────────────────
 
 /**
+ * Callback the runtime injects so `this.schedule.cancel()` (and
+ * transitively `cancelByName`, `cancelAll`) can evict the in-memory
+ * cron registration on top of unlinking the disk file. Without this,
+ * the daemon keeps firing the cancelled schedule until its next
+ * restart / first fire (where the phantom-prune check at fire time
+ * catches it as a backstop) — doubled executions in the window.
+ *
+ * The parameter is the namespaced job id the daemon uses:
+ * `${photonId}:sched:${taskId}`. Return value mirrors the daemon's
+ * `unscheduleJob` boolean (true if something was evicted).
+ */
+export type UnscheduleHook = (namespacedJobId: string) => Promise<boolean> | boolean;
+
+/**
  * Runtime Schedule Provider
  *
  * Provides CRUD operations for scheduled tasks.
@@ -172,6 +186,7 @@ async function ensureDir(dir: string): Promise<void> {
 export class ScheduleProvider {
   private _photonId: string;
   private _baseDir?: string;
+  private _unscheduleHook?: UnscheduleHook;
 
   /**
    * @param photonId Photon identifier used as the bucket under .data/
@@ -180,10 +195,20 @@ export class ScheduleProvider {
    *   reads back later — mirrors the fix applied to MemoryProvider.
    *   Without it, photonScheduleDir falls through to PHOTON_DIR env or
    *   ~/.photon and schedule files drift across daemon restarts.
+   * @param unscheduleHook Runtime-injected callback that evicts the
+   *   in-memory cron registration after a disk cancel. Optional — when
+   *   absent, `cancel()` still unlinks the file and the daemon's
+   *   fire-time phantom prune is the fallback.
    */
-  constructor(photonId: string, baseDir?: string) {
+  constructor(photonId: string, baseDir?: string, unscheduleHook?: UnscheduleHook) {
     this._photonId = photonId;
     this._baseDir = baseDir;
+    this._unscheduleHook = unscheduleHook;
+  }
+
+  /** Shape the daemon keys cron jobs under — see schedule-loader.ts. */
+  private _jobId(taskId: string): string {
+    return `${this._photonId}:sched:${taskId}`;
   }
 
   /**
@@ -332,16 +357,42 @@ export class ScheduleProvider {
   }
 
   /**
-   * Cancel (delete) a scheduled task
+   * Cancel (delete) a scheduled task.
+   *
+   * Two steps:
+   *   1. Unlink the disk file so daemon restarts don't re-register.
+   *   2. Notify the running daemon via `unscheduleHook` so the
+   *      in-memory cron registration is evicted immediately.
+   *
+   * Without step 2, a cancel followed by a re-enable under the same
+   * name produced two in-memory registrations — the old one (never
+   * evicted) and the new one — both firing on schedule until the
+   * next daemon restart. The hook closes that window.
    */
   async cancel(taskId: string): Promise<boolean> {
+    let removed = false;
     try {
       await fs.unlink(taskPath(this._photonId, taskId, this._baseDir));
-      return true;
+      removed = true;
     } catch (err: any) {
-      if (err.code === 'ENOENT') return false;
-      throw err;
+      if (err.code !== 'ENOENT') throw err;
     }
+
+    // Always call the hook — even when the file was already gone the
+    // in-memory registration might still be alive (ghost schedule from
+    // a prior session). The daemon's unschedule is idempotent, so an
+    // extra call when no registration exists is harmless.
+    if (this._unscheduleHook) {
+      try {
+        await this._unscheduleHook(this._jobId(taskId));
+      } catch {
+        // Best effort. If the daemon is unreachable the fire-time
+        // phantom-prune path (daemon checks sourceFile before
+        // running) catches the ghost on its next scheduled tick.
+      }
+    }
+
+    return removed;
   }
 
   /**
