@@ -3143,8 +3143,15 @@ export type PhotonCapability = 'emit' | 'memory' | 'call' | 'mcp' | 'lock' | 'in
  * compensates by always-injecting the cheap convenience methods whose
  * gating would otherwise silently fail for those patterns.
  */
+// The `(this as <T>)` alternative allows one level of nested parens inside
+// the type annotation so function-type syntax like `(k: string) => void`
+// doesn't truncate the match. Without the `(?:[^()]|\([^()]*\))+` fallback,
+// `(this as unknown as { memory: { set: (k: string) => Promise<void> } })`
+// would terminate at the first inner `)` and the trailing `.memory` access
+// would never be seen — silently disabling this.memory injection for any
+// plain class that uses a complex TS type cast to reach memory.
 const THIS_BASE =
-  String.raw`(?:\bthis\b|\(\s*<[^>]+>\s*this\s*\)|\(\s*this\s+as\s+[^)]+\))`;
+  String.raw`(?:\bthis\b|\(\s*<[^>]+>\s*this\s*\)|\(\s*this\s+as\s+(?:[^()]|\([^()]*\))+\))`;
 
 function memberAccess(name: string, trailing: '\\(' | '\\b'): RegExp {
   return new RegExp(`${THIS_BASE}\\s*\\.\\s*${name}\\s*${trailing}`);

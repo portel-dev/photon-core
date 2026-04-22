@@ -87,6 +87,28 @@ test('extra spaces in cast: ( this   as   any ).call(', () =>
 test('newline between this and .call', () =>
   expectCap('this\n  .call("x.y", {})', 'call'));
 
+console.log('\ndetectCapabilities — casts with function-type parens (regression):');
+
+// These patterns were silently missed before the nested-paren fix. The inner
+// `(k: string)` ended `[^)]+` prematurely, so `.memory` / `.call` were never
+// seen and the capability was never injected — causing runtime
+// "Cannot read properties of undefined" on every memory access.
+test('cast with function-type in annotation: .memory', () =>
+  expectCap(
+    '(this as unknown as { memory: { set: (k: string, v: unknown) => Promise<void> } }).memory.set(K,q)',
+    'memory'
+  ));
+test('cast with function-type in annotation: .call()', () =>
+  expectCap(
+    '(this as unknown as { call: (t: string, p: unknown) => Promise<void> }).call("x.y", {})',
+    'call'
+  ));
+test('cast with function-type spanning newlines (growth-console style)', () =>
+  expectCap(
+    'await (this as unknown as {\n  memory: { get: (k: string) => Promise<unknown> };\n}).memory.get("items");',
+    'memory'
+  ));
+
 console.log('\ndetectCapabilities — negatives (must NOT falsely match):');
 
 test('unrelated .call on another receiver', () =>
