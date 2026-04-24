@@ -4,6 +4,18 @@ All notable changes to `@portel/photon-core` will be documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version numbers follow [Semantic Versioning 2.0](https://semver.org/).
 
+## [2.25.0] - 2026-04-24
+
+### Added
+
+- New imperative primitives on the `Photon` base class: `this.sample()` for MCP sampling, `this.confirm()` for yes/no prompts, and `this.elicit()` for structured input requests. Complements the existing async-generator `yield`-based elicitation flow and lets plain async methods request input without switching to a generator. Available on all loaded photons via capability injection.
+
+### Fixed
+
+- `this.schedule.cancel()` now fires the registered unschedule hook so the in-memory cron registration is evicted from the daemon when the backing task file is unlinked. Prior behavior left ghost timers firing forever against a deleted task record.
+- Unschedule-hook failures now surface to the caller instead of being silently swallowed. Cancel operations that fail to evict are visible so the caller can react.
+- `detectCapabilities()` now recognizes typed-access patterns with function-type parens like `((this as any).foo)()`. Prior regex missed this shape and skipped capability injection for affected photons.
+
 ## [2.24.0] — 2026-04-21
 
 ### Added
@@ -31,4 +43,5 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 
 See git log; CHANGELOG seeded from v2.24.0 forward. Earlier releases are tagged in git history.
 
+[2.25.0]: https://github.com/portel-dev/photon-core/compare/v2.24.0...v2.25.0
 [2.24.0]: https://github.com/portel-dev/photon-core/compare/v2.23.0...v2.24.0
