@@ -33,6 +33,12 @@ function warnHandlePrefixOnce(methodName: string): void {
   );
 }
 
+export interface HttpRoute {
+  method: 'GET' | 'POST';
+  path: string;
+  handler: string;
+}
+
 export interface ExtractedMetadata {
   tools: ExtractedSchema[];
   templates: TemplateInfo[];
@@ -48,8 +54,11 @@ export interface ExtractedMetadata {
    * - 'required': all methods require authenticated caller
    * - 'optional': caller populated if token present, anonymous allowed
    * - string URL: OIDC provider URL (implies required)
+   * - 'cf-access': use Cloudflare Access JWT to identify caller
    */
-  auth?: 'required' | 'optional' | string;
+  auth?: 'required' | 'optional' | 'cf-access' | string;
+  /** HTTP routes declared with @get or @post on individual methods */
+  httpRoutes?: HttpRoute[];
 }
 
 /**
@@ -92,6 +101,9 @@ export class SchemaExtractor {
 
     // MCP OAuth auth requirement (from @auth tag)
     let auth: 'required' | 'optional' | string | undefined;
+
+    // HTTP routes from @get / @post method-level tags
+    const httpRoutes: HttpRoute[] = [];
 
     try {
       // If source doesn't contain a class declaration, wrap it in one
@@ -153,6 +165,18 @@ export class SchemaExtractor {
         const isInternal = /@internal\b/.test(jsdoc);
         const hasDaemonFeature = /@scheduled\b/.test(jsdoc) || /@webhook\b/.test(jsdoc) || /@cron\b/.test(jsdoc) || /^scheduled/.test(methodName);
         if (isInternal && !hasDaemonFeature) {
+          return;
+        }
+
+        // @get /path or @post /path — HTTP-only route, not an MCP tool
+        const getMatch = jsdoc.match(/@get\s+(\/\S*)/i);
+        const postMatch = jsdoc.match(/@post\s+(\/\S*)/i);
+        if (getMatch || postMatch) {
+          httpRoutes.push({
+            method: getMatch ? 'GET' : 'POST',
+            path: (getMatch ?? postMatch)![1],
+            handler: methodName,
+          });
           return;
         }
 
@@ -560,6 +584,11 @@ export class SchemaExtractor {
     // Include auth requirement if detected
     if (auth) {
       result.auth = auth;
+    }
+
+    // Include HTTP routes if any
+    if (httpRoutes.length > 0) {
+      result.httpRoutes = httpRoutes;
     }
 
     return result;
