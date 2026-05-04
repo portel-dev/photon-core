@@ -28,9 +28,15 @@ async function fileExists(filePath: string): Promise<boolean> {
 /**
  * Discover and extract assets from a Photon file
  *
- * Convention:
+ * Conventions (both supported, dual-layout):
  * - Asset folder: {photon-name}/ next to {photon-name}.photon.ts
- * - Subfolder: ui/, prompts/, resources/
+ * - Old layout: subfolders ui/, prompts/, resources/ live directly under {photon-name}/
+ * - New layout: subfolders live under {photon-name}/assets/ (canonical bundle root)
+ *
+ * When {photon-name}/assets/ exists, it becomes the resolution root for
+ * explicit @ui declarations and the source for auto-discovery. The plain
+ * {photon-name}/ folder remains a fallback so older photons keep working
+ * without modification.
  *
  * @param photonPath - Absolute path to the .photon.ts file
  * @param source - Source code content of the Photon file
@@ -70,8 +76,23 @@ export async function discoverAssets(
     // Folder doesn't exist
   }
 
+  // Dual-layout: prefer {photon}/assets/ as the canonical root when present.
+  // Falling back to the plain folder keeps every pre-v1.29 fixture working.
+  let assetRoot = assetFolder;
+  if (folderExists) {
+    const nestedRoot = path.join(assetFolder, 'assets');
+    try {
+      const nestedStat = await fs.stat(nestedRoot);
+      if (nestedStat.isDirectory()) {
+        assetRoot = nestedRoot;
+      }
+    } catch {
+      // No assets/ subfolder — keep the legacy root.
+    }
+  }
+
   // Extract explicit asset declarations from source annotations
-  const assets = extractor.extractAssets(source, folderExists ? assetFolder : undefined);
+  const assets = extractor.extractAssets(source, folderExists ? assetRoot : undefined);
 
   // If no folder exists and no explicit declarations, skip
   if (
@@ -84,19 +105,33 @@ export async function discoverAssets(
   }
 
   if (folderExists) {
-    // Resolve paths for explicitly declared assets
+    // Resolve paths for explicitly declared assets. Try the canonical root
+    // first; if a declaration was written against the legacy root convention
+    // (./ui/foo.html with no assets/ wrapper), fall back to assetFolder so
+    // the directive keeps resolving without source edits.
+    const resolveAssetPath = async (declared: string): Promise<string> => {
+      const cleaned = declared.replace(/^\.\//, '');
+      const primary = path.resolve(assetRoot, cleaned);
+      if (assetRoot === assetFolder) return primary;
+      try {
+        await fs.access(primary);
+        return primary;
+      } catch {
+        return path.resolve(assetFolder, cleaned);
+      }
+    };
     for (const ui of assets.ui) {
-      ui.resolvedPath = path.resolve(assetFolder, ui.path.replace(/^\.\//, ''));
+      ui.resolvedPath = await resolveAssetPath(ui.path);
     }
     for (const prompt of assets.prompts) {
-      prompt.resolvedPath = path.resolve(assetFolder, prompt.path.replace(/^\.\//, ''));
+      prompt.resolvedPath = await resolveAssetPath(prompt.path);
     }
     for (const resource of assets.resources) {
-      resource.resolvedPath = path.resolve(assetFolder, resource.path.replace(/^\.\//, ''));
+      resource.resolvedPath = await resolveAssetPath(resource.path);
     }
 
-    // Auto-discover assets from folder structure
-    await autoDiscoverAssets(assetFolder, assets);
+    // Auto-discover assets from folder structure (new convention root first).
+    await autoDiscoverAssets(assetRoot, assets);
   }
 
   return assets;
