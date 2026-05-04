@@ -2009,17 +2009,24 @@ export class SchemaExtractor {
   }
 
   /**
-   * Check if JSDoc contains @Template tag
+   * Check if a method's JSDoc marks it as an MCP prompt template.
+   * Canonical form: `@prompt`. Legacy form `@Template` still accepted
+   * for backward compatibility with photons authored before the rename.
    */
   private hasTemplateTag(jsdocContent: string): boolean {
-    return /@Template/i.test(jsdocContent);
+    return /@(?:Template|prompt)\b/i.test(jsdocContent);
   }
 
   /**
-   * Check if JSDoc contains @Static tag
+   * Check if a method's JSDoc marks it as a dynamic MCP resource resolver.
+   * Canonical form: `@resource <uri-template>`. Legacy form `@Static`
+   * still accepted. Disambiguation from the class-level static-file form
+   * (`@resource <id> <path>`) is by argument shape: the class-level form
+   * requires `<id>` followed by a path starting with `./` or `/`, which
+   * the URI-template form never matches.
    */
   private hasStaticTag(jsdocContent: string): boolean {
-    return /@Static/i.test(jsdocContent);
+    return /@(?:Static|resource)\b/i.test(jsdocContent);
   }
 
   /**
@@ -2477,11 +2484,12 @@ export class SchemaExtractor {
   }
 
   /**
-   * Extract URI pattern from @Static tag
-   * Example: @Static github://repos/{owner}/{repo}/readme
+   * Extract URI pattern from a method's resource annotation.
+   * Canonical: `@resource github://repos/{owner}/{repo}/readme`
+   * Legacy: `@Static github://repos/{owner}/{repo}/readme`
    */
   private extractStaticURI(jsdocContent: string): string | null {
-    const match = jsdocContent.match(/@Static\s+([\w:\/\{\}\-_.]+)/i);
+    const match = jsdocContent.match(/@(?:Static|resource)\s+([\w:\/\{\}\-_.]+)/i);
     return match ? match[1].trim() : null;
   }
 
