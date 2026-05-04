@@ -264,6 +264,33 @@ export class Photon {
   }
 
   /**
+   * Notify subscribed MCP clients that the resource at `uri` has changed.
+   * Triggers `notifications/resources/updated` for every client that has
+   * issued `resources/subscribe` against this exact URI.
+   *
+   * Default no-op so calls from CLI execution (no live MCP server) do not
+   * throw. The runtime overrides this with a wired version on every
+   * instance it constructs; that wired version dispatches into the
+   * server's subscription registry.
+   *
+   * Use it from `@stateful` methods or any code path that mutates the
+   * data behind a `@resource <uri-template>` resolver:
+   *
+   * @example
+   * ```typescript
+   * async upsertPerson(params: { slug: string; ... }) {
+   *   this.people[params.slug] = ...;
+   *   this.notifyResourceUpdated(`person://${params.slug}`);
+   * }
+   * ```
+   */
+  notifyResourceUpdated(_uri: string): void {
+    // Runtime injects a wired version on every instance — see
+    // photon/src/loader.ts injectResourceNotifier. This default is for
+    // standalone use (CLI, unit tests) where no MCP server is attached.
+  }
+
+  /**
    * Internal: resolve the runtime-supplied input provider, throwing a
    * clear error if none is attached to the current execution context.
    * @internal
