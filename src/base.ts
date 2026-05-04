@@ -264,6 +264,36 @@ export class Photon {
   }
 
   /**
+   * Workspace roots declared by the connected MCP client (per spec
+   * `roots/list`). Each entry is a `{ uri, name? }` pair; URIs always start
+   * with `file://` per the current spec.
+   *
+   * Empty when:
+   *   - the client did not declare the `roots` capability,
+   *   - the photon is running outside a live MCP session (CLI / unit test),
+   *   - the client returned an empty list.
+   *
+   * The runtime fetches `roots/list` once per session and refreshes on
+   * `notifications/roots/list_changed`, so reads inside a tool call are
+   * synchronous and consistent.
+   *
+   * @example
+   * ```typescript
+   * async listProjectFiles() {
+   *   const roots = this.roots;
+   *   if (roots.length === 0) return [];
+   *   // ...resolve files under each root.uri...
+   * }
+   * ```
+   */
+  get roots(): Array<{ uri: string; name?: string }> {
+    const store = executionContext.getStore() as
+      | { roots?: Array<{ uri: string; name?: string }> }
+      | undefined;
+    return store?.roots ?? [];
+  }
+
+  /**
    * Notify subscribed MCP clients that the resource at `uri` has changed.
    * Triggers `notifications/resources/updated` for every client that has
    * issued `resources/subscribe` against this exact URI.
