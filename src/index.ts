@@ -154,6 +154,9 @@ export {
 // Core base class with lifecycle hooks
 export { Photon, Photon as PhotonMCP } from './base.js';
 
+// Cloudflare capability surface
+export { type CFRuntime, notConfiguredCF } from './cf.js';
+
 // Mixin for capability injection without requiring inheritance
 export { withPhotonCapabilities } from './mixins.js';
 

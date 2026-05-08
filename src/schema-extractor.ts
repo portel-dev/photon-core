@@ -3164,7 +3164,7 @@ export class SchemaExtractor {
 /**
  * Capability types that can be auto-detected from source code
  */
-export type PhotonCapability = 'emit' | 'memory' | 'call' | 'mcp' | 'lock' | 'instanceMeta' | 'allInstances' | 'caller';
+export type PhotonCapability = 'emit' | 'memory' | 'call' | 'mcp' | 'lock' | 'instanceMeta' | 'allInstances' | 'caller' | 'cf';
 
 /**
  * Match a `this`-like base in source code. Covers:
@@ -3215,5 +3215,6 @@ export function detectCapabilities(source: string): Set<PhotonCapability> {
   if (memberAccess('instanceMeta', '\\b').test(source)) caps.add('instanceMeta');
   if (memberAccess('allInstances', '\\(').test(source)) caps.add('allInstances');
   if (memberAccess('caller', '\\b').test(source)) caps.add('caller');
+  if (memberAccess('cf', '\\b').test(source)) caps.add('cf');
   return caps;
 }

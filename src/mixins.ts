@@ -27,6 +27,7 @@ import { executionContext, type CallerInfo } from '@portel/cli';
 import { getBroker } from './channels/index.js';
 import { MemoryProvider } from './memory.js';
 import { ScheduleProvider } from './schedule.js';
+import { type CFRuntime, notConfiguredCF } from './cf.js';
 
 /**
  * Type for a constructor that may or may not extend Photon base class
@@ -85,6 +86,13 @@ export function withPhotonCapabilities<T extends Constructor>(Base: T): T {
     private _schedule?: ScheduleProvider;
 
     /**
+     * Cloudflare runtime adapter - injected by the host (miniflare
+     * locally or real Worker env when deployed).
+     * @internal
+     */
+    _cfRuntime?: CFRuntime;
+
+    /**
      * Cross-photon call handler - injected by runtime
      * @internal
      */
@@ -128,6 +136,13 @@ export function withPhotonCapabilities<T extends Constructor>(Base: T): T {
         );
       }
       return this._memory;
+    }
+
+    /**
+     * Cloudflare capability surface — see Photon.cf for full docs.
+     */
+    get cf(): CFRuntime {
+      return this._cfRuntime ?? notConfiguredCF();
     }
 
     /**

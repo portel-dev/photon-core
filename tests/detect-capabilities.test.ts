@@ -131,5 +131,15 @@ test('property name ending in caller should NOT trigger caller', () =>
 test('method similar to memory prefix', () =>
   expectNoCap('this.memoryBank.add(1)', 'memory'));
 
+console.log('\ndetectCapabilities — this.cf (Cloudflare surface):');
+
+test('literal this.cf.r2()', () => expectCap('await this.cf.r2("photos").put(k, v)', 'cf'));
+test('literal this.cf.d1()', () => expectCap('this.cf.d1("app").prepare("..")', 'cf'));
+test('literal this.cf.ai property', () => expectCap('await this.cf.ai.run("@cf/x")', 'cf'));
+test('cast (this as any).cf.kv()', () =>
+  expectCap('(this as any).cf.kv("cache").get("k")', 'cf'));
+test('property cfManager should NOT trigger cf', () =>
+  expectNoCap('this.cfManager.init()', 'cf'));
+
 console.log(`\n${passed} passed, ${failed} failed.`);
 if (failed > 0) process.exit(1);

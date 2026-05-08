@@ -45,6 +45,7 @@ import { getBroker } from './channels/index.js';
 import { withLock as withLockHelper } from './decorators.js';
 import { MemoryProvider } from './memory.js';
 import { ScheduleProvider } from './schedule.js';
+import { type CFRuntime, notConfiguredCF } from './cf.js';
 import * as path from 'path';
 import * as fs from 'fs';
 import { getPhotonDataDir } from './data-paths.js';
@@ -132,6 +133,14 @@ export class Photon {
    * @internal
    */
   private _schedule?: ScheduleProvider;
+
+  /**
+   * Cloudflare runtime adapter - injected by the host (local miniflare
+   * or deployed Worker). When unset, `this.cf` returns a stub that
+   * throws a helpful error on use.
+   * @internal
+   */
+  _cfRuntime?: CFRuntime;
 
   /**
    * Session ID for session-scoped memory - set by runtime
@@ -375,6 +384,25 @@ export class Photon {
       );
     }
     return this._memory;
+  }
+
+  /**
+   * Cloudflare capability surface. Returns an object whose subnamespaces
+   * (`r2`, `kv`, `d1`, `queue`, `vectorize`, `ai`, `images`, `browser`,
+   * `do`, `fetch`) match Cloudflare Worker bindings. The runtime adapter
+   * decides how each is backed (miniflare locally, real bindings on a
+   * deployed Worker). If no runtime is configured, the returned object
+   * throws a helpful error on use.
+   *
+   * @example
+   * ```typescript
+   * await this.cf.r2('photos').put(name, blob);
+   * await this.cf.d1('app').prepare('insert into uploads(name) values (?)').bind(name).run();
+   * await this.cf.kv('cache').put('key', 'value');
+   * ```
+   */
+  get cf(): CFRuntime {
+    return this._cfRuntime ?? notConfiguredCF();
   }
 
   /**

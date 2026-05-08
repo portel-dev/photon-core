@@ -22,6 +22,7 @@ SUITES=(
   tests/audit.test.ts
   tests/bases-registry.test.ts
   tests/bulkhead.test.ts
+  tests/cf-surface.test.ts
   tests/channels.test.ts
   tests/collection.test.ts
   tests/collections.test.ts
