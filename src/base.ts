@@ -136,11 +136,17 @@ export class Photon {
 
   /**
    * Cloudflare runtime adapter - injected by the host (local miniflare
-   * or deployed Worker). When unset, `this.cf` returns a stub that
-   * throws a helpful error on use.
+   * or deployed Worker). When unset, `this.cf` returns a per-instance
+   * cached stub that throws a helpful error on use.
    * @internal
    */
   _cfRuntime?: CFRuntime;
+
+  /**
+   * Cached unconfigured-CF stub - one per instance for identity stability.
+   * @internal
+   */
+  private _cfStub?: CFRuntime;
 
   /**
    * Session ID for session-scoped memory - set by runtime
@@ -402,7 +408,9 @@ export class Photon {
    * ```
    */
   get cf(): CFRuntime {
-    return this._cfRuntime ?? notConfiguredCF();
+    if (this._cfRuntime) return this._cfRuntime;
+    if (!this._cfStub) this._cfStub = notConfiguredCF();
+    return this._cfStub;
   }
 
   /**

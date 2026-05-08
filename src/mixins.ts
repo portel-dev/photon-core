@@ -93,6 +93,12 @@ export function withPhotonCapabilities<T extends Constructor>(Base: T): T {
     _cfRuntime?: CFRuntime;
 
     /**
+     * Cached unconfigured-CF stub - one per instance for identity stability.
+     * @internal
+     */
+    private _cfStub?: CFRuntime;
+
+    /**
      * Cross-photon call handler - injected by runtime
      * @internal
      */
@@ -142,7 +148,9 @@ export function withPhotonCapabilities<T extends Constructor>(Base: T): T {
      * Cloudflare capability surface — see Photon.cf for full docs.
      */
     get cf(): CFRuntime {
-      return this._cfRuntime ?? notConfiguredCF();
+      if (this._cfRuntime) return this._cfRuntime;
+      if (!this._cfStub) this._cfStub = notConfiguredCF();
+      return this._cfStub;
     }
 
     /**
