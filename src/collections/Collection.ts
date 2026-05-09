@@ -330,9 +330,28 @@ export class Collection<T> extends ReactiveArray<T> {
   /**
    * Attach a rendering hint for auto-UI.
    * Returns `this` for chaining at the end of a query.
+   *
+   * Pins `toJSON` as an own property here. Bun's `JSON.stringify`
+   * resolves the array branch before consulting the prototype's
+   * `toJSON`, so a prototype-only definition is silently bypassed
+   * for Array subclasses (Node 22 calls it correctly; Bun 1.2 does
+   * not). Installing the bound function as an own enumerable: false
+   * property makes both engines route through our serialization.
+   * Without `.as()` the photon shouldn't produce the metadata
+   * envelope at all, so the prototype-level `toJSON` (returns plain
+   * array) is fine — and JSON.stringify's array path produces the
+   * same plain array anyway, so the Bun divergence is invisible
+   * for that case.
    */
   as(format: RenderFormat, options?: Record<string, unknown>): this {
     this._renderHint = { format, options };
+    if (!Object.prototype.hasOwnProperty.call(this, 'toJSON')) {
+      Object.defineProperty(this, 'toJSON', {
+        value: this.toJSON.bind(this),
+        enumerable: false,
+        configurable: true,
+      });
+    }
     return this;
   }
 

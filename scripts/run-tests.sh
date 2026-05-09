@@ -1,29 +1,29 @@
 #!/usr/bin/env bash
-# Runs every passing test suite in photon-core.
+# Runs every test suite in photon-core.
 #
-# Three suites are deliberately excluded and tracked as known gaps rather than
-# silently skipped:
-#   - tests/schedule.test.ts
-#       Pre-existing test-state contamination — two "create: …" cases fail
-#       because earlier tests leave a ScheduleProvider entry in the shared
-#       store. Pre-dates the v2.24.0 window. Tracked for a future fix.
-#   - tests/schema-extractor-constraint-validation.test.ts
-#       Imports from 'vitest' but photon-core has no vitest devDependency.
-#       Either install vitest or migrate the file to node:test — the
-#       coverage it adds is already duplicated by tsc type-checks.
-#   - tests/schema-extractor-phase2-validation.test.ts
-#       Same vitest-import blocker as above.
+# Two test runners cover different files:
+#   - `bun run` for plain Node-assert suites (the photon-core
+#     convention — assert + custom test wrappers, no framework).
+#     Previously this used `npx tsx`; switched because tsx's esbuild
+#     transform service intermittently throws "write EPIPE" when
+#     many suites run in sequence. Bun's TS support is native and
+#     stable.
+#   - `npx vitest` for the two schema-extractor validation files
+#     which use vitest's `describe/it/expect`. vitest is now a
+#     devDependency so these run as part of the standard suite —
+#     no longer skipped.
 #
 # Update this list alongside any new test file.
 
 set -eo pipefail
 
-SUITES=(
+# Bun-runnable suites — Node-assert style.
+TSX_SUITES=(
   tests/audit.test.ts
   tests/bases-registry.test.ts
   tests/bulkhead.test.ts
-  tests/cf-surface.test.ts
   tests/channels.test.ts
+  tests/cloudflare-surface.test.ts
   tests/collection.test.ts
   tests/collections.test.ts
   tests/data-paths.test.ts
@@ -44,17 +44,27 @@ SUITES=(
   tests/on-error-hook.test.ts
   tests/photon-base-sample-elicit.test.ts
   tests/photon-error.test.ts
+  tests/photon-injection.test.ts
   tests/photon-loader-lite.test.ts
+  tests/schedule.test.ts
   tests/shared-utils.test.ts
   tests/watcher.test.ts
+)
+
+# Vitest-driven suites.
+VITEST_SUITES=(
+  tests/schema-extractor-constraint-validation.test.ts
+  tests/schema-extractor-phase2-validation.test.ts
 )
 
 PASS=0
 FAIL=0
 FAILED_SUITES=()
-for t in "${SUITES[@]}"; do
+
+echo "── tsx suites ──"
+for t in "${TSX_SUITES[@]}"; do
   printf "  %-60s " "$t"
-  if npx tsx "$t" > /tmp/photon-core-$(basename "$t").log 2>&1; then
+  if bun run "$t" > /tmp/photon-core-$(basename "$t").log 2>&1; then
     echo "OK"
     PASS=$((PASS + 1))
   else
@@ -65,13 +75,33 @@ for t in "${SUITES[@]}"; do
 done
 
 echo
-echo "  Passed: $PASS / ${#SUITES[@]}"
+echo "── vitest suites ──"
+if npx vitest run "${VITEST_SUITES[@]}" > /tmp/photon-core-vitest.log 2>&1; then
+  for t in "${VITEST_SUITES[@]}"; do
+    printf "  %-60s OK\n" "$t"
+    PASS=$((PASS + 1))
+  done
+else
+  for t in "${VITEST_SUITES[@]}"; do
+    printf "  %-60s FAIL\n" "$t"
+    FAIL=$((FAIL + 1))
+    FAILED_SUITES+=("$t")
+  done
+fi
+
+TOTAL=$(( ${#TSX_SUITES[@]} + ${#VITEST_SUITES[@]} ))
+echo
+echo "  Passed: $PASS / $TOTAL"
 if [ "$FAIL" -gt 0 ]; then
   echo "  Failed: $FAIL"
   for t in "${FAILED_SUITES[@]}"; do
     echo
     echo "  ── $t ──"
-    tail -20 "/tmp/photon-core-$(basename "$t").log" | sed 's/^/    /'
+    if [ -f "/tmp/photon-core-$(basename "$t").log" ]; then
+      tail -20 "/tmp/photon-core-$(basename "$t").log" | sed 's/^/    /'
+    else
+      tail -20 /tmp/photon-core-vitest.log | sed 's/^/    /'
+    fi
   done
   exit 1
 fi
