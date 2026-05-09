@@ -166,8 +166,9 @@ export {
   SHARED_BROWSER_BINDING,
 } from './cloudflare.js';
 export { type CloudflareEnv } from './env.js';
-// Internal CF structural types (kept for backward compatibility with
-// callers building their own CF runtimes; not the user-facing surface).
+// Structural CF binding types — published so hosts can type their own
+// CF adapters against the same shape `Cloudflare` exposes (e.g. unit
+// tests that mock `cf.kv()` returns).
 export {
   type R2BucketLike,
   type KVNamespaceLike,
@@ -178,12 +179,6 @@ export {
   type AiLike,
   type ImagesBindingLike,
   type FetcherLike,
-  // Legacy CF surface kept exported for hosts that built their own
-  // adapter against the original `this.cf.*` shape (notably the photon
-  // repo's classic loader / cf-local). New code should consume the
-  // `Cloudflare` injection above instead.
-  type CFRuntime,
-  notConfiguredCF,
 } from './cf.js';
 
 // Mixin for capability injection without requiring inheritance
