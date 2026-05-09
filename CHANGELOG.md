@@ -4,7 +4,7 @@ All notable changes to `@portel/photon-core` will be documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version numbers follow [Semantic Versioning 2.0](https://semver.org/).
 
-## [Unreleased]
+## [2.27.0] - 2026-05-09
 
 ### Added
 
