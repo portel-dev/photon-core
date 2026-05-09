@@ -27,7 +27,7 @@ function test(name: string, fn: () => void): void {
   }
 }
 
-const FUNCTION_CATEGORIES = ['r2', 'kv', 'd1', 'queue', 'vectorize', 'do'] as const;
+const FUNCTION_CATEGORIES = ['r2', 'kv', 'd1', 'queue', 'vectorize'] as const;
 const PROPERTY_CATEGORIES = ['ai', 'images', 'browser'] as const;
 
 console.log('this.cf — Photon base class:');
@@ -160,7 +160,6 @@ function makeFakeCF(): CFRuntime {
     ai: { run: () => Promise.resolve('ok') } as any,
     images: {} as any,
     browser: {} as any,
-    do: () => ({}) as any,
     fetch: async () => new Response('ok') as any,
   };
 }

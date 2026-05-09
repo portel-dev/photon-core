@@ -116,7 +116,6 @@ export interface CFRuntime {
   ai: AiLike;
   images: ImagesBindingLike;
   browser: FetcherLike;
-  do(name: string): DurableObjectNamespaceLike;
   fetch(input: string, init?: unknown): Promise<unknown>;
 }
 
@@ -159,7 +158,6 @@ export function notConfiguredCF(): CFRuntime {
     ai: throwingProperty('ai') as unknown as AiLike,
     images: throwingProperty('images') as unknown as ImagesBindingLike,
     browser: throwingProperty('browser') as unknown as FetcherLike,
-    do: throwingFn('do') as CFRuntime['do'],
     fetch: ((_input: string, _init?: unknown) => {
       throw new Error(`this.cf.fetch() called but ${HINT}`);
     }) as CFRuntime['fetch'],
