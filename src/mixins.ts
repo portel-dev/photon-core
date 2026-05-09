@@ -99,6 +99,18 @@ export function withPhotonCapabilities<T extends Constructor>(Base: T): T {
     private _cfStub?: CFRuntime;
 
     /**
+     * Cloudflare Worker env when deployed; undefined on local hosts.
+     * See Photon.env for the full contract.
+     */
+    readonly env?: Record<string, unknown>;
+
+    /**
+     * True when the active /mcp request passed the PHOTON_MCP_BEARER
+     * gate. See Photon.mcpAuthed for the full contract.
+     */
+    readonly mcpAuthed?: boolean;
+
+    /**
      * Cross-photon call handler - injected by runtime
      * @internal
      */

@@ -155,6 +155,35 @@ export class Photon {
   _sessionId?: string;
 
   /**
+   * Cloudflare Worker env, present only when the photon runs on a
+   * deployed CF Worker. Carries bindings (KV, R2, secrets, custom env
+   * vars) that aren't part of the typed `this.cf.*` namespace. Undefined
+   * on the local CLI / Beam daemon.
+   *
+   * Typed loosely so photon-core stays free of `@cloudflare/workers-types`.
+   * Photons that need exact binding shapes can re-declare the property
+   * with a stricter type.
+   */
+  readonly env?: Record<string, unknown>;
+
+  /**
+   * True when the active `/mcp` request passed the `PHOTON_MCP_BEARER`
+   * Worker secret check. False/undefined when:
+   *  - no secret is configured (the bearer gate is off),
+   *  - the photon is running locally (CLI / Beam),
+   *  - the call arrived via `/api/*`, `__call`, or any path other than
+   *    a transport-authed `tools/call`.
+   *
+   * User code can guard sensitive methods with:
+   * ```typescript
+   * if (!this.mcpAuthed) throw new Error('unauthorized');
+   * ```
+   * Backed by AsyncLocalStorage on the deployed Worker so concurrent
+   * tool calls each see their own value.
+   */
+  readonly mcpAuthed?: boolean;
+
+  /**
    * Authenticated caller identity
    *
    * Populated from MCP OAuth when `@auth` is enabled on the photon.

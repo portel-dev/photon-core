@@ -38,6 +38,33 @@ test('Photon.cf returns a defined object even with no runtime', () => {
   assert.ok(inst.cf, 'this.cf should be defined');
 });
 
+test('Photon.env is undefined on local (no CF runtime attached)', () => {
+  class Sample extends Photon {}
+  const inst = new Sample();
+  // The CF Worker template attaches `env` via Object.defineProperty at
+  // dispatch time; locally it stays undefined so user code can branch.
+  assert.equal(inst.env, undefined);
+});
+
+test('Photon.mcpAuthed is undefined on local (no /mcp dispatch)', () => {
+  class Sample extends Photon {}
+  const inst = new Sample();
+  assert.equal(inst.mcpAuthed, undefined);
+});
+
+test('subclass can read this.env / this.mcpAuthed without casting', () => {
+  // Type-only smoke. If the base properties weren't declared the
+  // expressions inside this method would fail tsc. The runtime check
+  // just confirms the property accesses don't throw.
+  class Sample extends Photon {
+    check(): { hasEnv: boolean; authed: boolean } {
+      return { hasEnv: this.env !== undefined, authed: this.mcpAuthed === true };
+    }
+  }
+  const inst = new Sample();
+  assert.deepEqual(inst.check(), { hasEnv: false, authed: false });
+});
+
 test('Photon.cf is identity-stable across reads (cached stub)', () => {
   class Sample extends Photon {}
   const inst = new Sample();
