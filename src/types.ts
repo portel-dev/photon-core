@@ -313,7 +313,22 @@ export interface ConstructorParam {
 /**
  * Injection type for constructor parameters
  */
-export type InjectionType = 'env' | 'mcp' | 'photon' | 'state';
+export type InjectionType =
+  | 'env'
+  | 'mcp'
+  | 'photon'
+  | 'state'
+  // Constructor param typed `Photon` from @portel/photon — loader injects
+  // a Photon instance configured identically to the host photon.
+  | 'photonRuntime'
+  // Constructor param typed `Cloudflare` — loader injects a wrapped CF
+  // surface (auto-named bindings) backed by miniflare locally or by the
+  // deployed Worker `env`.
+  | 'cloudflare'
+  // Constructor param typed `CloudflareEnv` / `CloudflareEnv<T>` — loader
+  // injects the raw Worker `env`. Escape hatch for service bindings
+  // and exotic features the wrapped surface doesn't cover.
+  | 'cloudflareEnv';
 
 /**
  * Resolved injection info for a constructor parameter

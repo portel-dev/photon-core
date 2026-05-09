@@ -131,15 +131,22 @@ test('property name ending in caller should NOT trigger caller', () =>
 test('method similar to memory prefix', () =>
   expectNoCap('this.memoryBank.add(1)', 'memory'));
 
-console.log('\ndetectCapabilities — this.cf (Cloudflare surface):');
+console.log('\ndetectCapabilities — Cloudflare forgiving auto-inject:');
 
-test('literal this.cf.r2()', () => expectCap('await this.cf.r2("photos").put(k, v)', 'cf'));
-test('literal this.cf.d1()', () => expectCap('this.cf.d1("app").prepare("..")', 'cf'));
-test('literal this.cf.ai property', () => expectCap('await this.cf.ai.run("@cf/x")', 'cf'));
-test('cast (this as any).cf.kv()', () =>
-  expectCap('(this as any).cf.kv("cache").get("k")', 'cf'));
-test('property cfManager should NOT trigger cf', () =>
-  expectNoCap('this.cfManager.init()', 'cf'));
+test('literal this.cf.r2() flags cloudflare', () =>
+  expectCap('await this.cf.r2().put(k, v)', 'cloudflare'));
+test('literal this.cf.d1() flags cloudflare', () =>
+  expectCap('this.cf.d1().prepare("..")', 'cloudflare'));
+test('literal this.cf.ai property flags cloudflare', () =>
+  expectCap('await this.cf.ai.run("@cf/x")', 'cloudflare'));
+test('cast (this as any).cf.kv() flags cloudflare', () =>
+  expectCap('(this as any).cf.kv("cache").get("k")', 'cloudflare'));
+test('property cfManager should NOT trigger cloudflare', () =>
+  expectNoCap('this.cfManager.init()', 'cloudflare'));
+test('this.cfEnv.MY_KV flags cloudflareEnv (raw env escape hatch)', () =>
+  expectCap('await this.cfEnv.MY_KV.put(k, v)', 'cloudflareEnv'));
+test('property cfEnvHandler should NOT trigger cloudflareEnv', () =>
+  expectNoCap('this.cfEnvHandler.init()', 'cloudflareEnv'));
 
 console.log(`\n${passed} passed, ${failed} failed.`);
 if (failed > 0) process.exit(1);

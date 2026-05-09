@@ -38,6 +38,12 @@ import { withPhotonCapabilities } from './mixins.js';
 import { MemoryProvider } from './memory.js';
 import { ScheduleProvider } from './schedule.js';
 import { toEnvVarName, parseEnvValue, type MissingParamInfo } from './env-utils.js';
+import { Photon as PhotonBase } from './base.js';
+import {
+  type Cloudflare,
+  notConfiguredCloudflare,
+  createCloudflareFromEnv,
+} from './cloudflare.js';
 import type { ExtractedSchema } from './types.js';
 import type { MCPClientFactory } from '@portel/mcp';
 import { getCacheDir } from './data-paths.js';
@@ -59,6 +65,22 @@ export interface PhotonOptions {
   sessionId?: string;
   /** Namespace for data path resolution (marketplace owner). Defaults to 'local'. */
   namespace?: string;
+  /**
+   * Build a `Cloudflare` runtime for a given photon. Hosts that bring CF
+   * support (local miniflare, deployed Worker) supply a factory; the
+   * loader calls it whenever a photon's constructor needs `Cloudflare`
+   * (or whenever `this.cf.*` is detected on a plain class). When the
+   * factory is absent the loader injects a throwing-Proxy fallback so
+   * the diagnostic remains clear.
+   */
+  cloudflareFactory?: (photonName: string) => Cloudflare;
+  /**
+   * Raw Cloudflare Worker `env`. Wired through to constructor params
+   * typed `CloudflareEnv` / `CloudflareEnv<T>`. Only present when the
+   * loader is being driven by the deployed Worker template (or by a
+   * test that wants to simulate it).
+   */
+  cloudflareEnv?: Record<string, unknown>;
 }
 
 export interface PhotonEvent {
@@ -263,6 +285,24 @@ async function loadPhotonInternal(
     // 9. Instantiate
     const instance = new EnhancedClass(...constructorArgs) as Record<string, any>;
 
+    // 9a. Forgiving auto-inject: classes that reference `this.cf.*` or
+    // `this.cfEnv.*` without declaring the matching constructor param
+    // still get the field populated, so authoring stays loose. The
+    // explicit-injection path (a typed constructor param) takes
+    // precedence; this only fills gaps. Mirrors how the classic loader
+    // injects `_callHandler` etc. for plain classes.
+    const detected = detectCapabilities(source);
+    const hasExplicitCloudflare = injections.some(i => i.injectionType === 'cloudflare');
+    const hasExplicitCloudflareEnv = injections.some(i => i.injectionType === 'cloudflareEnv');
+    if (detected.has('cloudflare') && !hasExplicitCloudflare && instance.cf === undefined) {
+      instance.cf = options.cloudflareFactory
+        ? options.cloudflareFactory(photonName)
+        : notConfiguredCloudflare();
+    }
+    if (detected.has('cloudflareEnv') && !hasExplicitCloudflareEnv && instance.cfEnv === undefined) {
+      instance.cfEnv = options.cloudflareEnv ?? makeThrowingCloudflareEnv();
+    }
+
     // 10. Set photon identity. Namespace mirrors the file's position under
     // baseDir (same rule the classic loader applies). Falls back to 'local'
     // when no baseDir context is available. See
@@ -450,6 +490,38 @@ async function resolveConstructorArgs(
         break;
       }
 
+      case 'photonRuntime': {
+        // `private photon: Photon` — inject a Photon instance configured
+        // identically to the host so `this.photon.memory.set(...)`,
+        // `this.photon.emit(...)`, etc. resolve to the same scope as
+        // the equivalent `extends Photon` calls would. Identity-stable
+        // per host load.
+        const runtime = createPhotonRuntimeForHost(photonName, currentPath, options);
+        values.push(runtime);
+        break;
+      }
+
+      case 'cloudflare': {
+        // `private cf: Cloudflare` — wrapped, auto-named CF surface.
+        const cf = options.cloudflareFactory
+          ? options.cloudflareFactory(photonName)
+          : notConfiguredCloudflare();
+        values.push(cf);
+        break;
+      }
+
+      case 'cloudflareEnv': {
+        // `private cfEnv: CloudflareEnv` — raw Worker env. On hosts
+        // without a CF runtime, hand back a throwing Proxy so the
+        // diagnostic names the imported symbol clearly.
+        if (options.cloudflareEnv) {
+          values.push(options.cloudflareEnv);
+        } else {
+          values.push(makeThrowingCloudflareEnv());
+        }
+        break;
+      }
+
       default:
         values.push(undefined);
     }
@@ -464,6 +536,119 @@ async function resolveConstructorArgs(
   }
 
   return values;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Photon-as-injection helpers
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * Build the `Photon` instance handed to `private photon: Photon` ctor
+ * params. We instantiate the real base class and configure it with the
+ * host photon's identity so every capability (`memory`, `schedule`,
+ * `emit`, `call`, `mcp`, `caller`, `confirm`, `elicit`, `sample`,
+ * `photon.use`, ...) resolves to the same scope an equivalent
+ * `extends Photon` consumer would see. The result is shape-equivalent
+ * to a normal Photon, so authors can swap between `extends Photon` and
+ * constructor injection without touching any call site beyond the
+ * access path (`this.memory` vs `this.photon.memory`).
+ *
+ * The `_callHandler` and `setMCPFactory` wiring is deferred to the
+ * caller (see step 14 of `loadPhotonInternal`), which assigns the
+ * resolver after constructor args are built. Constructor-time access
+ * to `photon.memory` works because MemoryProvider is lazy-resolved on
+ * first use and the photon name / baseDir are set up here directly.
+ */
+function createPhotonRuntimeForHost(
+  photonName: string,
+  currentPath: string,
+  options: PhotonOptions,
+): InstanceType<typeof PhotonBase> {
+  const runtime = new PhotonBase() as PhotonBase & Record<string, unknown>;
+  runtime._photonName = photonName;
+  runtime._photonNamespace =
+    options.namespace ?? deriveNamespace(currentPath, options.baseDir);
+  runtime._baseDir = options.baseDir;
+  runtime._photonFilePath = currentPath;
+  if (options.sessionId) {
+    runtime._sessionId = options.sessionId;
+  }
+  const setMCPFactory = (runtime as { setMCPFactory?: (f: MCPClientFactory) => void }).setMCPFactory;
+  if (options.mcpFactory && typeof setMCPFactory === 'function') {
+    setMCPFactory.call(runtime, options.mcpFactory);
+  }
+  // Cross-photon calls flow through the same in-process resolver the
+  // host instance uses. `loadPhotonInternal` re-assigns `_callHandler`
+  // on the host instance below; the runtime facade gets its own copy
+  // pointed at the same target resolver so injected callers and
+  // extends-Photon callers see identical behaviour.
+  runtime._callHandler = async (
+    targetPhotonName: string,
+    method: string,
+    params: Record<string, unknown>,
+  ) => {
+    const targetPath = resolvePhotonPath(targetPhotonName, currentPath, options.baseDir);
+    const target = await photon(targetPath, {
+      baseDir: options.baseDir,
+      mcpFactory: options.mcpFactory,
+      sessionId: options.sessionId,
+    });
+    return (target as Record<string, (p: Record<string, unknown>) => Promise<unknown>>)[method](params);
+  };
+  // `this.photon.photon.use()` parity: `extends Photon` instances get
+  // `_photonResolver` set by the host loader; the injected runtime
+  // needs the same resolver so dynamic photon access works identically
+  // through both consumption modes.
+  runtime._photonResolver = async (name: string, instanceName?: string) => {
+    const targetPath = resolvePhotonPath(name, currentPath, options.baseDir);
+    return photon(targetPath, {
+      baseDir: options.baseDir,
+      mcpFactory: options.mcpFactory,
+      sessionId: options.sessionId,
+      instanceName,
+    });
+  };
+  return runtime;
+}
+
+const CFENV_HINT =
+  'This photon imports `CloudflareEnv` from "@portel/photon" but no CF ' +
+  'env was attached. Run via `photon host run` (miniflare-backed) or ' +
+  'deploy with `photon host deploy cloudflare`. Outside CF, this ' +
+  'photon\'s CF-dependent methods cannot execute.';
+
+function makeThrowingCloudflareEnv(): Record<string, unknown> {
+  // Engine-internal property accesses (constructor lookup, async-iterator
+  // probing, `await` thenable check, JSON.stringify) must not throw —
+  // otherwise, harmless reflection from runtime utilities like
+  // `wireReactiveCollections` blows up the photon load before any user
+  // code runs. We satisfy those safely and only throw when actual
+  // user code reads a binding name.
+  const safePassthrough = new Set<string | symbol>([
+    'constructor',
+    'then',
+    'toJSON',
+    'toString',
+    'valueOf',
+    Symbol.toPrimitive,
+    Symbol.toStringTag,
+    Symbol.iterator,
+    Symbol.asyncIterator,
+  ]);
+  return new Proxy(Object.create(null), {
+    get(_target, prop) {
+      if (safePassthrough.has(prop)) {
+        if (prop === 'toString' || prop === Symbol.toPrimitive) {
+          return () => '[unconfigured CloudflareEnv]';
+        }
+        return undefined;
+      }
+      throw new Error(`CloudflareEnv.${String(prop)} accessed but ${CFENV_HINT}`);
+    },
+    has(_target, prop) {
+      return !safePassthrough.has(prop);
+    },
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════

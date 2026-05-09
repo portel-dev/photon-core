@@ -154,8 +154,37 @@ export {
 // Core base class with lifecycle hooks
 export { Photon, Photon as PhotonMCP } from './base.js';
 
-// Cloudflare capability surface
-export { type CFRuntime, notConfiguredCF } from './cf.js';
+// Cloudflare deploy-target injections (constructor-injected, not on Photon)
+export {
+  type Cloudflare,
+  type ScopedBindingCategory,
+  bindingNameFor,
+  notConfiguredCloudflare,
+  createCloudflareFromEnv,
+  SHARED_AI_BINDING,
+  SHARED_IMAGES_BINDING,
+  SHARED_BROWSER_BINDING,
+} from './cloudflare.js';
+export { type CloudflareEnv } from './env.js';
+// Internal CF structural types (kept for backward compatibility with
+// callers building their own CF runtimes; not the user-facing surface).
+export {
+  type R2BucketLike,
+  type KVNamespaceLike,
+  type D1DatabaseLike,
+  type D1PreparedStatementLike,
+  type QueueLike,
+  type VectorizeIndexLike,
+  type AiLike,
+  type ImagesBindingLike,
+  type FetcherLike,
+  // Legacy CF surface kept exported for hosts that built their own
+  // adapter against the original `this.cf.*` shape (notably the photon
+  // repo's classic loader / cf-local). New code should consume the
+  // `Cloudflare` injection above instead.
+  type CFRuntime,
+  notConfiguredCF,
+} from './cf.js';
 
 // Mixin for capability injection without requiring inheritance
 export { withPhotonCapabilities } from './mixins.js';

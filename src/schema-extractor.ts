@@ -2888,6 +2888,30 @@ export class SchemaExtractor {
     const photonMap = new Map(photonDeps.map(d => [d.name, d]));
 
     return params.map(param => {
+      // Framework-recognized typed injections (matched on the parameter
+      // type, not the parameter name). Win ahead of every other rule
+      // because they are unambiguous: a user importing `Photon` /
+      // `Cloudflare` / `CloudflareEnv` and typing a constructor param
+      // with one of those names is asking the loader to wire it.
+      if (isPhotonRuntimeType(param.type)) {
+        return {
+          param,
+          injectionType: 'photonRuntime' as const,
+        };
+      }
+      if (isCloudflareType(param.type)) {
+        return {
+          param,
+          injectionType: 'cloudflare' as const,
+        };
+      }
+      if (isCloudflareEnvType(param.type)) {
+        return {
+          param,
+          injectionType: 'cloudflareEnv' as const,
+        };
+      }
+
       // Primitives → env var
       if (param.isPrimitive) {
         const envVarName = this.toEnvVarName(mcpName, param.name);
@@ -3164,7 +3188,23 @@ export class SchemaExtractor {
 /**
  * Capability types that can be auto-detected from source code
  */
-export type PhotonCapability = 'emit' | 'memory' | 'call' | 'mcp' | 'lock' | 'instanceMeta' | 'allInstances' | 'caller' | 'cf';
+export type PhotonCapability =
+  | 'emit'
+  | 'memory'
+  | 'call'
+  | 'mcp'
+  | 'lock'
+  | 'instanceMeta'
+  | 'allInstances'
+  | 'caller'
+  // Forgiving auto-inject: when these are detected on a class that
+  // didn't declare a constructor param of the matching type, the loader
+  // assigns the matching field on the instance after construction so
+  // `this.cf.kv()` / `this.cfEnv.MY_KV.put(...)` work without the user
+  // having to wire the import + ctor param themselves. The diagnostic
+  // remains clear when the matching CF runtime isn't actually attached.
+  | 'cloudflare'
+  | 'cloudflareEnv';
 
 /**
  * Match a `this`-like base in source code. Covers:
@@ -3195,6 +3235,34 @@ function memberAccess(name: string, trailing: '\\(' | '\\b'): RegExp {
 }
 
 /**
+ * Constructor-param type matchers for the framework-injected types.
+ * The schema extractor sees parameter types as raw text (e.g. `"Photon"`,
+ * `"Cloudflare"`, `"CloudflareEnv<MyBindings>"`), so we match by string.
+ *
+ * Optional modifiers / unions like `Photon | undefined` are accepted so
+ * authors who write `private photon?: Photon` get the same injection.
+ */
+function stripNullish(type: string): string {
+  return type
+    .trim()
+    .replace(/\|\s*undefined\b/g, '')
+    .replace(/\|\s*null\b/g, '')
+    .trim();
+}
+
+export function isPhotonRuntimeType(type: string): boolean {
+  return /^Photon$/.test(stripNullish(type));
+}
+
+export function isCloudflareType(type: string): boolean {
+  return /^Cloudflare$/.test(stripNullish(type));
+}
+
+export function isCloudflareEnvType(type: string): boolean {
+  return /^CloudflareEnv(\s*<[\s\S]+>)?$/.test(stripNullish(type));
+}
+
+/**
  * Detect capabilities used by a Photon from its source code.
  *
  * Scans for `this.emit(`, `this.memory`, `this.call(`, etc. patterns
@@ -3215,6 +3283,10 @@ export function detectCapabilities(source: string): Set<PhotonCapability> {
   if (memberAccess('instanceMeta', '\\b').test(source)) caps.add('instanceMeta');
   if (memberAccess('allInstances', '\\(').test(source)) caps.add('allInstances');
   if (memberAccess('caller', '\\b').test(source)) caps.add('caller');
-  if (memberAccess('cf', '\\b').test(source)) caps.add('cf');
+  // Forgiving auto-inject signals — surface as separate capabilities so
+  // the loader can populate `instance.cf` / `instance.cfEnv` for plain
+  // classes that reference them without the explicit constructor param.
+  if (memberAccess('cf', '\\b').test(source)) caps.add('cloudflare');
+  if (memberAccess('cfEnv', '\\b').test(source)) caps.add('cloudflareEnv');
   return caps;
 }
