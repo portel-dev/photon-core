@@ -175,6 +175,12 @@ export default class MyPhoton extends Photon {
 - `getLock(name)` - Query who holds a lock
 - `withLock(name, fn, timeout?)` - Execute function with a binary mutex lock
 
+**MCP workspace roots** (v2.26.0+):
+- `this.roots` - `Array<{ uri: string; name?: string }>` of roots declared by the connected client (`roots/list`). Empty when running outside a live MCP session.
+
+**Resource subscriptions** (v2.26.0+):
+- `notifyResourceUpdated(uri)` - Trigger `notifications/resources/updated` for every client subscribed to `uri`. No-op in CLI/test context; runtime wires it automatically.
+
 **Lifecycle hooks:**
 - `onInitialize()` - Called when photon is initialized
 - `onShutdown()` - Called when photon is shut down
@@ -341,6 +347,37 @@ interface ExtractedSchema {
  */
 ```
 
+**Method-level role tags (v2.26.0+):**
+
+| Tag | Meaning |
+|-----|---------|
+| `@resource <uri-template>` | Dynamic MCP resource resolver (canonical; replaces legacy `@Static`) |
+| `@prompt` | MCP prompt template (canonical; replaces legacy `@Template`) |
+| `@get /path` | HTTP-only GET route, not exposed as an MCP tool |
+| `@post /path` | HTTP-only POST route, not exposed as an MCP tool |
+| `@auth cf-access` | Authenticate caller via Cloudflare Access JWT |
+
+```typescript
+export default class MyPhoton extends Photon {
+  /**
+   * @resource person://{slug}
+   */
+  async getPerson(params: { slug: string }) { ... }
+
+  /**
+   * @prompt
+   */
+  async summaryPrompt(params: { topic: string }) { ... }
+
+  /**
+   * @get /health
+   */
+  async healthCheck() { return { ok: true }; }
+}
+```
+
+`@get` and `@post` routes appear in `ExtractedMetadata.httpRoutes` as `{ method, path, handler }` and are not included in the MCP tool list.
+
 ---
 
 ### Generator Support (Ask/Emit Pattern)
@@ -428,6 +465,7 @@ export default class Chess extends Photon {
 | `@auth required` | All methods require a valid JWT. Anonymous callers get 401. |
 | `@auth optional` | Caller populated if token present, anonymous allowed. |
 | `@auth https://accounts.google.com` | Specifies the OIDC provider URL (implies required). |
+| `@auth cf-access` | Validate Cloudflare Access JWT (for photons deployed to Workers). |
 
 **`this.caller` properties:**
 
@@ -440,6 +478,89 @@ export default class Chess extends Photon {
 | `claims` | `Record<string, unknown>?` | Raw JWT claims |
 
 The MCP transport handles the OAuth 2.1 flow per the [MCP authorization spec](https://modelcontextprotocol.io/specification/latest/basic/authorization). The photon author never deals with tokens or OAuth directly.
+
+---
+
+### Cloudflare Injection (v2.27.0+)
+
+Photons deployed to Cloudflare Workers get first-class access to platform bindings through constructor injection. The import line is the deployment-target signal - it documents the dependency and lets the loader wire the correct backend.
+
+**Three injectable types:**
+
+```typescript
+import { Photon, Cloudflare, CloudflareEnv } from '@portel/photon-core';
+
+export default class MyPhoton {
+  constructor(
+    private photon: Photon,          // Runtime capabilities (memory, emit, schedule...)
+    private cf: Cloudflare,          // CF bindings (KV, R2, D1, AI...)
+    private env: CloudflareEnv<Env>, // Raw Worker env for the escape hatch
+  ) {}
+}
+```
+
+All three are optional and combinable. Photons that `extends Photon` can still add `Cloudflare` or `CloudflareEnv` constructor parameters.
+
+**`Cloudflare` binding methods:**
+
+| Method | CF Binding | Auto-name |
+|--------|-----------|-----------|
+| `cf.kv(qualifier?)` | KVNamespace | `{photon}_kv` / `{photon}_{qualifier}_kv` |
+| `cf.r2(qualifier?)` | R2Bucket | `{photon}_r2` / `{photon}_{qualifier}_r2` |
+| `cf.d1(qualifier?)` | D1Database | `{photon}_d1` / `{photon}_{qualifier}_d1` |
+| `cf.queue(qualifier?)` | Queue | `{photon}_queue` / `{photon}_{qualifier}_queue` |
+| `cf.ai()` | AI gateway | `AI` (canonical, shared) |
+| `cf.images()` | Images binding | `IMAGES` (canonical, shared) |
+| `cf.browser()` | Browser rendering | `BROWSER` (canonical, shared) |
+
+Photon names with hyphens normalize to underscores in binding names (`my-shop` -> `my_shop_kv`).
+
+```typescript
+import { Cloudflare } from '@portel/photon-core';
+
+export default class ShopPhoton {
+  constructor(private cf: Cloudflare) {}
+
+  async getProduct(params: { id: string }) {
+    const kv = this.cf.kv();          // SHOP_KV binding
+    return await kv.get(params.id, 'json');
+  }
+
+  async getCachedAsset(params: { key: string }) {
+    const cache = this.cf.kv('cache'); // SHOP_CACHE_KV binding
+    return await cache.get(params.key);
+  }
+}
+```
+
+**`Photon` injection mode** (for photons that already extend another base class):
+
+```typescript
+import { Photon } from '@portel/photon-core';
+
+export default class MyPhoton extends SomeOtherBase {
+  constructor(private photon: Photon) {}
+
+  async save(params: { key: string; value: string }) {
+    await this.photon.memory.set(params.key, params.value);
+    // Same memory store as if the class had `extends Photon`
+  }
+}
+```
+
+**Forgiving auto-inject** - plain classes that reference `this.cf.*` without declaring the constructor parameter still get the field populated after construction, matching the existing behavior for `this.memory` and `this.emit`.
+
+**Host utilities:**
+
+```typescript
+import { createCloudflareFromEnv } from '@portel/photon-core';
+
+// In a deployed Worker or test harness:
+const cf = createCloudflareFromEnv(env, 'my-photon');
+// Constructs a Cloudflare surface backed by real CF bindings using the auto-naming convention.
+```
+
+Outside Cloudflare, the loader injects a throwing Proxy whose error message names the imported symbol, so the failure is clear at the call site.
 
 ---
 

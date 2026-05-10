@@ -34,6 +34,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 - `tests/cloudflare-surface.test.ts` (14 cases) — binding naming, throwing-Proxy fallbacks, env-backed factory, type matchers.
 - `tests/detect-capabilities.test.ts` updated for `cloudflare` / `cloudflareEnv` (replacing `cf`); 42 cases pass.
 
+## [2.26.0] - 2026-05-05
+
+### Added
+
+- **`this.roots`** - Read-only getter on `Photon` exposing MCP workspace roots declared by the connected client (`roots/list`). Returns `Array<{ uri: string; name?: string }>`. Empty when the client has no `roots` capability or the photon is running outside a live MCP session. The runtime fetches once per session and refreshes on `notifications/roots/list_changed`.
+- **`notifyResourceUpdated(uri)`** - Method on `Photon` for triggering `notifications/resources/updated` to every subscribed client. Default is a no-op (CLI/unit-test safe); the runtime injects a wired version per instance.
+- **`@get /path` and `@post /path` method tags** - HTTP-only route declarations. Methods annotated with `@get` or `@post` are registered as HTTP endpoints (not MCP tools). The schema extractor emits them as `httpRoutes` in `ExtractedMetadata`.
+- **`@auth cf-access`** - New auth mode value in `ExtractedMetadata.auth`. Signals Cloudflare Access JWT validation instead of OIDC.
+- **`@resource` and `@prompt` as canonical method-level tags** - Aliases for the legacy `@Static` (resource resolver) and `@Template` (prompt template) forms. Both old and new names are accepted; the canonical forms are preferred in new photons.
+- **Dual-layout asset discovery** - `{photon}/assets/` is now the canonical bundle root when present. Legacy `{photon}/ui/`, `{photon}/prompts/`, `{photon}/resources/` flat layout still resolves without changes, keeping all pre-v1.29 photons working.
+- `HttpRoute` interface exported from `schema-extractor` (`{ method, path, handler }`).
+
 ## [2.25.0] - 2026-04-24
 
 ### Added
@@ -73,5 +85,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 
 See git log; CHANGELOG seeded from v2.24.0 forward. Earlier releases are tagged in git history.
 
+[2.27.0]: https://github.com/portel-dev/photon-core/compare/v2.26.0...v2.27.0
+[2.26.0]: https://github.com/portel-dev/photon-core/compare/v2.25.0...v2.26.0
 [2.25.0]: https://github.com/portel-dev/photon-core/compare/v2.24.0...v2.25.0
 [2.24.0]: https://github.com/portel-dev/photon-core/compare/v2.23.0...v2.24.0
