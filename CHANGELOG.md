@@ -4,6 +4,12 @@ All notable changes to `@portel/photon-core` will be documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version numbers follow [Semantic Versioning 2.0](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **`storage()` now resolves under the loader-pinned base directory.** `memory` and `schedule` already passed the loader-set `_baseDir` to their providers, but `storage()` called `getPhotonDataDir(ns, name)` without it, falling back to `process.env.PHOTON_DIR` (or `~/.photon`) at call time. A photon loaded from one base directory could read and write storage under a different one depending on which process touched it later — the same drift class as the memory baseDir bug. Regression test: `tests/storage-basedir.test.ts`.
+
 ## [2.27.0] - 2026-05-09
 
 ### Added
