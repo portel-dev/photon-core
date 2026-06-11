@@ -493,7 +493,7 @@ export class Photon {
     }
     const name = this._photonName || path.basename(this._photonFilePath).replace(/\.photon\.(ts|js)$/, '');
     const ns = this._photonNamespace || 'local';
-    const target = path.join(getPhotonDataDir(ns, name), subpath);
+    const target = path.join(getPhotonDataDir(ns, name, this._baseDir), subpath);
     fs.mkdirSync(target, { recursive: true });
     return target;
   }

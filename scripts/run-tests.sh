@@ -48,6 +48,7 @@ TSX_SUITES=(
   tests/photon-loader-lite.test.ts
   tests/schedule.test.ts
   tests/shared-utils.test.ts
+  tests/storage-basedir.test.ts
   tests/watcher.test.ts
 )
 
