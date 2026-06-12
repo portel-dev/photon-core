@@ -778,7 +778,7 @@ export default class WhatsApp extends Photon {
   async onInitialize() {
     // Persistent data directory (follows symlink path)
     const authDir = this.storage('auth');
-    // → ~/.photon/portel-dev/whatsapp/auth/
+    // → ~/.photon/.data/portel-dev/whatsapp/auth/
 
     // Bundled assets directory (follows realpath to source)
     const templates = this.assets('templates');

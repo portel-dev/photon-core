@@ -478,10 +478,10 @@ export class Photon {
    * @example
    * ```typescript
    * const authDir = this.storage('auth');
-   * // ~/.photon/portel-dev/whatsapp/auth/
+   * // ~/.photon/.data/portel-dev/whatsapp/auth/
    *
    * const mediaDir = this.storage('media/images');
-   * // ~/.photon/portel-dev/whatsapp/media/images/
+   * // ~/.photon/.data/portel-dev/whatsapp/media/images/
    * ```
    */
   protected storage(subpath: string): string {
