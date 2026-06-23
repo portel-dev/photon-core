@@ -26,6 +26,7 @@ TSX_SUITES=(
   tests/cloudflare-surface.test.ts
   tests/collection.test.ts
   tests/collections.test.ts
+  tests/data.test.ts
   tests/data-paths.test.ts
   tests/description-sanitizer.test.ts
   tests/detect-capabilities.test.ts
