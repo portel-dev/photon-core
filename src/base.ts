@@ -43,6 +43,7 @@ import { MCPClient, MCPClientFactory, createMCPProxy } from '@portel/mcp';
 import { executionContext, type CallerInfo } from '@portel/cli';
 import { getBroker } from './channels/index.js';
 import { withLock as withLockHelper } from './decorators.js';
+import { DataProvider } from './data.js';
 import { MemoryProvider } from './memory.js';
 import { ScheduleProvider } from './schedule.js';
 import * as path from 'path';
@@ -126,6 +127,12 @@ export class Photon {
    * @internal
    */
   private _memory?: MemoryProvider;
+
+  /**
+   * Scoped structured data provider - lazy-initialized on first access
+   * @internal
+   */
+  private _data?: DataProvider;
 
   /**
    * Scoped schedule provider - lazy-initialized on first access
@@ -404,6 +411,40 @@ export class Photon {
       );
     }
     return this._memory;
+  }
+
+  /**
+   * Scoped structured records and append-only logs.
+   *
+   * Use `this.data` for durable data that grows beyond small key/value facts:
+   * tables, event logs, transcripts, audit trails, queues, and queryable
+   * history. Use `this.memory` for compact remembered values and
+   * `storage(subpath)` only when a photon needs direct file paths.
+   *
+   * @example
+   * ```typescript
+   * const sessions = this.data.table<Session>('sessions');
+   * await sessions.put(id, session);
+   *
+   * const transcript = this.data.log<Message>('transcripts');
+   * await transcript.append({ role: 'user', content: 'hello' });
+   * ```
+   */
+  get data(): DataProvider {
+    if (!this._data) {
+      const name = this._photonName || this.constructor.name
+        .replace(/MCP$/, '')
+        .replace(/([A-Z])/g, '-$1')
+        .toLowerCase()
+        .replace(/^-/, '');
+      this._data = new DataProvider(
+        name,
+        this._sessionId,
+        this._photonNamespace,
+        this._baseDir
+      );
+    }
+    return this._data;
   }
 
   /**

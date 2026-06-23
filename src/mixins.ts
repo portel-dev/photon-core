@@ -25,6 +25,7 @@
 import { MCPClient, MCPClientFactory, createMCPProxy } from '@portel/mcp';
 import { executionContext, type CallerInfo } from '@portel/cli';
 import { getBroker } from './channels/index.js';
+import { DataProvider } from './data.js';
 import { MemoryProvider } from './memory.js';
 import { ScheduleProvider } from './schedule.js';
 
@@ -77,6 +78,12 @@ export function withPhotonCapabilities<T extends Constructor>(Base: T): T {
      * @internal
      */
     private _memory?: MemoryProvider;
+
+    /**
+     * Scoped structured data provider - lazy-initialized on first access
+     * @internal
+     */
+    private _data?: DataProvider;
 
     /**
      * Scoped schedule provider - lazy-initialized on first access
@@ -140,6 +147,26 @@ export function withPhotonCapabilities<T extends Constructor>(Base: T): T {
         );
       }
       return this._memory;
+    }
+
+    /**
+     * Scoped structured records and append-only logs.
+     */
+    get data(): DataProvider {
+      if (!this._data) {
+        const name = this._photonName || this.constructor.name
+          .replace(/MCP$/, '')
+          .replace(/([A-Z])/g, '-$1')
+          .toLowerCase()
+          .replace(/^-/, '');
+        this._data = new DataProvider(
+          name,
+          this._sessionId,
+          this._photonNamespace,
+          this._baseDir
+        );
+      }
+      return this._data;
     }
 
     /**

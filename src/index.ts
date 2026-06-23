@@ -493,6 +493,30 @@ export {
   type MemoryScope,
 } from './memory.js';
 
+// ===== STRUCTURED DATA =====
+// Framework-level records and logs (this.data on Photon base class)
+// DataBackend is the pluggable interface; FileDataBackend is the default.
+export {
+  DataProvider,
+  DataTable,
+  DataLog,
+  FileDataBackend,
+  DurableObjectDataBackend,
+  setDefaultDataBackend,
+  getDefaultDataBackend,
+  type DataBackend,
+  type DurableObjectSqlStorageLike,
+  type DurableObjectStorageLike,
+  type DataScope,
+  type DataListOptions,
+  type DataListResult,
+  type DataLogEntry,
+  type DataLogReadOptions,
+  type DataLogReadResult,
+  type DataSql,
+  type DataSqlResult,
+} from './data.js';
+
 // ===== RUNTIME SCHEDULING =====
 // Programmatic task scheduling (this.schedule on Photon base class)
 export {

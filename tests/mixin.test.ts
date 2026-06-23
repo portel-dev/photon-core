@@ -3,7 +3,7 @@
  * Validates capability injection across all inheritance patterns
  */
 
-import { withPhotonCapabilities, Photon, MemoryProvider } from '../dist/index.js';
+import { withPhotonCapabilities, Photon, MemoryProvider, DataProvider } from '../dist/index.js';
 import { strict as assert } from 'assert';
 
 async function runTests() {
@@ -153,6 +153,27 @@ async function runTests() {
   });
 
   // Test 7: Verify emit method signature
+  await test('Data provider works correctly', async () => {
+    class DataStore {
+      async get(key: string) {
+        return null;
+      }
+    }
+
+    const Enhanced = withPhotonCapabilities(DataStore);
+    const instance = new Enhanced() as any;
+
+    assert.ok(instance.data, 'Data should be defined');
+    assert.ok(instance.data instanceof DataProvider, 'Should be DataProvider instance');
+    assert.strictEqual(typeof instance.data.table, 'function', 'Should have table method');
+    assert.strictEqual(typeof instance.data.log, 'function', 'Should have log method');
+
+    const data1 = instance.data;
+    const data2 = instance.data;
+    assert.strictEqual(data1, data2, 'Data should be cached (same instance)');
+  });
+
+  // Test 8: Verify emit method signature
   await test('Emit method accepts data and channel objects', async () => {
     class EventEmitter {
       emitted: any[] = [];
